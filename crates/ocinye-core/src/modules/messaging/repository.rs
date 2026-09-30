@@ -124,6 +124,26 @@ pub async fn participants<'e>(
     .await?)
 }
 
+/// Quem participa numa conversa agora, com o papel de cada um (`owner`,
+/// `administrator`, `member`).
+///
+/// # Errors
+///
+/// Devolve erro quando a leitura falha.
+pub async fn participant_roles<'e>(
+    executor: impl PgExecutor<'e>,
+    conversation_id: Uuid,
+) -> CoreResult<Vec<(Uuid, String)>> {
+    Ok(sqlx::query_as(
+        "SELECT person_id, role FROM conversation_participants
+          WHERE conversation_id = $1 AND left_at IS NULL
+          ORDER BY joined_at",
+    )
+    .bind(conversation_id)
+    .fetch_all(executor)
+    .await?)
+}
+
 /// A conversa, se a pessoa a alcançar.
 ///
 /// # Errors

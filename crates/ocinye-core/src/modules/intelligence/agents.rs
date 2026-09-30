@@ -354,8 +354,13 @@ pub async fn list(
 ) -> CoreResult<Vec<Agent>> {
     // Visibility is decided in SQL rather than by filtering afterwards: an
     // agent an actor may not see must not travel out of the database at all.
+    // The same holds for the instructions of an agent someone else defined:
+    // seeing an agent is not reading how its creator told it to behave (D007
+    // AG-03), so only the creator's own read carries them.
     let rows = sqlx::query(
-        "SELECT a.id, a.name, a.purpose, a.instructions, a.capability, a.scope, a.scope_id,
+        "SELECT a.id, a.name, a.purpose,
+                CASE WHEN a.created_by_id = $2 THEN a.instructions END AS instructions,
+                a.capability, a.scope, a.scope_id,
                 a.max_classification, a.uses_bibliography, a.uses_documents, a.uses_datasets,
                 a.enabled, a.created_at, p.full_name AS created_by_name
            FROM ai_agents a
@@ -398,7 +403,9 @@ pub async fn get(
     capabilities: &SystemCapabilities,
 ) -> CoreResult<Agent> {
     let row = sqlx::query(
-        "SELECT a.id, a.name, a.purpose, a.instructions, a.capability, a.scope, a.scope_id,
+        "SELECT a.id, a.name, a.purpose,
+                CASE WHEN a.created_by_id = $2 THEN a.instructions END AS instructions,
+                a.capability, a.scope, a.scope_id,
                 a.max_classification, a.uses_bibliography, a.uses_documents, a.uses_datasets,
                 a.enabled, a.created_at, p.full_name AS created_by_name
            FROM ai_agents a
@@ -423,6 +430,73 @@ pub async fn get(
     .ok_or_else(|| CoreError::NotFound("Agent not found.".to_owned()))?;
 
     agent_from_row(&row, capabilities)
+}
+
+/// Where an actor may define an agent: each scope whose permission holds, and
+/// for unit and workspace scopes the targets where it holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CreatableScope {
+    /// The scope.
+    pub scope: AgentScope,
+    /// The units or workspaces, for a scope that names one.
+    pub targets: Vec<Uuid>,
+}
+
+/// The scopes (and targets) where [`create`] would pass its permission gate.
+///
+/// The same evaluation [`create`] runs, asked in advance: a presentation
+/// signal, never an authorisation — `create` decides again. Unit and workspace
+/// targets are only those the actor belongs to, since the permission is never
+/// held in a context the actor has no role in.
+#[must_use]
+pub fn creatable_scopes(actor: &Principal) -> Vec<CreatableScope> {
+    let allowed = |scope: AgentScope, target: Option<Uuid>| {
+        can(
+            actor,
+            scope.required_permission(),
+            &context_for(actor, scope, target),
+            target,
+        )
+        .allowed
+    };
+    let mut out = Vec::new();
+    if allowed(AgentScope::Personal, None) {
+        out.push(CreatableScope {
+            scope: AgentScope::Personal,
+            targets: Vec::new(),
+        });
+    }
+    let mut workspaces = actor.workspace_ids();
+    workspaces.sort_unstable();
+    let workspaces: Vec<Uuid> = workspaces
+        .into_iter()
+        .filter(|w| allowed(AgentScope::Workspace, Some(*w)))
+        .collect();
+    if !workspaces.is_empty() {
+        out.push(CreatableScope {
+            scope: AgentScope::Workspace,
+            targets: workspaces,
+        });
+    }
+    let mut units = actor.unit_ids();
+    units.sort_unstable();
+    let units: Vec<Uuid> = units
+        .into_iter()
+        .filter(|u| allowed(AgentScope::Unit, Some(*u)))
+        .collect();
+    if !units.is_empty() {
+        out.push(CreatableScope {
+            scope: AgentScope::Unit,
+            targets: units,
+        });
+    }
+    if allowed(AgentScope::Institutional, None) {
+        out.push(CreatableScope {
+            scope: AgentScope::Institutional,
+            targets: Vec::new(),
+        });
+    }
+    out
 }
 
 /// Build an agent from a row, deriving its execution state.

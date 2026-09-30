@@ -244,20 +244,23 @@ async fn one(
             )
         })?;
 
-    let membros = ocinye_core::modules::messaging::repository::participants(&state.pool, id)
-        .await
-        .map_err(|error| ApiError::new(error, &ids))?;
+    let com_papel =
+        ocinye_core::modules::messaging::repository::participant_roles(&state.pool, id)
+            .await
+            .map_err(|error| ApiError::new(error, &ids))?;
+    let membros: Vec<Uuid> = com_papel.iter().map(|(p, _)| *p).collect();
     let mapa = nomes(&state.pool, &membros)
         .await
         .map_err(|error| ApiError::new(error.into(), &ids))?;
 
     let mut pessoas = Vec::with_capacity(membros.len());
-    for pessoa in &membros {
+    for (pessoa, papel) in &com_papel {
         let sinais = state.realtime.sinais(*pessoa).await;
         let estado = ocinye_core::realtime::presence::resolver(sinais);
         pessoas.push(serde_json::json!({
             "id": pessoa,
             "name": mapa.get(pessoa).cloned().unwrap_or_default(),
+            "role": papel,
             "presence": state.realtime.saudavel().then(|| estado.as_str()),
             "presence_label": state.realtime.saudavel().then(|| estado.label()),
         }));
@@ -369,7 +372,13 @@ async fn montar(
                     Box::new(ReplyView {
                         id: c.id,
                         author_name: mapa.get(&c.author_id).cloned().unwrap_or_default(),
-                        excerpt: excerto(&c.body),
+                        // Uma mensagem retirada não se cita: o texto que o
+                        // autor retirou não volta pela resposta de outro.
+                        excerpt: if c.deleted_at.is_some() {
+                            String::new()
+                        } else {
+                            excerto(&c.body)
+                        },
                     })
                 })
             }),

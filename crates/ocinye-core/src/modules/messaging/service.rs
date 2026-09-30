@@ -511,8 +511,20 @@ pub async fn send(
     let mut tx = pool.begin().await?;
 
     // Idempotência: a mesma chave não escreve duas mensagens.
+    //
+    // Dois envios simultâneos com a mesma chave (um duplo-clique que chega em
+    // paralelo, um `retry` do proxy) viam ambos «não existe» e o segundo batia
+    // no índice único com um erro interno. A tranca por (conversa, autor,
+    // chave) serializa-os: o segundo espera e lê o que o primeiro gravou.
     let existente: Option<Uuid> = match envio.idempotency_key {
         Some(chave) => {
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind(format!(
+                    "ocinye.messaging.send.{conversation_id}.{}.{chave}",
+                    principal.person_id
+                ))
+                .execute(&mut *tx)
+                .await?;
             sqlx::query_scalar(
                 "SELECT id FROM messages
                   WHERE conversation_id = $1 AND author_id = $2 AND idempotency_key = $3",

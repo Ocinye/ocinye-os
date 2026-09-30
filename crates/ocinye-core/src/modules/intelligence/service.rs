@@ -117,20 +117,34 @@ pub async fn intelligence_status(
 
     let models = repo::list_models(pool, principal.organisation_id).await?;
 
-    let capabilities: Vec<CapabilityStatus> = AiCapability::all()
-        .into_iter()
-        .map(|capability| CapabilityStatus {
+    // Each capability is answered by the same resolution a prompt runs, so the
+    // state shown is the state a request would meet — including its reason
+    // (D007 AI-01): «nothing reported» and «nothing serves this» are different.
+    let mut capabilities: Vec<CapabilityStatus> = Vec::new();
+    for capability in AiCapability::all() {
+        let resolution =
+            resolve_capability(pool, principal.organisation_id, config, capability).await?;
+        let reason = match resolution {
+            ModelResolution::Resolved(_) => None,
+            ModelResolution::NoCandidate(reason) => Some(reason),
+        };
+        capabilities.push(CapabilityStatus {
             capability,
-            available: models.iter().any(|model| model.serves(capability)),
+            available: reason.is_none(),
             configured_model: config.capability_map.get(&capability).cloned(),
-        })
-        .collect();
+            reason,
+        });
+    }
 
+    // Providers, not models: a node or provider with three healthy models is
+    // one provider reporting healthy.
     let providers = u32::try_from(
         models
             .iter()
             .filter(|model| model.status() == ocinye_contracts::ModelStatus::Available)
-            .count(),
+            .map(|model| (model.provider_kind.as_str(), model.provider_name.as_str()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
     )
     .unwrap_or(u32::MAX);
 

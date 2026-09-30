@@ -32,6 +32,7 @@ pub fn routes() -> Router<AppState> {
         .route("/ai/models", get(list_models))
         .route("/ai/context-preview", get(context_preview))
         .route("/ai/agents", get(list_agents).post(create_agent))
+        .route("/ai/agents/capabilities", get(agent_capabilities))
         .route("/ai/agents/{agent_id}", get(get_agent))
         .route("/ai/prompt", post(submit_prompt))
         .route("/ai/conversations", get(list_conversations))
@@ -265,6 +266,59 @@ async fn get_agent(
         execution_available: capabilities.any_ai_usable(),
         agent,
     }))
+}
+
+/// `GET /ai/agents/capabilities`
+///
+/// Where the caller may define an agent: the scopes whose permission holds and,
+/// for unit and workspace scopes, the targets by name. The same policy
+/// `POST /ai/agents` applies, asked in advance so the form offers only what the
+/// Core would accept (D007 AG-02). A rendering signal: creation decides again.
+async fn agent_capabilities(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let scopes = intelligence::agents::creatable_scopes(&principal);
+    let mut ids_all: Vec<Uuid> = scopes.iter().flat_map(|s| s.targets.clone()).collect();
+    ids_all.sort_unstable();
+    ids_all.dedup();
+    let names: std::collections::HashMap<Uuid, String> = if ids_all.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        sqlx::query_as::<_, (Uuid, String)>(
+            "SELECT id, name FROM units WHERE id = ANY($1) AND organisation_id = $2
+             UNION ALL
+             SELECT id, title FROM research_workspaces
+              WHERE id = ANY($1) AND organisation_id = $2 AND archived_at IS NULL",
+        )
+        .bind(&ids_all)
+        .bind(principal.organisation_id)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|error| ApiError::new(error.into(), &ids))?
+        .into_iter()
+        .collect()
+    };
+    let out: Vec<serde_json::Value> = scopes
+        .into_iter()
+        .map(|s| {
+            serde_json::json!({
+                "scope": s.scope,
+                "targets": s.targets.iter().filter_map(|t| names.get(t).map(|n| serde_json::json!({
+                    "id": t,
+                    "name": n,
+                }))).collect::<Vec<_>>(),
+            })
+        })
+        .filter(|v| {
+            // Um âmbito que nomeia um alvo e ficou sem nenhum legível não se
+            // oferece.
+            let precisa = matches!(v["scope"].as_str(), Some("unit" | "workspace"));
+            !precisa || v["targets"].as_array().is_some_and(|a| !a.is_empty())
+        })
+        .collect();
+    Ok(Json(serde_json::json!({ "scopes": out })))
 }
 
 #[derive(Serialize)]
