@@ -72,6 +72,9 @@ pub enum ApplicationId {
     Help,
     /// O Terminal (ocsh, ADR-0312).
     Terminal,
+    /// O Ocinye Browser (ADR-0612, ADR-0623, D008): abas dentro da aplicação;
+    /// o conteúdo externo não é de confiança.
+    Browser,
     /// O Monitor de Actividade: consumo e estado operacional da Instância
     /// (D007.1; administração da plataforma).
     Monitor,
@@ -93,7 +96,7 @@ pub enum ApplicationClass {
 
 impl ApplicationId {
     /// Todas, na ordem do registo.
-    pub const ALL: [ApplicationId; 27] = [
+    pub const ALL: [ApplicationId; 28] = [
         Self::Notes,
         Self::Calendar,
         Self::Work,
@@ -118,6 +121,7 @@ impl ApplicationId {
         Self::Settings,
         Self::Help,
         Self::Terminal,
+        Self::Browser,
         Self::Monitor,
         Self::Results,
         Self::Trash,
@@ -151,6 +155,7 @@ impl ApplicationId {
             Self::Settings => "settings",
             Self::Help => "help",
             Self::Terminal => "terminal",
+            Self::Browser => "browser",
             Self::Monitor => "monitor",
             Self::Results => "results",
             Self::Trash => "trash",
@@ -287,6 +292,7 @@ impl InstanceProfile {
                     | A::Units
                     | A::Projects
                     | A::Terminal
+                    | A::Browser
             ),
             Self::Education => matches!(
                 app,
@@ -302,10 +308,11 @@ impl InstanceProfile {
                     | A::Knowledge
                     | A::Bibliography
                     | A::Terminal
+                    | A::Browser
             ),
             Self::Personal => matches!(
                 app,
-                A::Notes | A::Calendar | A::Mail | A::Prompt | A::Terminal
+                A::Notes | A::Calendar | A::Mail | A::Prompt | A::Terminal | A::Browser
             ),
         }
     }
@@ -428,6 +435,10 @@ pub enum NetworkUse {
     None,
     /// Servidores de correio (IMAP/SMTP) configurados pela Instância.
     ExternalMail,
+    /// A web pública, **pelo cliente** (o navegador da pessoa ou a casca),
+    /// nunca pela Instância: o Core não faz pedidos por conta da aplicação e
+    /// não há proxy (ADR-0612 §4, ADR-0623).
+    ClientWeb,
 }
 
 /// De onde vem o estado de disponibilidade da aplicação.
@@ -531,7 +542,7 @@ use crate::intelligence::AiCapability;
 use crate::resource::ResourceType;
 
 /// Os manifestos de todas as aplicações nativas, na ordem do registo.
-pub const MANIFESTS: [ApplicationManifest; 27] = [
+pub const MANIFESTS: [ApplicationManifest; 28] = [
     ApplicationManifest {
         id: ApplicationId::Notes,
         category: ApplicationCategory::Productivity,
@@ -922,6 +933,26 @@ pub const MANIFESTS: [ApplicationManifest; 27] = [
         api_prefixes: &["/commands"],
         storage: StorageUse::None,
         network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
+    },
+    // O Browser não traz autoridade: o que toca no Ocinye (guardar em
+    // Ficheiros, perguntar à Nye) são capabilities já existentes, autorizadas
+    // pelo Core. Sem prefixo de API próprio (D008). Novas páginas são abas
+    // dentro da mesma janela.
+    ApplicationManifest {
+        id: ApplicationId::Browser,
+        category: ApplicationCategory::System,
+        route: "/browser",
+        name_key: "browser.app",
+        description_key: "browser.app.desc",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::ClientWeb,
         ai_capabilities: &[],
         requested_resources: &[],
         health: HealthSource::Core,

@@ -357,19 +357,19 @@ pub const HOST_SHELL_WORDS: &[&str] = &[
     "sudo", "su", "bash", "sh", "zsh", "fish", "ssh", "host", "exec", "eval", "doas",
 ];
 
-/// Palavras POSIX com um equivalente no Ocinye, para a sugestão «quis dizer».
-/// Não são aliases: `ls` continua a ser comando desconhecido.
-pub const POSIX_HINTS: &[(&str, &str)] = &[
-    ("ls", "files ls"),
-    ("cd", "files cd"),
-    ("pwd", "files pwd"),
-    ("mkdir", "files mkdir"),
-    ("mv", "files mv"),
-    ("rm", "files trash"),
-    ("cat", "files open"),
-    ("cls", "clear"),
-    ("man", "help"),
+/// Palavras de uma shell POSIX (e ferramentas do anfitrião) que se reconhecem
+/// só para explicar que o ocsh não é uma delas. Não são aliases: continuam a
+/// ser comando desconhecido (127), e nenhuma é executada.
+pub const POSIX_WORDS: &[&str] = &[
+    "ls", "cd", "pwd", "mkdir", "mv", "cp", "rm", "cat", "less", "grep", "find", "chmod", "chown",
+    "touch", "echo", "env", "export", "kill", "ps", "top", "docker", "psql", "curl", "wget", "nc",
+    "ping", "cls", "man",
 ];
+
+/// «Quis dizer»: uma palavra POSIX com um comando **registado** que faz o
+/// mesmo. Só entra aqui o que existe no registo — um teste falha se o alvo não
+/// for um comando válido (D008 · T-08: nunca sugerir `files ls` sem `files`).
+pub const POSIX_HINTS: &[(&str, &str)] = &[("cls", "clear"), ("man", "help")];
 
 /// A família com este nome.
 #[must_use]
@@ -465,8 +465,26 @@ mod tests {
         for w in HOST_SHELL_WORDS {
             assert!(family(w).is_none(), "{w} é família");
         }
-        for (w, _) in POSIX_HINTS {
+        for w in POSIX_WORDS {
             assert!(family(w).is_none(), "{w} virou alias");
+        }
+        for (w, _) in POSIX_HINTS {
+            assert!(POSIX_WORDS.contains(w), "{w} sugere sem ser palavra POSIX");
+        }
+    }
+
+    /// D008 · T-08: um «quis dizer» nunca aponta para um comando que não existe.
+    #[test]
+    fn cada_sugestao_posix_e_um_comando_registado() {
+        for (w, alvo) in POSIX_HINTS {
+            let mut partes = alvo.split_whitespace();
+            let fam = partes.next().unwrap_or_default();
+            let sub = partes.next().unwrap_or("");
+            assert!(
+                command(fam, sub).is_some()
+                    || family(fam).is_some_and(|f| sub.is_empty() && f.default_sub.is_some()),
+                "{w} → {alvo}: não é um comando do registo"
+            );
         }
     }
 

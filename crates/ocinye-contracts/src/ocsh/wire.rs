@@ -118,6 +118,16 @@ pub enum Block {
         /// O comando.
         action: String,
     },
+    /// A ponte explícita para a Nye (`nye ask …` / `? …`, D008 · T-24).
+    ///
+    /// O Core leu a linha e reconheceu uma pergunta — e só isso. Quem a leva à
+    /// Nye é o cliente, pelo caminho canónico (`POST /ai/prompt`), onde o Core
+    /// volta a decidir: permissão de IA, política de encaminhamento,
+    /// disponibilidade. Nenhum comando desconhecido chega aqui.
+    Ask {
+        /// A pergunta, tal como foi escrita depois de `nye ask` / `?`.
+        question: String,
+    },
 }
 
 /// A resposta de uma execução.

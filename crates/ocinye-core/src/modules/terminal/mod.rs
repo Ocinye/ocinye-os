@@ -22,7 +22,7 @@ use ocinye_contracts::agentic::{
     CapabilityId, CapabilityRequest, CapabilityResult, ExecutionStatus,
     ResourceKind as AgenticKind, ResourceRef,
 };
-use ocinye_contracts::ocsh::registry::{Binding, OutputShape, COMMANDS};
+use ocinye_contracts::ocsh::registry::{Binding, CommandSpec, OutputShape, COMMANDS};
 use ocinye_contracts::ocsh::wire::{Block, ContextView, ExecRequest, ExecResponse, Tone};
 use ocinye_contracts::ocsh::{parse, ExitCode, Invocation, ParseError, Parsed, Stage};
 use ocinye_domain::{Principal, ResourceContext, ResourceKind};
@@ -81,7 +81,12 @@ pub async fn execute(
         Ok(context) => match parse(&request.line) {
             Ok(Parsed::Empty) => (ExitCode::Ok, vec![], None, context),
             Ok(Parsed::Help(topic)) => (ExitCode::Ok, vec![help(principal, &topic)], None, context),
-            Err(error) => (error.exit(), vec![parse_error(&error)], None, context),
+            Err(error) => (
+                error.exit(),
+                vec![parse_error(principal, &error)],
+                None,
+                context,
+            ),
             Ok(Parsed::Run(inv)) => run(deps, principal, &inv, context).await?,
         },
     };
@@ -124,9 +129,18 @@ async fn run(
                 context,
             ))
         }
+        // A ponte explícita: o Core só diz que isto é uma pergunta à Nye. A
+        // resposta vem do caminho canónico (`/ai/prompt`), que decide de novo.
         Binding::Nye => Ok((
-            ExitCode::Unavailable,
-            vec![note(Tone::Warn, "ocsh.state.pending_exec", vec![], vec![])],
+            ExitCode::Ok,
+            vec![Block::Ask {
+                question: inv
+                    .args
+                    .get("question")
+                    .and_then(|v| v.as_text())
+                    .unwrap_or("")
+                    .to_owned(),
+            }],
             None,
             context,
         )),
@@ -432,23 +446,32 @@ async fn resolve_context(
     })
 }
 
-/// A ajuda, filtrada pelo que esta pessoa pode usar.
-///
-/// Um comando cuja capability a pessoa não tem não aparece — e se for escrito,
-/// o Core recusa-o na mesma. Esconder é cortesia; a recusa é que protege.
-fn help(principal: &Principal, topic: &str) -> Block {
+/// Os comandos que esta pessoa vê: os locais, a ponte da Nye, e os que invocam
+/// uma capability que ela pode usar. **Só descoberta**: escrever um comando
+/// escondido chega ao executor, que o recusa na mesma.
+fn visible_to(principal: &Principal) -> Vec<&'static CommandSpec> {
     let available: Vec<String> = registry()
         .available_to(principal, None)
         .into_iter()
         .map(|d| d.id.as_str().to_owned())
         .collect();
-    let topic = topic.trim();
-    let entries = COMMANDS
+    COMMANDS
         .iter()
         .filter(|c| match c.binding {
             Binding::Capability(id) => available.iter().any(|a| a == id),
             Binding::Local | Binding::Nye => true,
         })
+        .collect()
+}
+
+/// A ajuda, filtrada pelo que esta pessoa pode usar.
+///
+/// Um comando cuja capability a pessoa não tem não aparece — e se for escrito,
+/// o Core recusa-o na mesma. Esconder é cortesia; a recusa é que protege.
+fn help(principal: &Principal, topic: &str) -> Block {
+    let topic = topic.trim();
+    let entries = visible_to(principal)
+        .into_iter()
         .filter(|c| {
             topic.is_empty() || topic == c.family || topic == format!("{} {}", c.family, c.sub)
         })
@@ -485,14 +508,28 @@ fn usage(c: &ocinye_contracts::ocsh::registry::CommandSpec) -> String {
     out
 }
 
-fn parse_error(error: &ParseError) -> Block {
+fn parse_error(principal: &Principal, error: &ParseError) -> Block {
     match error {
-        ParseError::UnknownCommand { word, suggestion } => note(
-            Tone::Err,
-            "ocsh.err.not_found",
-            vec![("cmd".into(), word.clone())],
-            suggestion.iter().cloned().collect(),
-        ),
+        // «Quis dizer» só nomeia um comando que existe e que esta pessoa vê
+        // (D008 · T-08): nunca um comando inexistente, nem uma família que a
+        // ajuda lhe esconde.
+        ParseError::UnknownCommand { word, suggestion } => {
+            let visible = visible_to(principal);
+            let suggestion = suggestion.iter().filter(|s| {
+                let mut w = s.split_whitespace();
+                let fam = w.next().unwrap_or_default();
+                let sub = w.next();
+                visible
+                    .iter()
+                    .any(|c| c.family == fam && sub.is_none_or(|sub| c.sub == sub))
+            });
+            note(
+                Tone::Err,
+                "ocsh.err.not_found",
+                vec![("cmd".into(), word.clone())],
+                suggestion.cloned().collect(),
+            )
+        }
         // `sudo` tem uma resposta própria: a autoridade vem das capabilities,
         // e não de um prefixo.
         ParseError::HostShell(word) => {
