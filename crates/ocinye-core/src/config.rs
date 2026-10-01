@@ -377,6 +377,11 @@ pub struct CoreConfig {
     /// Profile given to the Instance when this installation creates it
     /// (ADR-0014). No default: creating an Instance names its profile.
     pub instance_profile: Option<ocinye_contracts::InstanceProfile>,
+    /// D010 (ADR-0020 §10): the Workspace's public URL, read **only** to seed
+    /// the canonical generic access endpoint when the Instance has none. After
+    /// that it decides nothing. Optional: without it, nothing is seeded and the
+    /// Workspace fails closed until an endpoint is configured.
+    pub endpoint_seed_url: Option<String>,
     /// PostgreSQL connection string.
     pub database_url: String,
     /// Maximum database connections.
@@ -567,6 +572,7 @@ impl CoreConfig {
                 )?),
                 None => None,
             },
+            endpoint_seed_url: optional("OCINYE_WORKSPACE_PUBLIC_URL"),
             database_url: required("OCINYE_DATABASE_URL")?,
             database_max_connections: parse_number("OCINYE_DATABASE_MAX_CONNECTIONS", 10),
             redis_url: or_default("OCINYE_REDIS_URL", "redis://localhost:6380"),
@@ -808,6 +814,7 @@ mod tests {
             organisation_slug: "instancia-de-teste".into(),
             instance_name: None,
             instance_profile: None,
+            endpoint_seed_url: None,
             database_url: "postgres://x".into(),
             database_max_connections: 10,
             redis_url: "redis://x".into(),

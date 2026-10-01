@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::ApiError;
-use crate::extract::{CurrentPrincipal, Ids};
+use crate::extract::{CurrentPrincipal, CurrentSession, Ids};
 use crate::state::AppState;
 
 pub fn routes() -> Router<AppState> {
@@ -248,9 +248,10 @@ impl From<identity::Person> for PersonView {
 /// o conjunto do produto. Um array vazio é uma escolha, e respeita-se.
 async fn list_app_pins(
     State(state): State<AppState>,
-    CurrentPrincipal(principal): CurrentPrincipal,
+    CurrentSession(principal, scope): CurrentSession,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    if let Some(pins) = identity::list_app_pins(&state.pool, &principal).await? {
+    let d = member_distribution(&state, &principal, &scope).await?;
+    if let Some(pins) = identity::list_app_pins(&state.pool, &principal, d).await? {
         return Ok(Json(
             serde_json::json!({ "pinned": pins, "source": "member" }),
         ));
@@ -272,11 +273,26 @@ struct SetAppPins {
 /// são todos «passa a ser esta a lista».
 async fn set_app_pins(
     State(state): State<AppState>,
-    CurrentPrincipal(principal): CurrentPrincipal,
+    CurrentSession(principal, scope): CurrentSession,
     Json(request): Json<SetAppPins>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    identity::set_app_pins(&state.pool, &principal, &request.pinned).await?;
+    let d = member_distribution(&state, &principal, &scope).await?;
+    identity::set_app_pins(&state.pool, &principal, &request.pinned, d).await?;
     Ok(Json(serde_json::json!({ "pinned": request.pinned })))
+}
+
+/// D010: a Distribuição em que vive o estado de apresentação deste pedido.
+async fn member_distribution(
+    state: &AppState,
+    principal: &ocinye_domain::Principal,
+    scope: &crate::extract::SessionScope,
+) -> Result<ocinye_contracts::Distribution, ApiError> {
+    Ok(organisation::distributions::for_member_state(
+        &state.pool,
+        principal,
+        scope.active_distribution,
+    )
+    .await?)
 }
 
 /// A disposição do Desktop, como o Workspace a lê.
@@ -308,9 +324,10 @@ fn desktop_view(stored: Option<identity::StoredDesktop>) -> serde_json::Value {
 /// `GET /me/desktop` — a disposição do Desktop do membro.
 async fn get_desktop(
     State(state): State<AppState>,
-    CurrentPrincipal(principal): CurrentPrincipal,
+    CurrentSession(principal, scope): CurrentSession,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let stored = identity::get_desktop(&state.pool, &principal).await?;
+    let d = member_distribution(&state, &principal, &scope).await?;
+    let stored = identity::get_desktop(&state.pool, &principal, d).await?;
     Ok(Json(desktop_view(stored)))
 }
 
@@ -326,9 +343,10 @@ struct PutDesktop {
 /// entretanto; `422` quando a disposição viola o registo.
 async fn put_desktop(
     State(state): State<AppState>,
-    CurrentPrincipal(principal): CurrentPrincipal,
+    CurrentSession(principal, scope): CurrentSession,
     Json(request): Json<PutDesktop>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let d = member_distribution(&state, &principal, &scope).await?;
     let admin = principal.is_organisation_admin();
     identity::put_desktop(
         &state.pool,
@@ -336,18 +354,20 @@ async fn put_desktop(
         request.version,
         &request.layout,
         admin,
+        d,
     )
     .await?;
-    let stored = identity::get_desktop(&state.pool, &principal).await?;
+    let stored = identity::get_desktop(&state.pool, &principal, d).await?;
     Ok(Json(desktop_view(stored)))
 }
 
 /// `POST /me/desktop/restore` — repõe a predefinição. Muda só a disposição.
 async fn restore_desktop(
     State(state): State<AppState>,
-    CurrentPrincipal(principal): CurrentPrincipal,
+    CurrentSession(principal, scope): CurrentSession,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    identity::reset_desktop(&state.pool, &principal).await?;
+    let d = member_distribution(&state, &principal, &scope).await?;
+    identity::reset_desktop(&state.pool, &principal, d).await?;
     Ok(Json(desktop_view(None)))
 }
 

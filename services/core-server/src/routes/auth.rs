@@ -34,6 +34,7 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/session", get(session))
         .route("/auth/password", post(set_password))
         .route("/auth/password/change", post(change_password))
+        .route("/auth/reauthenticate", post(reauthenticate))
         .route("/auth/sessions", get(own_sessions))
         .route(
             "/auth/sessions/{session_id}/revoke",
@@ -815,4 +816,42 @@ mod tests {
         assert!(value.contains("Max-Age=0"));
         assert!(value.starts_with(&format!("{SESSION_COOKIE}=;")));
     }
+}
+
+#[derive(Deserialize)]
+struct ReauthenticateRequest {
+    password: Secret,
+}
+
+/// D010 · S22: desbloquear a sessão. Confirma a palavra-passe da própria
+/// pessoa, com o limite de tentativas da entrada; não emite sessão nova.
+async fn reauthenticate(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    headers: HeaderMap,
+    RestrictedSession { session, person }: RestrictedSession,
+    Json(request): Json<ReauthenticateRequest>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    if !session.state.permits_ordinary_work() {
+        return Err(ApiError::new(
+            CoreError::PermissionDenied("Esta sessão não está activa.".to_owned()),
+            &ids,
+        ));
+    }
+    let mut parts = axum::http::Request::new(());
+    *parts.headers_mut() = headers;
+    let (parts, ()) = parts.into_parts();
+    let context = attempt_context(&parts);
+    state
+        .authenticator
+        .reauthenticate(
+            &state.pool,
+            &person.email,
+            person.id,
+            &request.password,
+            &context,
+        )
+        .await
+        .map(|()| axum::http::StatusCode::NO_CONTENT)
+        .map_err(|error| ApiError::new(error, &ids))
 }

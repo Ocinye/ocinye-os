@@ -9,6 +9,7 @@
 //! nunca escolheu (o Workspace aplica o conjunto por omissão); vazia é a escolha
 //! de não fixar nenhuma. Por isso [`list_app_pins`] devolve `Option`.
 
+use ocinye_contracts::Distribution;
 use ocinye_domain::Principal;
 use sqlx::PgPool;
 
@@ -34,12 +35,16 @@ const MAX_ID_LEN: usize = 64;
 pub async fn list_app_pins(
     pool: &PgPool,
     principal: &Principal,
+    distribution: Distribution,
 ) -> CoreResult<Option<Vec<String>>> {
-    let linha: Option<(Vec<String>,)> =
-        sqlx::query_as("SELECT pinned_app_ids FROM member_app_pins WHERE person_id = $1")
-            .bind(principal.person_id)
-            .fetch_optional(pool)
-            .await?;
+    // D010: as fixações são por membro + Distribuição.
+    let linha: Option<(Vec<String>,)> = sqlx::query_as(
+        "SELECT pinned_app_ids FROM member_app_pins WHERE person_id = $1 AND distribution = $2",
+    )
+    .bind(principal.person_id)
+    .bind(distribution.as_str())
+    .fetch_optional(pool)
+    .await?;
     Ok(linha.map(|(ids,)| ids))
 }
 
@@ -55,7 +60,12 @@ pub async fn list_app_pins(
 ///
 /// [`CoreError::Validation`] quando a lista excede o tecto, tem um identificador
 /// mal formado, ou repete um.
-pub async fn set_app_pins(pool: &PgPool, principal: &Principal, ids: &[String]) -> CoreResult<()> {
+pub async fn set_app_pins(
+    pool: &PgPool,
+    principal: &Principal,
+    ids: &[String],
+    distribution: Distribution,
+) -> CoreResult<()> {
     if ids.len() > MAX_PINS {
         return Err(CoreError::Validation(format!(
             "Não é possível fixar mais de {MAX_PINS} aplicações."
@@ -81,13 +91,14 @@ pub async fn set_app_pins(pool: &PgPool, principal: &Principal, ids: &[String]) 
     }
 
     sqlx::query(
-        "INSERT INTO member_app_pins (person_id, pinned_app_ids, updated_at)
-         VALUES ($1, $2, now())
-         ON CONFLICT (person_id)
+        "INSERT INTO member_app_pins (person_id, distribution, pinned_app_ids, updated_at)
+         VALUES ($1, $3, $2, now())
+         ON CONFLICT (person_id, distribution)
          DO UPDATE SET pinned_app_ids = EXCLUDED.pinned_app_ids, updated_at = now()",
     )
     .bind(principal.person_id)
     .bind(ids)
+    .bind(distribution.as_str())
     .execute(pool)
     .await?;
     Ok(())

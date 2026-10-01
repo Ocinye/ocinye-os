@@ -111,6 +111,23 @@ async fn main() -> anyhow::Result<()> {
     config.organisation_slug.clone_from(&organisation.slug);
     tracing::info!(instance = organisation.slug, "instance resolved");
 
+    // D010 (M4): o ponto de acesso canónico nasce do endereço público do
+    // Workspace, uma vez, quando a Instância ainda não tem nenhum.
+    match config.endpoint_seed_url.as_deref() {
+        Some(url) => {
+            if organisation::endpoints::seed(&pool, organisation.id, url, &ids)
+                .await
+                .context("access endpoint seed")?
+            {
+                tracing::info!("canonical access endpoint seeded");
+            }
+        }
+        None => tracing::warn!(
+            "OCINYE_WORKSPACE_PUBLIC_URL is not set for the Core: no access endpoint is \
+             seeded; the Workspace refuses unknown hosts until one is configured"
+        ),
+    }
+
     // Object storage is optional at startup. Its absence is reported through
     // the health endpoint rather than preventing the Core from running.
     let store = ObjectStore::new(config.storage.clone());

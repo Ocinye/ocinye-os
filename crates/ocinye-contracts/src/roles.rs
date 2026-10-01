@@ -109,6 +109,18 @@ pub enum TechnicalRole {
 }
 
 impl TechnicalRole {
+    /// Every technical role.
+    pub const ALL: [TechnicalRole; 8] = [
+        Self::PlatformAdmin,
+        Self::OrganisationAdmin,
+        Self::UnitManager,
+        Self::ResearchLead,
+        Self::ResearchMember,
+        Self::Collaborator,
+        Self::ExternalCollaborator,
+        Self::Auditor,
+    ];
+
     /// Stable representation.
     #[must_use]
     pub const fn as_str(self) -> &'static str {

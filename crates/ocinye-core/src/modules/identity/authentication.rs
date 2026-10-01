@@ -355,6 +355,46 @@ impl Authenticator {
         let _ = self.hasher.verify(candidate, &self.dummy_verifier);
     }
 
+    /// D010 · S22: desbloquear a sessão confirma a palavra-passe da própria
+    /// pessoa, contra o verificador guardado, com o mesmo limite de tentativas
+    /// da entrada (as falhas contam para o mesmo endereço). Não cria sessão.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::RateLimited`] when throttled; [`CoreError::Unauthenticated`]
+    /// when the password does not match (one message for every reason).
+    pub async fn reauthenticate(
+        &self,
+        pool: &PgPool,
+        email: &str,
+        person_id: uuid::Uuid,
+        password: &Secret,
+        context: &AttemptContext,
+    ) -> CoreResult<()> {
+        if self.is_throttled(pool, email, context).await? {
+            record_attempt(pool, email, context, Outcome::RateLimited).await;
+            return Err(CoreError::RateLimited(
+                "Demasiadas tentativas. Aguarde alguns minutos.".to_owned(),
+            ));
+        }
+        let candidate = policy::normalise(password);
+        let now = Utc::now();
+        let live = creds::live_credentials(pool, person_id).await?;
+        let matched = password.len_bytes() <= policy::MAX_BYTES
+            && live
+                .iter()
+                .find(|c| c.kind == CredentialKind::Permanent && c.is_usable(now))
+                .is_some_and(|c| self.hasher.verify(&candidate, &c.verifier));
+        if matched {
+            record_attempt(pool, email, context, Outcome::Succeeded).await;
+            Ok(())
+        } else {
+            record_attempt(pool, email, context, Outcome::BadCredentials).await;
+            // 403, não 401: a sessão continua válida; só a palavra-passe não confere.
+            Err(CoreError::PermissionDenied(SIGN_IN_REFUSED.to_owned()))
+        }
+    }
+
     async fn is_throttled(
         &self,
         pool: &PgPool,

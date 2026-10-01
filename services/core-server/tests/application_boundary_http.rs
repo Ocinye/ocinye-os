@@ -313,14 +313,22 @@ async fn um_membro_nao_configura_a_instancia() {
     let org = organisation(&pool).await;
     let state = nucleo(pool.clone(), org);
     let (_, pessoa) = membro(&pool, org, TechnicalRole::ResearchMember).await;
-    for (caminho, corpo) in [
-        (
-            "/api/v1/instance/applications/notes",
-            json!({ "active": false }),
-        ),
-        ("/api/v1/instance/profile", json!({ "profile": "personal" })),
+    let (status, _) = pedido(
+        &state,
+        Some(&pessoa),
+        "PUT",
+        "/api/v1/instance/applications/notes",
+        Some(json!({ "active": false })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    // D010: activar ou desactivar uma Distribuição (o que substituiu «mudar o
+    // perfil») é também de quem governa a Instância.
+    for caminho in [
+        "/api/v1/instance/distributions/personal/enable",
+        "/api/v1/instance/distributions/research/disable",
     ] {
-        let (status, _) = pedido(&state, Some(&pessoa), "PUT", caminho, Some(corpo)).await;
+        let (status, _) = pedido(&state, Some(&pessoa), "POST", caminho, None).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{caminho}");
     }
     let (status, _) = pedido(&state, Some(&pessoa), "GET", "/api/v1/mail/status", None).await;

@@ -9,6 +9,7 @@
 //! Salta quando `OCINYE_TEST_DATABASE_URL` não está definida; falha se estiver
 //! mas a base não responder.
 
+use ocinye_contracts::Distribution;
 use ocinye_contracts::TechnicalRole;
 use ocinye_core::modules::identity;
 use ocinye_core::CoreError;
@@ -76,7 +77,9 @@ async fn a_ausencia_e_distinta_da_lista_vazia_e_a_ordem_preserva_se() {
 
     // Nunca escolheu.
     assert_eq!(
-        identity::list_app_pins(&pool, &quem).await.expect("ler"),
+        identity::list_app_pins(&pool, &quem, Distribution::Research)
+            .await
+            .expect("ler"),
         None,
         "sem linha, a leitura tem de ser None para o Workspace aplicar o padrão"
     );
@@ -87,11 +90,13 @@ async fn a_ausencia_e_distinta_da_lista_vazia_e_a_ordem_preserva_se() {
         "notes".to_owned(),
         "projects".to_owned(),
     ];
-    identity::set_app_pins(&pool, &quem, &escolha)
+    identity::set_app_pins(&pool, &quem, &escolha, Distribution::Research)
         .await
         .expect("fixar");
     assert_eq!(
-        identity::list_app_pins(&pool, &quem).await.expect("ler"),
+        identity::list_app_pins(&pool, &quem, Distribution::Research)
+            .await
+            .expect("ler"),
         Some(escolha.clone()),
         "a lista guardada não é a que foi escrita, ou perdeu a ordem"
     );
@@ -102,21 +107,25 @@ async fn a_ausencia_e_distinta_da_lista_vazia_e_a_ordem_preserva_se() {
         "files".to_owned(),
         "notes".to_owned(),
     ];
-    identity::set_app_pins(&pool, &quem, &reordenada)
+    identity::set_app_pins(&pool, &quem, &reordenada, Distribution::Research)
         .await
         .expect("reordenar");
     assert_eq!(
-        identity::list_app_pins(&pool, &quem).await.expect("ler"),
+        identity::list_app_pins(&pool, &quem, Distribution::Research)
+            .await
+            .expect("ler"),
         Some(reordenada),
         "reordenar tem de substituir pela lista inteira"
     );
 
     // Tira tudo: uma lista vazia é uma escolha — Some(vec![]), não None.
-    identity::set_app_pins(&pool, &quem, &[])
+    identity::set_app_pins(&pool, &quem, &[], Distribution::Research)
         .await
         .expect("esvaziar");
     assert_eq!(
-        identity::list_app_pins(&pool, &quem).await.expect("ler"),
+        identity::list_app_pins(&pool, &quem, Distribution::Research)
+            .await
+            .expect("ler"),
         Some(Vec::new()),
         "esvaziar é uma escolha explícita, distinta de nunca ter escolhido"
     );
@@ -129,14 +138,20 @@ async fn a_validacao_recusa_ids_maus_e_repetidos() {
     let quem = member(&pool).await;
 
     // Repetido.
-    let r = identity::set_app_pins(&pool, &quem, &["files".to_owned(), "files".to_owned()]).await;
+    let r = identity::set_app_pins(
+        &pool,
+        &quem,
+        &["files".to_owned(), "files".to_owned()],
+        Distribution::Research,
+    )
+    .await;
     assert!(
         matches!(r, Err(CoreError::Validation(_))),
         "um id repetido tem de ser recusado"
     );
 
     // Mal formado (espaço).
-    let r = identity::set_app_pins(&pool, &quem, &["a b".to_owned()]).await;
+    let r = identity::set_app_pins(&pool, &quem, &["a b".to_owned()], Distribution::Research).await;
     assert!(
         matches!(r, Err(CoreError::Validation(_))),
         "um id com espaço tem de ser recusado"
@@ -144,7 +159,7 @@ async fn a_validacao_recusa_ids_maus_e_repetidos() {
 
     // Grande de mais.
     let muitos: Vec<String> = (0..100).map(|i| format!("app{i}")).collect();
-    let r = identity::set_app_pins(&pool, &quem, &muitos).await;
+    let r = identity::set_app_pins(&pool, &quem, &muitos, Distribution::Research).await;
     assert!(
         matches!(r, Err(CoreError::Validation(_))),
         "uma lista enorme tem de ser recusada"
@@ -152,7 +167,9 @@ async fn a_validacao_recusa_ids_maus_e_repetidos() {
 
     // E nenhuma dessas escritas deixou estado: continua sem escolha.
     assert_eq!(
-        identity::list_app_pins(&pool, &quem).await.expect("ler"),
+        identity::list_app_pins(&pool, &quem, Distribution::Research)
+            .await
+            .expect("ler"),
         None,
         "uma escrita recusada não pode ter guardado nada"
     );
@@ -166,17 +183,21 @@ async fn a_fixacao_de_um_membro_nao_e_a_de_outro() {
     let a = member(&pool).await;
     let b = member(&pool).await;
 
-    identity::set_app_pins(&pool, &a, &["mail".to_owned()])
+    identity::set_app_pins(&pool, &a, &["mail".to_owned()], Distribution::Research)
         .await
         .expect("fixar de A");
 
     assert_eq!(
-        identity::list_app_pins(&pool, &b).await.expect("ler B"),
+        identity::list_app_pins(&pool, &b, Distribution::Research)
+            .await
+            .expect("ler B"),
         None,
         "a fixação de A não pode aparecer a B"
     );
     assert_eq!(
-        identity::list_app_pins(&pool, &a).await.expect("ler A"),
+        identity::list_app_pins(&pool, &a, Distribution::Research)
+            .await
+            .expect("ler A"),
         Some(vec!["mail".to_owned()]),
         "a fixação de A tem de continuar a ser a de A"
     );

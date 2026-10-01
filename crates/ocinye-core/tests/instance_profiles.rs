@@ -222,10 +222,14 @@ async fn desactivar_esconde_reactivar_devolve_e_repor_segue_o_perfil() {
         .expect("reactivar");
     assert!(activa(&pool, org, ApplicationId::Notes).await);
 
-    // Um perfil sem Ideias; a decisão explícita sobre Notas mantém-se.
-    organisation::set_profile(&pool, &admin, InstanceProfile::Business, &ids())
+    // D010: passar a Business (sem Ideias) é activar Business e desactivar
+    // Research (ADR-0019); a decisão explícita sobre Notas mantém-se.
+    organisation::distributions::enable(&pool, &admin, InstanceProfile::Business, &ids())
         .await
-        .expect("mudar de perfil");
+        .expect("activar Business");
+    organisation::distributions::disable(&pool, &admin, InstanceProfile::Research, &ids())
+        .await
+        .expect("desactivar Research");
     assert!(
         !activa(&pool, org, ApplicationId::Ideas).await,
         "empresa não traz Ideias"
@@ -245,13 +249,14 @@ async fn desactivar_esconde_reactivar_devolve_e_repor_segue_o_perfil() {
     // Cada mudança ficou auditada.
     let auditadas: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM audit_events
-          WHERE actor_person_id = $1 AND resource_type IN ('instance_application', 'instance_profile')",
+          WHERE actor_person_id = $1
+            AND resource_type IN ('instance_application', 'instance_distribution')",
     )
     .bind(admin.person_id)
     .fetch_one(&pool)
     .await
     .expect("auditoria");
-    assert_eq!(auditadas, 5);
+    assert_eq!(auditadas, 6);
 }
 
 #[tokio::test]
@@ -292,7 +297,9 @@ async fn so_quem_governa_a_instancia_a_configura() {
         matches!(desactivar, Err(CoreError::PermissionDenied(_))),
         "{desactivar:?}"
     );
-    let perfil = organisation::set_profile(&pool, &membro, InstanceProfile::Personal, &ids()).await;
+    let perfil =
+        organisation::distributions::enable(&pool, &membro, InstanceProfile::Personal, &ids())
+            .await;
     assert!(
         matches!(perfil, Err(CoreError::PermissionDenied(_))),
         "{perfil:?}"

@@ -73,7 +73,7 @@ pub struct ApplicationState {
     pub active: bool,
     /// Se o estado vem de uma decisão explícita da Instância, e não do perfil.
     pub explicit: bool,
-    /// O que o perfil diria, sem decisão explícita.
+    /// O que as Distribuições activadas diriam, sem decisão explícita.
     pub profile_default: bool,
     /// O que a aplicação declara ao Ocinye OS (ADR-0016).
     pub manifest: &'static ocinye_contracts::ApplicationManifest,
@@ -82,8 +82,11 @@ pub struct ApplicationState {
 /// A configuração de aplicações de uma Instância.
 #[derive(Debug, Clone, Serialize)]
 pub struct InstanceApplications {
-    /// O perfil.
+    /// O perfil — espelho só de leitura da Distribuição activada mais antiga,
+    /// durante uma versão (0060). As activadas estão em `distributions`.
     pub profile: InstanceProfile,
+    /// As Distribuições activadas (ADR-0019).
+    pub distributions: Vec<ocinye_contracts::Distribution>,
     /// Todas as aplicações, na ordem do registo.
     pub applications: Vec<ApplicationState>,
 }
@@ -143,11 +146,14 @@ pub async fn application_states(
     organisation_id: Uuid,
 ) -> CoreResult<InstanceApplications> {
     let profile = profile_of(pool, organisation_id).await?;
+    // ADR-0019 §9: sem decisão explícita, uma aplicação opcional está activa se
+    // **alguma** Distribuição activada a traz. Com uma só, é a regra do perfil.
+    let enabled = super::distributions::enabled(pool, organisation_id).await?;
     let decisions = explicit_decisions(pool, organisation_id).await?;
     let applications = ApplicationId::ALL
         .into_iter()
         .map(|id| {
-            let profile_default = profile.activates(id);
+            let profile_default = enabled.iter().any(|d| d.activates(id));
             let decided = if id.is_optional() {
                 decisions.get(&id).copied()
             } else {
@@ -165,6 +171,7 @@ pub async fn application_states(
         .collect();
     Ok(InstanceApplications {
         profile,
+        distributions: enabled.iter().collect(),
         applications,
     })
 }
@@ -200,43 +207,9 @@ pub async fn instance_applications(
     application_states(pool, principal.organisation_id).await
 }
 
-/// Muda o perfil da Instância. As decisões explícitas mantêm-se; as aplicações
-/// sem decisão passam a seguir o perfil novo. Nada se apaga.
-///
-/// # Errors
-///
-/// [`CoreError::PermissionDenied`] without `organisation.manage`; database errors.
-pub async fn set_profile(
-    pool: &PgPool,
-    principal: &Principal,
-    profile: InstanceProfile,
-    ids: &CorrelationIds,
-) -> CoreResult<InstanceApplications> {
-    require(principal, Permission::OrganisationManage)?;
-    let mut tx = pool.begin().await?;
-    let anterior: String =
-        sqlx::query_scalar("SELECT profile FROM organisations WHERE id = $1 FOR UPDATE")
-            .bind(principal.organisation_id)
-            .fetch_one(&mut *tx)
-            .await?;
-    sqlx::query("UPDATE organisations SET profile = $2, updated_at = now() WHERE id = $1")
-        .bind(principal.organisation_id)
-        .bind(profile.as_str())
-        .execute(&mut *tx)
-        .await?;
-    audit::record(
-        &mut tx,
-        Some(principal),
-        ids,
-        AuditEntry::new(action::ADMIN_OPERATION, "instance_profile")
-            .resource(principal.organisation_id)
-            .detail("from", anterior.as_str())
-            .detail("to", profile.as_str()),
-    )
-    .await?;
-    tx.commit().await?;
-    application_states(pool, principal.organisation_id).await
-}
+// D010 (ADR-0019): «mudar o perfil» — substituir a Distribuição da Instância —
+// deixou de existir. Activam-se e desactivam-se Distribuições
+// (`distributions::enable`/`disable`), auditadas, com as suas invariantes.
 
 /// Activa, desactiva, ou devolve ao perfil (`None`) uma aplicação opcional.
 ///

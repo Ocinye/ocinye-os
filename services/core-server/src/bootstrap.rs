@@ -33,7 +33,8 @@ use ocinye_observability::CorrelationIds;
 #[derive(Debug, Default)]
 struct Args {
     instance_name: Option<String>,
-    profile: Option<String>,
+    /// `--distribution` (repetível) — e `--profile`, o nome antigo da primeira.
+    distributions: Vec<String>,
     name: Option<String>,
     email: Option<String>,
     admin_name: Option<String>,
@@ -56,8 +57,8 @@ fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
                 args.instance_name = Some(value()?);
                 iter.next();
             }
-            "--profile" => {
-                args.profile = Some(value()?);
+            "--profile" | "--distribution" => {
+                args.distributions.push(value()?);
                 iter.next();
             }
             "--name" => {
@@ -90,7 +91,7 @@ fn print_usage() {
     eprintln!(
         "Uso: ocinye-core-server bootstrap-admin \\
   [--instance-name \"Nome da Organização\"] \\
-  [--profile research|business|education|personal] \\
+  [--distribution research|business|education|personal]… \\
   --name        \"Nome Completo\" \\
   --email       pessoa@ocinye.com \\
   --admin-name  \"Nome Completo (Admin)\" \\
@@ -223,14 +224,20 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         .or_else(|| config.instance_name.clone())
         .map(|name| name.trim().to_owned())
         .filter(|name| !name.is_empty());
-    let profile: Option<InstanceProfile> = match args.profile.as_deref() {
-        Some(value) => Some(
-            value
-                .parse()
-                .map_err(|error: UnknownProfile| anyhow::anyhow!("{error}"))?,
-        ),
-        None => config.instance_profile,
-    };
+    // D010 (fronteira D011): `--distribution` repete-se; a primeira é a que a
+    // Instância nasce a ter, e as outras activam-se com ela. Sem nenhuma, a da
+    // configuração. Nunca «as quatro» por omissão.
+    let mut chosen: Vec<InstanceProfile> = Vec::new();
+    for value in &args.distributions {
+        let d: InstanceProfile = value
+            .parse()
+            .map_err(|error: UnknownProfile| anyhow::anyhow!("{error}"))?;
+        if !chosen.contains(&d) {
+            chosen.push(d);
+        }
+    }
+    let profile: Option<InstanceProfile> = chosen.first().copied().or(config.instance_profile);
+    let more: Vec<InstanceProfile> = chosen.iter().skip(1).copied().collect();
 
     let pool = db::connect(&config)
         .await
@@ -264,6 +271,14 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         },
     }
     .context("instância")?;
+
+    if let (Some(first), false) = (profile, more.is_empty()) {
+        organisation::distributions::initial(&pool, organisation.id, first, &more, &ids)
+            .await
+            .context(
+                "Distribuições activadas (só numa Instância nova; depois, na Administração)",
+            )?;
+    }
 
     // The institution has a default resource profile from the start, so every
     // member resolves an entitlement (ADR-0108). Existing installations were
@@ -324,6 +339,11 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         }
         Err(error) => return Err(error.into()),
     };
+
+    // O primeiro administrador entra em todas as activadas (fronteira D011).
+    organisation::distributions::grant_all_enabled(&pool, organisation.id, person.id)
+        .await
+        .context("acesso às Distribuições")?;
 
     // Printed to stdout, once. Nothing else on this path writes it anywhere:
     // not the log, not the database, not the audit trail.

@@ -10,6 +10,7 @@
 //! mas a base não responder.
 
 use ocinye_contracts::desktop::{DesktopLayout, PlacedWidget};
+use ocinye_contracts::Distribution;
 use ocinye_contracts::TechnicalRole;
 use ocinye_core::modules::identity;
 use ocinye_core::CoreError;
@@ -94,16 +95,18 @@ async fn sem_disposicao_segue_a_predefinicao_e_a_primeira_gravacao_e_a_versao_um
     let quem = member(&pool).await;
 
     assert_eq!(
-        identity::get_desktop(&pool, &quem).await.expect("ler"),
+        identity::get_desktop(&pool, &quem, Distribution::Research)
+            .await
+            .expect("ler"),
         None
     );
 
     let minha = layout(&[("notice", 2, 1), ("tasks", 1, 2)]);
-    let v = identity::put_desktop(&pool, &quem, 0, &minha, false)
+    let v = identity::put_desktop(&pool, &quem, 0, &minha, false, Distribution::Research)
         .await
         .expect("gravar");
     assert_eq!(v, 1);
-    let lida = identity::get_desktop(&pool, &quem)
+    let lida = identity::get_desktop(&pool, &quem, Distribution::Research)
         .await
         .expect("ler")
         .expect("gravada");
@@ -118,25 +121,25 @@ async fn duas_sessoes_nao_se_sobrepoem_em_silencio() {
 
     let a = layout(&[("notice", 2, 1), ("tasks", 1, 2)]);
     let b = layout(&[("notice", 2, 1), ("notes", 1, 1)]);
-    identity::put_desktop(&pool, &quem, 0, &a, false)
+    identity::put_desktop(&pool, &quem, 0, &a, false, Distribution::Research)
         .await
         .expect("v1");
     // As duas janelas leram a versão 1; a primeira grava, a segunda chega tarde.
     assert_eq!(
-        identity::put_desktop(&pool, &quem, 1, &a, false)
+        identity::put_desktop(&pool, &quem, 1, &a, false, Distribution::Research)
             .await
             .expect("v2"),
         2
     );
-    let tarde = identity::put_desktop(&pool, &quem, 1, &b, false).await;
+    let tarde = identity::put_desktop(&pool, &quem, 1, &b, false, Distribution::Research).await;
     assert!(matches!(tarde, Err(CoreError::Conflict(_))), "{tarde:?}");
     // E a primeira gravação também não pode ser repetida com a versão 0.
-    let de_novo = identity::put_desktop(&pool, &quem, 0, &b, false).await;
+    let de_novo = identity::put_desktop(&pool, &quem, 0, &b, false, Distribution::Research).await;
     assert!(
         matches!(de_novo, Err(CoreError::Conflict(_))),
         "{de_novo:?}"
     );
-    let lida = identity::get_desktop(&pool, &quem)
+    let lida = identity::get_desktop(&pool, &quem, Distribution::Research)
         .await
         .expect("ler")
         .expect("gravada");
@@ -158,11 +161,14 @@ async fn uma_disposicao_invalida_e_recusada_sem_gravar() {
         layout(&[("notice", 2, 1), ("kpis", 1, 1)]), // tamanho não permitido
         layout(&[("notice", 2, 1), ("notice", 2, 1)]), // repetido
     ] {
-        let r = identity::put_desktop(&pool, &quem, 0, &errada, false).await;
+        let r =
+            identity::put_desktop(&pool, &quem, 0, &errada, false, Distribution::Research).await;
         assert!(matches!(r, Err(CoreError::Validation(_))), "{r:?}");
     }
     assert_eq!(
-        identity::get_desktop(&pool, &quem).await.expect("ler"),
+        identity::get_desktop(&pool, &quem, Distribution::Research)
+            .await
+            .expect("ler"),
         None
     );
 }
@@ -172,10 +178,17 @@ async fn uma_disposicao_invalida_e_recusada_sem_gravar() {
 async fn sem_obrigatorios_um_desktop_vazio_grava() {
     let Some(pool) = pool().await else { return };
     let quem = member(&pool).await;
-    let v = identity::put_desktop(&pool, &quem, 0, &layout(&[("tasks", 1, 2)]), false)
-        .await
-        .expect("sem avisos");
-    identity::put_desktop(&pool, &quem, v, &layout(&[]), false)
+    let v = identity::put_desktop(
+        &pool,
+        &quem,
+        0,
+        &layout(&[("tasks", 1, 2)]),
+        false,
+        Distribution::Research,
+    )
+    .await
+    .expect("sem avisos");
+    identity::put_desktop(&pool, &quem, v, &layout(&[]), false, Distribution::Research)
         .await
         .expect("vazio");
 }
@@ -186,18 +199,36 @@ async fn repor_volta_a_predefinicao() {
     let Some(pool) = pool().await else { return };
     let quem = member(&pool).await;
 
-    identity::put_desktop(&pool, &quem, 0, &layout(&[("notice", 2, 1)]), false)
+    identity::put_desktop(
+        &pool,
+        &quem,
+        0,
+        &layout(&[("notice", 2, 1)]),
+        false,
+        Distribution::Research,
+    )
+    .await
+    .expect("gravar");
+    identity::reset_desktop(&pool, &quem, Distribution::Research)
         .await
-        .expect("gravar");
-    identity::reset_desktop(&pool, &quem).await.expect("repor");
+        .expect("repor");
     assert_eq!(
-        identity::get_desktop(&pool, &quem).await.expect("ler"),
+        identity::get_desktop(&pool, &quem, Distribution::Research)
+            .await
+            .expect("ler"),
         None
     );
     assert_eq!(
-        identity::put_desktop(&pool, &quem, 0, &layout(&[("notice", 2, 1)]), false)
-            .await
-            .expect("gravar de novo"),
+        identity::put_desktop(
+            &pool,
+            &quem,
+            0,
+            &layout(&[("notice", 2, 1)]),
+            false,
+            Distribution::Research
+        )
+        .await
+        .expect("gravar de novo"),
         1
     );
 }
@@ -209,13 +240,27 @@ async fn a_disposicao_de_um_membro_nao_e_a_de_outro() {
     let a = member(&pool).await;
     let b = member(&pool).await;
 
-    identity::put_desktop(&pool, &a, 0, &layout(&[("notice", 2, 1)]), false)
+    identity::put_desktop(
+        &pool,
+        &a,
+        0,
+        &layout(&[("notice", 2, 1)]),
+        false,
+        Distribution::Research,
+    )
+    .await
+    .expect("gravar de A");
+    assert_eq!(
+        identity::get_desktop(&pool, &b, Distribution::Research)
+            .await
+            .expect("ler B"),
+        None
+    );
+    identity::reset_desktop(&pool, &b, Distribution::Research)
         .await
-        .expect("gravar de A");
-    assert_eq!(identity::get_desktop(&pool, &b).await.expect("ler B"), None);
-    identity::reset_desktop(&pool, &b).await.expect("B repõe");
+        .expect("B repõe");
     assert!(
-        identity::get_desktop(&pool, &a)
+        identity::get_desktop(&pool, &a, Distribution::Research)
             .await
             .expect("ler A")
             .is_some(),
