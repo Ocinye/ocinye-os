@@ -83,6 +83,19 @@ hoje não pode fingir nem aprofundar.
   **substitui** a Distribuição — não acrescenta — e que a Workspace não expõe;
   a disposição gravada do membro atravessa essa troca, como antes da D009.
 
+## Emenda D010 (2026-10-01)
+
+Com a [ADR-0019](0019-multi-distribution-instance.md), uma Instância tem **uma
+ou mais** Distribuições activadas (`instance_distributions`, migração 0060), e
+o estado do membro passa a ser por **membro + Distribuição** (migração 0061):
+disposição do Desktop, **fundo** (dentro da disposição) e fixações. A
+predefinição desta ADR aplica-se por Distribuição activa, exactamente como
+estava; a migração levou o estado de cada membro para a Distribuição que a
+Instância tinha, sem cópia para as outras. A predefinição da Instância
+(FG-014) continua **adiada**, e a Administração di-lo (S33). G9-21 (mudar a
+Distribuição depois de criada) resolve-se por activar e desactivar
+(S26/S38), nunca por substituir.
+
 ## Alternatives
 
 | Alternativa | Porque não |

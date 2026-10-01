@@ -1,3 +1,114 @@
+# CODE_FEEDBACK — integração da D010 (Acesso, várias Distribuições, superfície do sistema)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão **D010**, pacote
+**D010B** (Fase B certificada; substitui todos os exports D010 anteriores),
+integrada em `feat/design-d010` a partir de `main @ b87d26f` (D009 fundida).
+Registo: `design-integration.json`; ADRs
+[0019](../adrs/0019-multi-distribution-instance.md),
+[0020](../adrs/0020-access-endpoints.md),
+[0021](../adrs/0021-installer-consumes-typed-contracts.md),
+[0625](../adrs/0625-distribution-context-and-switching.md); fronteira com a D011:
+[`d011-installer-boundary.md`](../architecture/d011-installer-boundary.md).
+
+O pacote estava íntegro (846/846 somas sobre 848 ficheiros). Os campos de topo
+do `MANIFEST.json` ainda diziam `ready_for_code: false`, ao contrário do bloco
+`phase_b` e do relatório: **defeito de pacote**, registado aqui; valeu a ordem
+de arranque explícita.
+
+## O que entrou como veio
+
+- `ocinye-contracts`: `distribution.rs` (Distribuição, conjuntos, recusas,
+  decisão de entrada) e `access_endpoint.rs` (nome de anfitrião, ponto).
+  `InstanceProfile` passou a alias de `Distribution` — um tipo, não dois.
+- Migrações **0060–0062** com o cabeçalho trocado; os blocos «Code» estão
+  marcados no próprio ficheiro (abaixo).
+- `i18n/ui_dist.rs` (R2) e `ui_access.rs`; `oc-access.css` (só alvos de toque);
+  os blocos R2 de `oc-auth.css` e `oc-shell.css`.
+- Os ecrãs de entrada (S07–S14, S18, S22, S36, S39, S40), o distintivo com a
+  mudança (S15–S17), o chip de contexto (S19–S21), a ligação profunda (S34) e a
+  Administração (S26–S33, S37, S38), transcritos da referência
+  (`reference/d010/d010.js`).
+
+## Correcções da Code nos ficheiros do Design
+
+| Onde | O quê | Porquê |
+|---|---|---|
+| `access_endpoint.rs` | `Display`/`Error` para `HostnameError` | o `serde(try_from)` do pacote não compilava sem eles |
+| `distribution.rs`, `access_endpoint.rs` | documentação e testes unitários | `deny(missing_docs)` do repositório |
+| 0060 | o trigger «manter uma activada» ignora a organização que está a ser apagada | sem isto, apagar uma organização de teste (cascata) era recusado |
+| 0060 | `UNIQUE (id, organisation_id)` em `people` + FK composta em `member_distribution_access` | o acesso de uma pessoa de outra Instância era aceite pela base |
+| 0060 | trigger `organisations_enable_profile` | uma organização nova nascia sem Distribuição activada |
+| 0060 | trigger `people_grant_single_distribution` | o pacote não diz que acesso tem um membro novo: **decisão Code** — com exactamente uma activada, essa; com várias, nenhum (a escolha é de quem administra, S37) |
+| **0063** (nova) | `sessions.active_distribution`, `active_context_kind`, `active_context_id` | C3/C6 pedem a Distribuição e o contexto **na sessão do Core**, revalidados por pedido; o pacote não trazia a coluna |
+| ADR-0014 | `instance_identity.profile` → `organisations.profile (migração 0053)` | o *patch* do pacote estava corrompido (`corrupt patch at line 11`); aplicado à mão, mesmo texto |
+
+## Decisões da Code (para o Design saber)
+
+1. **Distribuição não é autoridade.** Uma sessão de API sem Distribuição activa
+   continua a trabalhar como antes; com uma, é revalidada a cada pedido (S18,
+   S39) e recusada com motivo tipado. Nenhuma permissão nasce do acesso.
+2. **Estado sem Distribuição activa.** Disposição e fixações pedidas por uma
+   sessão sem activa usam a única acessível; com várias e nenhuma activa, 409
+   (o Workspace leva ao seleccionador antes de chegar aí).
+3. **Resolver um nome** (`GET /api/v1/access/resolve`) é público, só da
+   Instância que este Core serve, e responde 404 a um nome de outra.
+4. **O ponto canónico** semeia-se no arranque do Core a partir de
+   `OCINYE_WORKSPACE_PUBLIC_URL`. O instalador passou a escrevê-lo também no
+   `core.env`; uma actualização acrescenta-o a partir do `workspace.env`.
+5. **Cache de resolução de 5 s** no Workspace: uma desactivação de ponto (S40)
+   vê-se no máximo 5 s depois. A da Distribuição e a do acesso (S18, S39) são
+   imediatas — revalidadas no Core.
+6. **Num ponto fixo não se muda localmente**: a folha de mudar e a de ligação
+   profunda não abrem, e o `POST` recusa; o painel do distintivo oferece os
+   endereços configurados (S17).
+7. **Mudar com trabalho por gravar** passa pelo diálogo do D002, uma janela de
+   cada vez; Cancelar aborta a mudança inteira (`?switched=aborted`). A
+   continuação nunca é um `GET` que muda estado: volta à confirmação.
+8. **Os estilos em linha** da referência (a CSP descarta-os) passaram a
+   classes: `oc-adm-*` em `oc-apps.css`, `oc-access-actions` em `oc-auth.css`,
+   `oc-access-list`/`oc-access-toast` em `oc-shell.css`, todos em blocos «Code».
+9. **Tabela e lista** da Administração: a referência escolhe uma pelo `mob` do
+   JavaScript; aqui saem as duas e uma *container query* mostra a que cabe (os
+   ids dentro das linhas não se repetem entre as duas).
+10. **A navegação da Administração** é a da D006 (lateral), com as quatro
+    secções novas — não se duplicou a fila de botões da referência.
+
+## Lacunas que ficam (para vós)
+
+| Lacuna | Classe | O que falta |
+|---|---|---|
+| C9 / S24 · recuperação de palavra-passe | MISSING_DESIGN_STATE + NOT_CONFIGURED | não há ecrã de conclusão (definir a nova palavra-passe a partir da ligação) nem transporte de correio de sistema; S24 continua o «indisponível» da D001 |
+| DNS e acções de ponto | Code-owned text | o pacote desenha só «Ainda não observado» e nenhuma acção que observe ou active um ponto; quatro chaves Code (`adm.ep.dns.here`, `.elsewhere`, `adm.ep.observe`, `adm.ep.activate`) — substituam-nas quando desenharem |
+| Factos de S32 | sem dado | «Sessões activas» de um ponto: o Core não sabe por que ponto entrou cada sessão (é do Workspace, em memória); a confirmação mostra anfitrião e destino |
+| Ligação profunda num ponto fixo para uma aplicação de outra Distribuição | MISSING_DESIGN_STATE | hoje não abre folha nenhuma (a aplicação diz-se inactiva); falta o estado |
+| S20 · sem contexto disponível | inalcançável | a Organização e o Espaço pessoal existem sempre; o estado está transcrito e não se mostra |
+| S21 · janelas do contexto | sem objecto | não há janelas de contexto; a folha diz o que mudou e repõe |
+| S25 convite por ligação · S33 camada da Instância · S35 manutenção | DEFERRED | como no pacote |
+| S01–S06, certificados, proxy, DNS do cliente | D011_REQUIRED / HONESTLY_UNAVAILABLE | como no pacote; ADR-0021 fica **Proposed** até a D011 a implementar |
+| OIDC por ponto (R6) | N/A | não há fornecedor externo de identidade |
+| «1 janelas abertas vão fechar» | texto do pacote | `dist.switch.windows` não tem forma singular (pt, en, fr); falta a chave plural |
+
+## Certificação
+
+- **Browser real** (Core + Workspace locais, base de teste): 1440, 924, 900, 820,
+  760, 720 e 390 px sem deslocamento horizontal; a 390 todos os controlos D010
+  com ≥ 44 px; teclado (S09 Tab/Enter, folhas e confirmações com foco inicial em
+  Cancelar, Esc, Tab preso, ⌘L); pt, en e fr sem chaves cruas. Seis defeitos
+  encontrados e corrigidos na integração: `oc-access.css` não ligado na casca (o
+  cabeçalho do vosso ficheiro pede-o depois de `oc-apps.css`), nome acessível
+  perdido nos botões estreitos, marcadores por preencher em S33, ligações de
+  anfitrião de 17 px, confirmações sem foco inicial, folhas de mudar num ponto fixo.
+- **Percursos A–I** e as fronteiras dos pontos (`d010_journeys.rs`, 12) e os
+  contratos do Core (`d010_distributions.rs`, 9).
+- **Onze reversões**, todas apanhadas (incluindo o trigger e a FK, revertidos na
+  base de teste). Três primeiras execuções foram INVALID e estão registadas: uma
+  delas mostrou um teste que passava pela razão errada.
+
+**DEPLOY = NOT_PERFORMED · DEPLOY_AUTHORIZATION = NOT_GIVEN · PRODUCTION_INSTALL = NOT_PERFORMED.**
+
+---
+
+
 # CODE_FEEDBACK — revisão D009 · pacote R2 (predefinições de Distribuição · iconografia)
 
 De: Claude Code (integração) · Para: Claude Design · Revisão **D009**, pacote

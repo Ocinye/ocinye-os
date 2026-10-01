@@ -1,470 +1,609 @@
 {
   "schema_version": 1,
-  "design_revision": "D009",
-  "package_revision": "R2",
-  "supersedes": "D009 R1 package (ocinye-design-complete-D009, 789 checksums), integrated first on this branch and reconciled onto R2 in place",
-  "based_on": "D008 (main @ ece29e9, merge of PR #191); Design observed main @ ece29e98",
-  "repository_head_before": "ece29e9",
-  "integrated_on": "2026-09-30",
-  "integration_branch": "feat/design-d009",
-  "integration_status": "INTEGRATED_R2_VISUAL_CERTIFIED_ACCESSIBILITY_CERTIFIED_WITH_D001_TOUCH_FINDINGS_FUNCTIONALLY_CERTIFIED; MULTI_DISTRIBUTION_D010_REQUIRED",
-  "package": "ocinye-design-complete-D009 2 (R2): 817/817 checksums; 86 reference states, 86/86 Design reference checks (Design reference only — not Rust, persistence, authorization, provisioning or multi-Distribution runtime)",
-  "r1_to_r2_reconciliation": {
-    "package_files_changed": 25,
-    "screenshot_files_changed": 26,
-    "already_integrated_from_r1": "all runtime files (defaults, iconography, sprite fragment, CSS, i18n ui_dist base, tests)",
-    "r2_corrections_applied": [
-      "experience/distribution.rs: two doc comments (enabled Distributions [1..4]; FG-014 per Instance + Distribution)",
-      "docs/ui/distribution-defaults.md: R2 hierarchy note",
-      "ADR-0624: R2 amendment (R2.1–R2.4) plus R2.5 repository truth"
+  "design_revision": "D010",
+  "package_revision": "D010B",
+  "supersedes": "every earlier D010 export (D010, D010 2): D010 2 was refused as not ready; D010B is the Phase-B certified package",
+  "based_on": "D009 (main @ b87d26f, merge of PR #192)",
+  "repository_head_before": "b87d26f",
+  "integrated_on": "2026-10-01",
+  "integration_branch": "feat/design-d010",
+  "integration_status": "INTEGRATED_FUNCTIONALLY_CERTIFIED_BROWSER_CERTIFIED; C9_PASSWORD_RECOVERY_NOT_IMPLEMENTED; D011_INSTALLER_OUT_OF_SCOPE",
+  "package": {
+    "files": 848,
+    "checksums": "846/846 OK",
+    "reference_count": 132,
+    "manifest_defect": "top-level ready_for_code=false contradicts the phase_b block and D010_REPORT (PHASE_B=COMPLETE); start order followed",
+    "adr_0014_patch": "corrupt (\"corrupt patch at line 11\"); applied by hand, same text"
+  },
+  "instance_model": "ONE_INSTANCE_PER_INSTALLATION; governing organisation = instance_identity.organisation_id; profile storage organisations.profile (mirror for one release)",
+  "migrations": {
+    "0060": "instance_distributions + member_distribution_access (+ Code: cascade-safe keep-one trigger, composite person FK, enable-on-create and single-Distribution grant triggers)",
+    "0061": "member_desktop_layouts and member_app_pins keyed by (person_id, distribution); wallpaper inside the layout",
+    "0062": "access_endpoints",
+    "0063": "Code: sessions.active_distribution, active_context_kind, active_context_id"
+  },
+  "migration_proof": "a populated D009-era database (0001–0059) upgraded through 0063: layout and pin md5 checksums identical, each member mapped to the Instance's own Distribution, empty pin lists kept, no copies to other Distributions; also exercised on the d001_preview copy used for browser certification",
+  "core": {
+    "modules": [
+      "organisation::distributions",
+      "organisation::endpoints",
+      "organisation::contexts"
     ],
-    "documentation_added": [
-      "docs/ui/D010_SCOPE_PROPOSAL.md",
-      "docs/ui/missing-screen-audit.md"
+    "routes": [
+      "GET /me/distributions",
+      "POST /me/distribution",
+      "GET /me/contexts",
+      "POST /me/context",
+      "GET /instance/distributions",
+      "POST /instance/distributions/{d}/enable|disable",
+      "GET /instance/distribution-access",
+      "PUT|DELETE /instance/distribution-access/{person}/{d}",
+      "GET /access/resolve (public, this Instance only)",
+      "GET|POST /access-endpoints",
+      "POST /access-endpoints/{id}/activate|binding|disable|observe",
+      "POST /auth/reauthenticate"
     ],
-    "d010_only_skipped": [
-      "i18n ui_dist: 26 keys dist.select/zero/bound/switch, endpoint.*, ctx.*, desk.target",
-      "oc-shell.css / oc-auth.css: .oc-dsel, .oc-auth__inst/__host/__stop, .oc-ctxsw, .oc-ctx-*, .oc-dist-sw, .oc-dist-bound"
+    "removed": [
+      "PUT /instance/profile"
     ],
-    "reference_only": [
-      "reference/d009/fixture.js",
-      "validate.html",
-      "25 r2-* screenshots"
-    ],
-    "conflicts": 0
+    "revalidation": "active Distribution revalidated on every request; typed refusals distribution_not_enabled / distribution_no_access"
   },
-  "proposal": {
-    "v3": "NOT_IN_PACKAGE (cited by README/HANDOFF; only archive/DO_NOT_IMPLEMENT-Ocinye OS Proposta.dc.html, byte-identical to R1, is shipped)",
-    "v2_superseded": "not shipped as a separate file",
-    "standalone_export": "STALE_NONCANONICAL (no deterministic exporter in the repository or package; not hand-written)",
-    "frame_portability": "PARTIAL (frames depend on package-adjacent pages; carried to D010 Design tooling)",
-    "repository": "proposals are not tracked in the repository"
-  },
-  "raw_build": "R1: compiled first time with one warning; R2: documentation-only Rust changes, compiled; clippy -D warnings clean",
-  "code_fix_in_design_file": [
-    "controllers/desktop.rs: unused SYSTEM_DIM/SYSTEM_WALLPAPER import (R1)",
-    "iconography.rs sprite test: xmlns false positive (R1)",
-    "distribution.rs: widget_shown (one rule for Desktop and library; G9-09/G9-10)",
-    "controllers/desktop.rs: KPIs drop only invisible/refused metrics; withhold only when no app is visible; default_for",
-    "ui/screens/home/mod.rs: library uses widget_shown",
-    "oc-shell.css: 44px mobile hit area for the badge; 44px Getting Started button",
-    "oc-shell.js: launcher/palette close returns focus to the opener"
-  ],
-  "registry": {
-    "before": 28,
-    "after": 28,
-    "changed": false
-  },
-  "app_activation": {
-    "changed": false,
-    "proof": "a_activacao_nao_mudou (per-profile snapshot equal to ece29e9); Core and core-server untouched"
-  },
-  "defaults": {
-    "research": {
-      "desktop": [
-        "kpis",
-        "projects"
-      ],
-      "pins": [
-        "work",
-        "projects",
-        "ideas",
-        "datasets",
-        "results",
-        "knowledge",
-        "files",
-        "notes"
-      ],
-      "background": "field"
-    },
-    "business": {
-      "desktop": [
-        "tasks",
-        "calendar",
-        "projects",
-        "files"
-      ],
-      "pins": [
-        "work",
-        "calendar",
-        "mail",
-        "messages",
-        "projects",
-        "files",
-        "notes"
-      ],
-      "background": "module"
-    },
-    "personal": {
-      "desktop": [
-        "notes",
-        "files",
-        "calendar",
-        "storage"
-      ],
-      "pins": [
-        "files",
-        "notes",
-        "calendar",
-        "work",
-        "resources",
-        "trash"
-      ],
-      "background": "calm"
-    },
-    "education": {
-      "desktop": [
-        "calendar",
-        "tasks",
-        "projects",
-        "notes"
-      ],
-      "pins": [
-        "work",
-        "units",
-        "projects",
-        "knowledge",
-        "bibliography",
-        "calendar",
-        "files",
-        "notes"
-      ],
-      "background": "lattice"
-    },
-    "unknown": "empty System default (no widgets, ocinye background, manifest pins) — never Research",
-    "never_pinned": [
-      "administration",
-      "audit",
-      "monitor",
-      "terminal",
-      "browser",
-      "prompt (Nye)"
-    ],
-    "version": 2
-  },
-  "scopes": {
-    "member_layout_current": "MEMBER_ONLY (member_desktop_layouts.person_id)",
-    "member_layout_target": "MEMBER + INSTANCE + DISTRIBUTION (D010, G9-30)",
-    "member_pins_current": "MEMBER_ONLY (member_app_pins.person_id)",
-    "member_pins_target": "MEMBER + INSTANCE + DISTRIBUTION (D010, G9-31)",
-    "member_background": "inside the layout: current MEMBER_ONLY; target Distribution-scoped (follows G9-30)",
-    "instance_default": "NOT_IMPLEMENTED (FG-014)",
-    "restore": "member row deleted → active Distribution default; System when unknown"
-  },
-  "multi_distribution": {
-    "runtime": "D010_REQUIRED",
-    "second_distribution_enablement": "BLOCKED (organisations.profile holds one value; PUT /api/v1/instance/profile replaces it, organisation.manage, audited, not exposed by the Workspace)",
-    "selector": "D010_REQUIRED",
-    "switch": "D010_REQUIRED",
-    "access_endpoints": "D010_REQUIRED",
-    "custom_domains": "D010_REQUIRED",
-    "tls_domains": "D010_REQUIRED",
-    "login_context_selection": "absent (login selects no Unit/Project/Personal Space)"
-  },
-  "icons": {
-    "app_icons": 28,
-    "keep": 18,
-    "refine": 3,
-    "replace": 7,
-    "distribution_icons": 4,
-    "sprite_before": 184,
-    "sprite_after": 198,
-    "added": 14,
-    "removed": 0,
-    "sizes_checked": "16/20/24/32/48 px in the real browser: 160/160 rendered with a glyph inside the box",
-    "guards": [
-      "cada_aplicacao_registada_tem_um_icone_que_existe",
-      "nao_ha_icones_repetidos_entre_aplicacoes",
-      "nenhum_icone_literal_aponta_para_o_vazio",
-      "o_sprite_nao_carrega_nem_executa_nada",
-      "quatro_icones_de_distribuicao"
+  "workspace": {
+    "host_resolution": "access::layer: Host (X-Forwarded-Host only from OCINYE_TRUSTED_PROXIES), resolved in the Core, 5 s cache; unknown → S13 404, unverified → S14, Core down → S36, disabled endpoint → S40 410 once then S13",
+    "session": "per host (cookie without Domain); a session from another endpoint is dropped",
+    "origin": "expected origin per resolved endpoint",
+    "entry": "0 → S10, 1 → direct, many → S09; bound: S08, S11, S12",
+    "switch": "S15/S16 via the D002 dirty-close; Cancel aborts; windows close; context reset; bound endpoint → S17 hosts",
+    "context": "S19–S21",
+    "lock": "S22 (⌘L/Ctrl+L), unlock re-checked by the Core, 5 attempts",
+    "deep_link": "S34",
+    "administration": [
+      "S26/S38 Distributions",
+      "S37 access",
+      "S27–S32 endpoints",
+      "S33 defaults (Instance layer not available)"
     ]
   },
-  "code_changes": [
-    "ShellVm.pin_order (dock follows the effective, filtered pin order)",
-    "controllers::desktop: withhold widgets whose apps the member sees none of; KPIs per metric; default_for",
-    "library offers only what would be drawn",
-    "Application::icon() via iconography; KPI units icon org-tree; account menu icons from the map",
-    "tests/common: Sistema::provisionar (fresh Instance through resolve_instance) and descartar"
+  "code_owned_keys": [
+    "adm.ep.dns.here",
+    "adm.ep.dns.elsewhere",
+    "adm.ep.observe",
+    "adm.ep.activate"
   ],
   "tests": {
-    "d009_journeys": 9,
-    "d009_contracts": 14,
-    "updated": [
-      "d001_journeys",
-      "d002_d001_equivalence (declared D009 normalisations)",
-      "member_desktop_layouts (Core)",
-      "apps.rs and home unit tests"
-    ],
-    "full_run": "workspace + contracts: 28 suites, 643 passed, 0 failed, 0 ignored (before the last 3 tests were added)"
+    "core_d010_distributions": 9,
+    "workspace_d010_journeys": 12,
+    "updated_for_d010": [
+      "d001_journeys (S07/S08 door)",
+      "d009_journeys (door on a bound endpoint)",
+      "d005_journeys (context chip lists the member's projects)",
+      "d002_d001_equivalence (lock is real, declared normalisation)",
+      "ui::shell lock test",
+      "routes router_tests (seeded host resolution)",
+      "instance_profiles, application_boundary_http, unauthenticated_sweep_http, member_app_pins, member_desktop_layouts"
+    ]
   },
   "reversion_proofs": {
-    "run": 19,
-    "caught": 19,
-    "note": "R2 (no Distribution → Research) was MISSED on the first run: the default choice moved to default_for with a direct test, then caught. R16 reverts both KPI guards together (the Core refuses inactive apps, so either alone is covered by the other)."
+    "run": 11,
+    "caught": 11,
+    "cases": [
+      "unknown host",
+      "member access revalidation",
+      "last enabled (Core)",
+      "last enabled (database trigger)",
+      "cross-Instance access (database FK)",
+      "layout scope",
+      "pin scope",
+      "bound endpoint authorization",
+      "dirty-window cancel",
+      "context reset",
+      "open-redirect guard"
+    ],
+    "note": "three first runs were INVALID and are recorded as such: two caught with a different signature than declared (defence in depth: the next guard refused), one exposed a test that passed for the wrong reason (a CHECK constraint, not the trigger) — the test was fixed and then caught the reversion"
   },
   "browser_certification": {
-    "instances": "four fresh single-Distribution Instances created with bootstrap-admin --profile; ordinary member created in Administration › Members; Education Collaborator for authority filtering; no data, no AI, no GPU",
-    "widths": "1440×900, 924×540, 900, 820, 760, 720, 390×844 in all four: 0 px horizontal overflow",
-    "touch_targets_390": "Distribution badge 5/5 and Getting Started button 5/5 (44px) by hit-testing after the fix; pre-existing D001 top-bar and widget-tool targets below 44 reported to Design, unchanged by D009",
-    "real_keyboard": "PASS: badge → Getting Started (Enter/Tab/Shift+Tab/Escape, focus visible, reopen) in all four; launcher Enter/Escape with focus return (fixed); customisation, library, Restore preview and Restore confirm by keyboard (row deleted, Anular offered)",
-    "arrows": "launcher has no arrow navigation (not a roving grid)",
-    "pt_en_fr": "PASS in all four; no raw keys",
-    "getting_started_automatic": "NO (closed after first access)",
-    "no_sample_data": "0 workspaces, files, notes, datasets, events, ideas in all four databases",
-    "authority": "Collaborator: pins work/calendar/files/notes, Projects widget hidden and kept, Tasks drawn, /projects 404, no Administration/Audit/Monitor; admin: authority apps in the launcher, never pinned, member_app_pins empty",
-    "screen_reader": "NOT_RUN"
+    "stack": "local Core + Workspace on a copy of the D009 preview test database migrated to 0063; endpoints 127.0.0.1 (canonical, generic) and business.d010.localhost (bound)",
+    "widths": "1440, 924, 900, 820, 760, 720, 390: 0 px horizontal overflow on the D010 surfaces; at 390 every D010 control ≥ 44 px",
+    "keyboard": "S09 Tab/Enter; S16 and governed confirmations: initial focus Cancel, Esc cancels, Tab trapped; ⌘L locks",
+    "locales": "pt, en, fr: no raw keys",
+    "findings_fixed": [
+      "oc-access.css was linked only on the Auth surface; now also on the Shell, after oc-apps.css as its header asks",
+      "admin action buttons lost their accessible name when the label hides at narrow widths (aria-label added)",
+      "S33 showed {distribution}/{version} placeholders",
+      "endpoint host links 17 px tall at 390",
+      "D010 confirmations had no initial focus or Esc (reuse of the D006 org-confirm hook)",
+      "the S16/S34 sheets opened on a bound endpoint"
+    ]
   },
-  "functional_gaps_total": 41,
-  "functional_gaps": {
-    "G9-01": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "WIDGET_KINDS: notice não obrigatório (contracts desktop.rs); core test sem_obrigatorios_um_desktop_vazio_grava"
-    },
-    "G9-02": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "WALLPAPERS/Wallpaper com field/module/calm/lattice; journeys verificam data-wall por Distribuição"
-    },
-    "G9-03": {
-      "class": "DEFERRED",
-      "security_sensitive": true,
-      "evidence": "Predefinição da Instância (FG-014) não existe; INSTANCE_DEFAULT = NOT_IMPLEMENTED; restore_target é o ponto de extensão"
-    },
-    "G9-04": {
-      "class": "DEFERRED",
-      "security_sensitive": false,
-      "evidence": "Proveniência gravada da disposição do membro: STORAGE_REQUIRED, fora da D009"
-    },
-    "G9-05": {
-      "class": "DEFERRED",
-      "security_sensitive": false,
-      "evidence": "Fixações por omissão da Instância: sem modelo"
-    },
-    "G9-06": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "Fundo de quem nunca personalizou = o da Distribuição (controllers/mod.rs); journeys por Distribuição"
-    },
-    "G9-07": {
-      "class": "RESOLVED",
-      "security_sensitive": true,
-      "evidence": "Distribuição desconhecida → predefinição do sistema: default_for + testes directos + d009_contracts"
-    },
-    "G9-08": {
-      "class": "RESOLVED",
-      "security_sensitive": true,
-      "evidence": "Widget recusado/invisível escondido e mantido na disposição: journey um_widget_escondido_sobrevive_a_gravacao"
-    },
-    "G9-09": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "Indicadores largam só a métrica invisível (kpis + widget_shown); journey os_indicadores_largam_so_as_metricas_que_o_membro_nao_ve"
-    },
-    "G9-10": {
-      "class": "RESOLVED",
-      "security_sensitive": true,
-      "evidence": "Biblioteca só oferece o que se desenharia (offered → widget_shown); teste a_biblioteca_so_oferece_o_que_o_membro_ve"
-    },
-    "G9-11": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "Application::icon() delega em iconography::app_icon_id; Icon::id() fica só para o vocabulário tipado, sem desenhar ids inexistentes (guarda nenhum_icone_literal_aponta_para_o_vazio)"
-    },
-    "G9-12": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "i18n/mod.rs: mod ui_dist"
-    },
-    "G9-13": {
-      "class": "RESOLVED",
-      "security_sensitive": true,
-      "evidence": "Fixação sem autorização/inactiva cai (pinned_visible → ShellVm.pin_order); journey a_autoridade_filtra_fixacoes_e_widgets, rota directa 404"
-    },
-    "G9-14": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "Activação por perfil inalterada (a_activacao_nao_mudou)"
-    },
-    "G9-15": {
-      "class": "RESOLVED",
-      "security_sensitive": true,
-      "evidence": "Perfil enum fechado (CHECK, from_str); journeys provisionam pelo resolve_instance"
-    },
-    "G9-16": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "Repor = apagar a linha → predefinição da Distribuição activa; journeys"
-    },
-    "G9-17": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "Actualização de predefinições não reescreve disposições gravadas"
-    },
-    "G9-18": {
-      "class": "HONESTLY_UNAVAILABLE",
-      "security_sensitive": false,
-      "evidence": "Avisos institucionais sem fonte no Core: fora das predefinições e da biblioteca"
-    },
-    "G9-19": {
-      "class": "DEFERRED",
-      "security_sensitive": false,
-      "evidence": "Sem persistência de visto; painel a pedido (os_primeiros_passos_nao_fingem_memoria)"
-    },
-    "G9-20": {
-      "class": "DEFERRED",
-      "security_sensitive": false,
-      "evidence": "Secção Começar na Ajuda: não desenhada nesta revisão"
-    },
-    "G9-21": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Mudar a Distribuição: Core tem PUT /instance/profile (substitui, auditado); Workspace não expõe; efeito sobre disposições por person_id → D010"
-    },
-    "G9-22": {
-      "class": "DEFERRED",
-      "security_sensitive": false,
-      "evidence": "Widget Correio sem caixa: fora das predefinições"
-    },
-    "G9-23": {
-      "class": "HONESTLY_UNAVAILABLE",
-      "security_sensitive": false,
-      "evidence": "Um só modo de aparência"
-    },
-    "G9-24": {
-      "class": "DEFERRED",
-      "security_sensitive": false,
-      "evidence": "Core profile vs Workspace Distribution: migração de terminologia"
-    },
-    "G9-25": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "CLAUDE.md §1 regenerado da história e do repository-facts.sh"
-    },
-    "G9-26": {
-      "class": "RESOLVED",
-      "security_sensitive": false,
-      "evidence": "Testes D001/D002 actualizados às predefinições D009, com normalizações declaradas"
-    },
-    "G9-27": {
-      "class": "RESOLVED",
-      "security_sensitive": true,
-      "evidence": "distribution::parse sobre o enum fechado; valor desconhecido nunca vira caminho nem Research"
-    },
-    "G9-28": {
-      "class": "DEFERRED",
-      "security_sensitive": false,
-      "evidence": "Limpeza de símbolos ot-*/ob-* duplicados: só depois de medir referências; 0 removidos"
-    },
-    "G9-29": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "organisations.profile guarda uma; segunda Distribuição BLOCKED"
-    },
-    "G9-30": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": false,
-      "evidence": "Disposição/fundo por membro+Instância+Distribuição; hoje MEMBER_ONLY"
-    },
-    "G9-31": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": false,
-      "evidence": "Fixações por Distribuição; hoje MEMBER_ONLY"
-    },
-    "G9-32": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": false,
-      "evidence": "Predefinição da Instância por (Instância, Distribuição)"
-    },
-    "G9-33": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Pontos de acesso tipados; hoje um OCINYE_WORKSPACE_PUBLIC_URL"
-    },
-    "G9-34": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Anfitrião desconhecido falha fechado"
-    },
-    "G9-35": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Várias origens: origin_is_ours, CSRF, redireccionamentos"
-    },
-    "G9-36": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Domínio próprio, verificação, TLS"
-    },
-    "G9-37": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Activadas ∩ acessíveis; escolha; zero; fixo sem acesso"
-    },
-    "G9-38": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Distribuição activa na sessão + mudança"
-    },
-    "G9-39": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Contexto activo dentro da Distribuição"
-    },
-    "G9-40": {
-      "class": "D010_REQUIRED",
-      "security_sensitive": true,
-      "evidence": "Ligação profunda para outra Distribuição"
-    },
-    "G9-41": {
-      "class": "RESOLVED",
-      "security_sensitive": true,
-      "evidence": "Sessão por anfitrião (cookie host-only): já assim; documentado, não alargado"
-    }
-  },
-  "functional_gaps_by_class": {
-    "RESOLVED": 18,
-    "DEFERRED": 8,
-    "HONESTLY_UNAVAILABLE": 2,
-    "D010_REQUIRED": 13
-  },
-  "security_sensitive_gaps_total": 18,
-  "security_sensitive_gaps_open": [
-    "G9-03",
-    "G9-21",
-    "G9-29",
-    "G9-33",
-    "G9-34",
-    "G9-35",
-    "G9-36",
-    "G9-37",
-    "G9-38",
-    "G9-39",
-    "G9-40"
-  ],
-  "d010": {
-    "scope_proposal": "docs/ui/D010_SCOPE_PROPOSAL.md",
-    "missing_screen_audit": "docs/ui/missing-screen-audit.md",
-    "proposed_screens": 36,
-    "required_screens": 33,
-    "security_sensitive_screens": 29,
-    "core_gaps": 9,
-    "runtime_gaps": 6,
-    "config_gaps": 4,
-    "package_created": false,
-    "implementation_started": false
+  "not_implemented": {
+    "C9_S24_password_recovery": "MISSING_DESIGN_STATE (no completion screen) + NOT_CONFIGURED (no system mail transport)",
+    "S25_invite_link": "DEFERRED",
+    "S33_instance_layer": "DEFERRED (FG-014)",
+    "S35_maintenance": "DEFERRED",
+    "S01_S06_installer, certificates, proxy, DNS": "D011_REQUIRED / HONESTLY_UNAVAILABLE"
   },
   "adr": [
-    "0624 (Accepted, R2 amendment)",
-    "0014 (amended)",
-    "0016 (amended)"
+    "0019 (Accepted)",
+    "0020 (Accepted)",
+    "0021 (Proposed — implementation is D011)",
+    "0625 (Accepted)",
+    "0624 (D010 amendment)",
+    "0014 (corrected: organisations.profile)",
+    "CLAUDE.md §34.3 (amended)"
   ],
-  "feedback": "docs/ui/CODE_FEEDBACK.md (D009 R2 section on top)",
-  "verify_sh": "run on the exact commit that carries this record; the outcome is in the D009 report",
+  "feedback": "docs/ui/CODE_FEEDBACK.md (D010 section on top)",
+  "verify_sh": "run on the exact commit that carries this record; the outcome is in the D010 report",
   "deploy": "NOT_PERFORMED",
   "deploy_authorization": "NOT_GIVEN",
+  "production_install": "NOT_PERFORMED",
   "history": [
+    {
+      "schema_version": 1,
+      "design_revision": "D009",
+      "package_revision": "R2",
+      "supersedes": "D009 R1 package (ocinye-design-complete-D009, 789 checksums), integrated first on this branch and reconciled onto R2 in place",
+      "based_on": "D008 (main @ ece29e9, merge of PR #191); Design observed main @ ece29e98",
+      "repository_head_before": "ece29e9",
+      "integrated_on": "2026-09-30",
+      "integration_branch": "feat/design-d009",
+      "integration_status": "INTEGRATED_R2_VISUAL_CERTIFIED_ACCESSIBILITY_CERTIFIED_WITH_D001_TOUCH_FINDINGS_FUNCTIONALLY_CERTIFIED; MULTI_DISTRIBUTION_D010_REQUIRED",
+      "package": "ocinye-design-complete-D009 2 (R2): 817/817 checksums; 86 reference states, 86/86 Design reference checks (Design reference only — not Rust, persistence, authorization, provisioning or multi-Distribution runtime)",
+      "r1_to_r2_reconciliation": {
+        "package_files_changed": 25,
+        "screenshot_files_changed": 26,
+        "already_integrated_from_r1": "all runtime files (defaults, iconography, sprite fragment, CSS, i18n ui_dist base, tests)",
+        "r2_corrections_applied": [
+          "experience/distribution.rs: two doc comments (enabled Distributions [1..4]; FG-014 per Instance + Distribution)",
+          "docs/ui/distribution-defaults.md: R2 hierarchy note",
+          "ADR-0624: R2 amendment (R2.1–R2.4) plus R2.5 repository truth"
+        ],
+        "documentation_added": [
+          "docs/ui/D010_SCOPE_PROPOSAL.md",
+          "docs/ui/missing-screen-audit.md"
+        ],
+        "d010_only_skipped": [
+          "i18n ui_dist: 26 keys dist.select/zero/bound/switch, endpoint.*, ctx.*, desk.target",
+          "oc-shell.css / oc-auth.css: .oc-dsel, .oc-auth__inst/__host/__stop, .oc-ctxsw, .oc-ctx-*, .oc-dist-sw, .oc-dist-bound"
+        ],
+        "reference_only": [
+          "reference/d009/fixture.js",
+          "validate.html",
+          "25 r2-* screenshots"
+        ],
+        "conflicts": 0
+      },
+      "proposal": {
+        "v3": "NOT_IN_PACKAGE (cited by README/HANDOFF; only archive/DO_NOT_IMPLEMENT-Ocinye OS Proposta.dc.html, byte-identical to R1, is shipped)",
+        "v2_superseded": "not shipped as a separate file",
+        "standalone_export": "STALE_NONCANONICAL (no deterministic exporter in the repository or package; not hand-written)",
+        "frame_portability": "PARTIAL (frames depend on package-adjacent pages; carried to D010 Design tooling)",
+        "repository": "proposals are not tracked in the repository"
+      },
+      "raw_build": "R1: compiled first time with one warning; R2: documentation-only Rust changes, compiled; clippy -D warnings clean",
+      "code_fix_in_design_file": [
+        "controllers/desktop.rs: unused SYSTEM_DIM/SYSTEM_WALLPAPER import (R1)",
+        "iconography.rs sprite test: xmlns false positive (R1)",
+        "distribution.rs: widget_shown (one rule for Desktop and library; G9-09/G9-10)",
+        "controllers/desktop.rs: KPIs drop only invisible/refused metrics; withhold only when no app is visible; default_for",
+        "ui/screens/home/mod.rs: library uses widget_shown",
+        "oc-shell.css: 44px mobile hit area for the badge; 44px Getting Started button",
+        "oc-shell.js: launcher/palette close returns focus to the opener"
+      ],
+      "registry": {
+        "before": 28,
+        "after": 28,
+        "changed": false
+      },
+      "app_activation": {
+        "changed": false,
+        "proof": "a_activacao_nao_mudou (per-profile snapshot equal to ece29e9); Core and core-server untouched"
+      },
+      "defaults": {
+        "research": {
+          "desktop": [
+            "kpis",
+            "projects"
+          ],
+          "pins": [
+            "work",
+            "projects",
+            "ideas",
+            "datasets",
+            "results",
+            "knowledge",
+            "files",
+            "notes"
+          ],
+          "background": "field"
+        },
+        "business": {
+          "desktop": [
+            "tasks",
+            "calendar",
+            "projects",
+            "files"
+          ],
+          "pins": [
+            "work",
+            "calendar",
+            "mail",
+            "messages",
+            "projects",
+            "files",
+            "notes"
+          ],
+          "background": "module"
+        },
+        "personal": {
+          "desktop": [
+            "notes",
+            "files",
+            "calendar",
+            "storage"
+          ],
+          "pins": [
+            "files",
+            "notes",
+            "calendar",
+            "work",
+            "resources",
+            "trash"
+          ],
+          "background": "calm"
+        },
+        "education": {
+          "desktop": [
+            "calendar",
+            "tasks",
+            "projects",
+            "notes"
+          ],
+          "pins": [
+            "work",
+            "units",
+            "projects",
+            "knowledge",
+            "bibliography",
+            "calendar",
+            "files",
+            "notes"
+          ],
+          "background": "lattice"
+        },
+        "unknown": "empty System default (no widgets, ocinye background, manifest pins) — never Research",
+        "never_pinned": [
+          "administration",
+          "audit",
+          "monitor",
+          "terminal",
+          "browser",
+          "prompt (Nye)"
+        ],
+        "version": 2
+      },
+      "scopes": {
+        "member_layout_current": "MEMBER_ONLY (member_desktop_layouts.person_id)",
+        "member_layout_target": "MEMBER + INSTANCE + DISTRIBUTION (D010, G9-30)",
+        "member_pins_current": "MEMBER_ONLY (member_app_pins.person_id)",
+        "member_pins_target": "MEMBER + INSTANCE + DISTRIBUTION (D010, G9-31)",
+        "member_background": "inside the layout: current MEMBER_ONLY; target Distribution-scoped (follows G9-30)",
+        "instance_default": "NOT_IMPLEMENTED (FG-014)",
+        "restore": "member row deleted → active Distribution default; System when unknown"
+      },
+      "multi_distribution": {
+        "runtime": "D010_REQUIRED",
+        "second_distribution_enablement": "BLOCKED (organisations.profile holds one value; PUT /api/v1/instance/profile replaces it, organisation.manage, audited, not exposed by the Workspace)",
+        "selector": "D010_REQUIRED",
+        "switch": "D010_REQUIRED",
+        "access_endpoints": "D010_REQUIRED",
+        "custom_domains": "D010_REQUIRED",
+        "tls_domains": "D010_REQUIRED",
+        "login_context_selection": "absent (login selects no Unit/Project/Personal Space)"
+      },
+      "icons": {
+        "app_icons": 28,
+        "keep": 18,
+        "refine": 3,
+        "replace": 7,
+        "distribution_icons": 4,
+        "sprite_before": 184,
+        "sprite_after": 198,
+        "added": 14,
+        "removed": 0,
+        "sizes_checked": "16/20/24/32/48 px in the real browser: 160/160 rendered with a glyph inside the box",
+        "guards": [
+          "cada_aplicacao_registada_tem_um_icone_que_existe",
+          "nao_ha_icones_repetidos_entre_aplicacoes",
+          "nenhum_icone_literal_aponta_para_o_vazio",
+          "o_sprite_nao_carrega_nem_executa_nada",
+          "quatro_icones_de_distribuicao"
+        ]
+      },
+      "code_changes": [
+        "ShellVm.pin_order (dock follows the effective, filtered pin order)",
+        "controllers::desktop: withhold widgets whose apps the member sees none of; KPIs per metric; default_for",
+        "library offers only what would be drawn",
+        "Application::icon() via iconography; KPI units icon org-tree; account menu icons from the map",
+        "tests/common: Sistema::provisionar (fresh Instance through resolve_instance) and descartar"
+      ],
+      "tests": {
+        "d009_journeys": 9,
+        "d009_contracts": 14,
+        "updated": [
+          "d001_journeys",
+          "d002_d001_equivalence (declared D009 normalisations)",
+          "member_desktop_layouts (Core)",
+          "apps.rs and home unit tests"
+        ],
+        "full_run": "workspace + contracts: 28 suites, 643 passed, 0 failed, 0 ignored (before the last 3 tests were added)"
+      },
+      "reversion_proofs": {
+        "run": 19,
+        "caught": 19,
+        "note": "R2 (no Distribution → Research) was MISSED on the first run: the default choice moved to default_for with a direct test, then caught. R16 reverts both KPI guards together (the Core refuses inactive apps, so either alone is covered by the other)."
+      },
+      "browser_certification": {
+        "instances": "four fresh single-Distribution Instances created with bootstrap-admin --profile; ordinary member created in Administration › Members; Education Collaborator for authority filtering; no data, no AI, no GPU",
+        "widths": "1440×900, 924×540, 900, 820, 760, 720, 390×844 in all four: 0 px horizontal overflow",
+        "touch_targets_390": "Distribution badge 5/5 and Getting Started button 5/5 (44px) by hit-testing after the fix; pre-existing D001 top-bar and widget-tool targets below 44 reported to Design, unchanged by D009",
+        "real_keyboard": "PASS: badge → Getting Started (Enter/Tab/Shift+Tab/Escape, focus visible, reopen) in all four; launcher Enter/Escape with focus return (fixed); customisation, library, Restore preview and Restore confirm by keyboard (row deleted, Anular offered)",
+        "arrows": "launcher has no arrow navigation (not a roving grid)",
+        "pt_en_fr": "PASS in all four; no raw keys",
+        "getting_started_automatic": "NO (closed after first access)",
+        "no_sample_data": "0 workspaces, files, notes, datasets, events, ideas in all four databases",
+        "authority": "Collaborator: pins work/calendar/files/notes, Projects widget hidden and kept, Tasks drawn, /projects 404, no Administration/Audit/Monitor; admin: authority apps in the launcher, never pinned, member_app_pins empty",
+        "screen_reader": "NOT_RUN"
+      },
+      "functional_gaps_total": 41,
+      "functional_gaps": {
+        "G9-01": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "WIDGET_KINDS: notice não obrigatório (contracts desktop.rs); core test sem_obrigatorios_um_desktop_vazio_grava"
+        },
+        "G9-02": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "WALLPAPERS/Wallpaper com field/module/calm/lattice; journeys verificam data-wall por Distribuição"
+        },
+        "G9-03": {
+          "class": "DEFERRED",
+          "security_sensitive": true,
+          "evidence": "Predefinição da Instância (FG-014) não existe; INSTANCE_DEFAULT = NOT_IMPLEMENTED; restore_target é o ponto de extensão"
+        },
+        "G9-04": {
+          "class": "DEFERRED",
+          "security_sensitive": false,
+          "evidence": "Proveniência gravada da disposição do membro: STORAGE_REQUIRED, fora da D009"
+        },
+        "G9-05": {
+          "class": "DEFERRED",
+          "security_sensitive": false,
+          "evidence": "Fixações por omissão da Instância: sem modelo"
+        },
+        "G9-06": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "Fundo de quem nunca personalizou = o da Distribuição (controllers/mod.rs); journeys por Distribuição"
+        },
+        "G9-07": {
+          "class": "RESOLVED",
+          "security_sensitive": true,
+          "evidence": "Distribuição desconhecida → predefinição do sistema: default_for + testes directos + d009_contracts"
+        },
+        "G9-08": {
+          "class": "RESOLVED",
+          "security_sensitive": true,
+          "evidence": "Widget recusado/invisível escondido e mantido na disposição: journey um_widget_escondido_sobrevive_a_gravacao"
+        },
+        "G9-09": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "Indicadores largam só a métrica invisível (kpis + widget_shown); journey os_indicadores_largam_so_as_metricas_que_o_membro_nao_ve"
+        },
+        "G9-10": {
+          "class": "RESOLVED",
+          "security_sensitive": true,
+          "evidence": "Biblioteca só oferece o que se desenharia (offered → widget_shown); teste a_biblioteca_so_oferece_o_que_o_membro_ve"
+        },
+        "G9-11": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "Application::icon() delega em iconography::app_icon_id; Icon::id() fica só para o vocabulário tipado, sem desenhar ids inexistentes (guarda nenhum_icone_literal_aponta_para_o_vazio)"
+        },
+        "G9-12": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "i18n/mod.rs: mod ui_dist"
+        },
+        "G9-13": {
+          "class": "RESOLVED",
+          "security_sensitive": true,
+          "evidence": "Fixação sem autorização/inactiva cai (pinned_visible → ShellVm.pin_order); journey a_autoridade_filtra_fixacoes_e_widgets, rota directa 404"
+        },
+        "G9-14": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "Activação por perfil inalterada (a_activacao_nao_mudou)"
+        },
+        "G9-15": {
+          "class": "RESOLVED",
+          "security_sensitive": true,
+          "evidence": "Perfil enum fechado (CHECK, from_str); journeys provisionam pelo resolve_instance"
+        },
+        "G9-16": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "Repor = apagar a linha → predefinição da Distribuição activa; journeys"
+        },
+        "G9-17": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "Actualização de predefinições não reescreve disposições gravadas"
+        },
+        "G9-18": {
+          "class": "HONESTLY_UNAVAILABLE",
+          "security_sensitive": false,
+          "evidence": "Avisos institucionais sem fonte no Core: fora das predefinições e da biblioteca"
+        },
+        "G9-19": {
+          "class": "DEFERRED",
+          "security_sensitive": false,
+          "evidence": "Sem persistência de visto; painel a pedido (os_primeiros_passos_nao_fingem_memoria)"
+        },
+        "G9-20": {
+          "class": "DEFERRED",
+          "security_sensitive": false,
+          "evidence": "Secção Começar na Ajuda: não desenhada nesta revisão"
+        },
+        "G9-21": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Mudar a Distribuição: Core tem PUT /instance/profile (substitui, auditado); Workspace não expõe; efeito sobre disposições por person_id → D010"
+        },
+        "G9-22": {
+          "class": "DEFERRED",
+          "security_sensitive": false,
+          "evidence": "Widget Correio sem caixa: fora das predefinições"
+        },
+        "G9-23": {
+          "class": "HONESTLY_UNAVAILABLE",
+          "security_sensitive": false,
+          "evidence": "Um só modo de aparência"
+        },
+        "G9-24": {
+          "class": "DEFERRED",
+          "security_sensitive": false,
+          "evidence": "Core profile vs Workspace Distribution: migração de terminologia"
+        },
+        "G9-25": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "CLAUDE.md §1 regenerado da história e do repository-facts.sh"
+        },
+        "G9-26": {
+          "class": "RESOLVED",
+          "security_sensitive": false,
+          "evidence": "Testes D001/D002 actualizados às predefinições D009, com normalizações declaradas"
+        },
+        "G9-27": {
+          "class": "RESOLVED",
+          "security_sensitive": true,
+          "evidence": "distribution::parse sobre o enum fechado; valor desconhecido nunca vira caminho nem Research"
+        },
+        "G9-28": {
+          "class": "DEFERRED",
+          "security_sensitive": false,
+          "evidence": "Limpeza de símbolos ot-*/ob-* duplicados: só depois de medir referências; 0 removidos"
+        },
+        "G9-29": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "organisations.profile guarda uma; segunda Distribuição BLOCKED"
+        },
+        "G9-30": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": false,
+          "evidence": "Disposição/fundo por membro+Instância+Distribuição; hoje MEMBER_ONLY"
+        },
+        "G9-31": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": false,
+          "evidence": "Fixações por Distribuição; hoje MEMBER_ONLY"
+        },
+        "G9-32": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": false,
+          "evidence": "Predefinição da Instância por (Instância, Distribuição)"
+        },
+        "G9-33": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Pontos de acesso tipados; hoje um OCINYE_WORKSPACE_PUBLIC_URL"
+        },
+        "G9-34": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Anfitrião desconhecido falha fechado"
+        },
+        "G9-35": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Várias origens: origin_is_ours, CSRF, redireccionamentos"
+        },
+        "G9-36": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Domínio próprio, verificação, TLS"
+        },
+        "G9-37": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Activadas ∩ acessíveis; escolha; zero; fixo sem acesso"
+        },
+        "G9-38": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Distribuição activa na sessão + mudança"
+        },
+        "G9-39": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Contexto activo dentro da Distribuição"
+        },
+        "G9-40": {
+          "class": "D010_REQUIRED",
+          "security_sensitive": true,
+          "evidence": "Ligação profunda para outra Distribuição"
+        },
+        "G9-41": {
+          "class": "RESOLVED",
+          "security_sensitive": true,
+          "evidence": "Sessão por anfitrião (cookie host-only): já assim; documentado, não alargado"
+        }
+      },
+      "functional_gaps_by_class": {
+        "RESOLVED": 18,
+        "DEFERRED": 8,
+        "HONESTLY_UNAVAILABLE": 2,
+        "D010_REQUIRED": 13
+      },
+      "security_sensitive_gaps_total": 18,
+      "security_sensitive_gaps_open": [
+        "G9-03",
+        "G9-21",
+        "G9-29",
+        "G9-33",
+        "G9-34",
+        "G9-35",
+        "G9-36",
+        "G9-37",
+        "G9-38",
+        "G9-39",
+        "G9-40"
+      ],
+      "d010": {
+        "scope_proposal": "docs/ui/D010_SCOPE_PROPOSAL.md",
+        "missing_screen_audit": "docs/ui/missing-screen-audit.md",
+        "proposed_screens": 36,
+        "required_screens": 33,
+        "security_sensitive_screens": 29,
+        "core_gaps": 9,
+        "runtime_gaps": 6,
+        "config_gaps": 4,
+        "package_created": false,
+        "implementation_started": false
+      },
+      "adr": [
+        "0624 (Accepted, R2 amendment)",
+        "0014 (amended)",
+        "0016 (amended)"
+      ],
+      "feedback": "docs/ui/CODE_FEEDBACK.md (D009 R2 section on top)",
+      "verify_sh": "run on the exact commit that carries this record; the outcome is in the D009 report",
+      "deploy": "NOT_PERFORMED",
+      "deploy_authorization": "NOT_GIVEN"
+    },
     {
       "schema_version": 1,
       "design_revision": "D008",
