@@ -150,6 +150,162 @@ fn distribution_key(d: Distribution) -> (&'static str, &'static str) {
     }
 }
 
+/// Code (D010 · S15/S17, transcrito da referência `fixture.js`): mudar de
+/// Distribuição, no painel do distintivo, junto dos primeiros passos. Num
+/// ponto fixo não se muda aqui: diz-se onde, por endereços configurados.
+fn switcher(vm: &ShellVm, active: Distribution) -> Option<AnyView> {
+    let sw = vm.dist_switch.as_ref()?;
+    if let Some(bound) = &sw.bound {
+        let generic = bound.generic_host.clone().unwrap_or_else(|| "—".to_owned());
+        let name = t(distribution_key(active).0);
+        let gotos = bound
+            .targets
+            .iter()
+            .map(|(_, host, url)| {
+                view! {
+                    <a class="oc-dist-go" data-part="dist-goto" href=url.clone()>{icon("link")}{tf("dist.switch.goto", &[("host", host.as_str())])}</a>
+                }
+            })
+            .collect_view();
+        return Some(
+            view! {
+                <p class="oc-dist-bound" data-part="dist-bound">{tf("dist.switch.bound", &[("distribution", name), ("generic", generic.as_str())])}</p>
+                {gotos}
+                {(!bound.targets.is_empty()).then(|| view! { <p class="oc-menu__foot">{t("dist.switch.goto.note")}</p> })}
+            }
+            .into_any(),
+        );
+    }
+    let items = sw
+        .choices
+        .iter()
+        .map(|d| {
+            let d = *d;
+            let current = d == active;
+            view! {
+                <li>
+                    <form method="get" action="/distribution/switch">
+                        <button type="submit" name="to" value=d.as_str() data-distribution=d.as_str() aria-current=if current { "true" } else { "false" }>
+                            {icon(iconography::dist_icon_id(d))}<span>{t(distribution_key(d).0)}</span>
+                        </button>
+                    </form>
+                </li>
+            }
+        })
+        .collect_view();
+    Some(
+        view! {
+            <p class="oc-dist-sub">{t("dist.switch.title")}</p>
+            <ul class="oc-dist-sw" data-part="dist-switch">{items}</ul>
+        }
+        .into_any(),
+    )
+}
+
+fn context_kind_key(kind: &str) -> &'static str {
+    match kind {
+        "unit" => "ctx.units",
+        "project" => "ctx.projects",
+        "personal" => "ctx.personal",
+        _ => "ctx.org",
+    }
+}
+
+fn context_icon(kind: &str) -> &'static str {
+    match kind {
+        "unit" => "org-tree",
+        "project" => "project",
+        "personal" => "user",
+        _ => "organization",
+    }
+}
+
+/// Code (D010 · S19–S21, transcrito da referência): o chip de contexto —
+/// tipo + nome — e os contextos que o Core diz serem do membro. Distinto do
+/// distintivo da Distribuição; mudar de contexto não muda a Distribuição.
+fn context_chip(vm: &ShellVm) -> Option<AnyView> {
+    let ctx = vm.context.as_ref()?;
+    let d = vm.distribution?;
+    let dname = t(distribution_key(d).0);
+    let (k, n, label) = match &ctx.active {
+        Some(a) => {
+            let name = if a.kind == "personal" {
+                t("ctx.personal").to_owned()
+            } else {
+                a.name.clone()
+            };
+            (
+                t(context_kind_key(&a.kind)).to_uppercase(),
+                name.clone(),
+                tf("ctx.change", &[("name", name.as_str())]),
+            )
+        }
+        None => (
+            "—".to_owned(),
+            t("ctx.none.chip").to_owned(),
+            t("ctx.choose").to_owned(),
+        ),
+    };
+    let groups = ["organisation", "unit", "project", "personal"]
+        .into_iter()
+        .filter_map(|kind| {
+            let items: Vec<_> = ctx.items.iter().filter(|c| c.kind == kind).collect();
+            if items.is_empty() {
+                return None;
+            }
+            let buttons = items
+                .into_iter()
+                .map(|c| {
+                    let current = ctx.active.as_ref().is_some_and(|a| a.kind == c.kind && a.id == c.id);
+                    let name = if c.kind == "personal" { t("ctx.personal").to_owned() } else { c.name.clone() };
+                    view! {
+                        <form method="post" action="/context">
+                            <input type="hidden" name="kind" value=c.kind.clone() />
+                            {c.id.clone().map(|id| view! { <input type="hidden" name="id" value=id /> })}
+                            <button type="submit" class="oc-ctx-i" aria-current=if current { "true" } else { "false" }>{icon(context_icon(&c.kind))}{name}</button>
+                        </form>
+                    }
+                })
+                .collect_view();
+            Some(view! { <p class="oc-ctx-g">{t(context_kind_key(kind))}</p>{buttons} })
+        })
+        .collect_view();
+    // S21: o contexto activo deixou de ser do membro — o Core já o repôs; a
+    // folha di-lo uma vez e leva a escolher outro (nunca mostra o antigo).
+    let revoked = ctx.revoked.clone().map(|name| {
+        view! {
+            <dialog class="oc-sheet oc-sheet--narrow" data-part="ctx-revoked" data-d010="" data-oc="auto-open" data-cancel="/" aria-labelledby="ctx-revoked-t">
+                <header class="oc-sheet__head">
+                    <h2 id="ctx-revoked-t">{tf("ctx.revoked.title", &[("name", name.as_str())])}</h2>
+                    <a class="oc-round-btn" href="/" aria-label=t("shell.close")>{icon("close")}</a>
+                </header>
+                <p class="oc-sheet__lead">{t("ctx.revoked.body")}</p>
+                <div class="oc-sheet__actions">
+                    <a class="oc-btn-solid" href="/" data-oc="dialog-close">{icon("org-tree")}{t("ctx.choose")}</a>
+                </div>
+            </dialog>
+        }
+    });
+    Some(
+        view! {
+            {revoked}
+            <details class="oc-menu" data-oc="menu">
+                <summary class="oc-ctxsw" data-part="ctx-switcher" aria-label=label>
+                    <span class="oc-ctxsw__k">{k}</span>
+                    <span class="oc-ctxsw__n">{n}</span>
+                    {icon("chev-d")}
+                </summary>
+                <div class="oc-menu__pop oc-menu__pop--ctx" role="dialog" aria-label=tf("ctx.kicker", &[("distribution", dname)])>
+                    <p class="oc-dist-sub">{tf("ctx.kicker", &[("distribution", dname.to_uppercase().as_str())])}</p>
+                    {groups}
+                    <p class="oc-menu__foot">{t("ctx.note")}</p>
+                </div>
+            </details>
+        }
+        .into_any(),
+    )
+}
+
 fn top_bar(vm: &ShellVm) -> impl IntoView {
     // D009 · o distintivo leva o ícone da Distribuição (DIST-03), e o painel
     // diz o que a Distribuição define — primeiros passos, fixações — e que
@@ -194,6 +350,7 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
                     {(!pins.is_empty()).then(|| view! { <p class="oc-dist-sub">{t("dist.pins")}</p>{chips(pins)} })}
                     {(!more.is_empty()).then(|| view! { <p class="oc-dist-sub">{t("dist.first.recommended")}</p>{chips(more)} })}
                     <a class="oc-dist-go" href="#oc-launcher" data-oc="launcher-open">{icon("apps")}{t("dist.first.open_apps")}</a>
+                    {switcher(vm, d)}
                     <p class="oc-menu__foot">{t("dist.authority")}" "{t("shell.dist.note")}</p>
                 </div>
             </details>
@@ -235,10 +392,13 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
                     <a class="oc-menu__item" role="menuitem" href="/settings">{icon(app_icon("/settings"))}{t("shell.user.settings")}</a>
                     <a class="oc-menu__item" role="menuitem" href="/#appearance" data-oc="appearance-open">{icon("appearance")}{t("shell.user.appearance")}</a>
                     <a class="oc-menu__item" role="menuitem" href="/help">{icon(app_icon("/help"))}{t("shell.user.help")}</a>
-                    <button type="button" class="oc-menu__item" role="menuitem" aria-disabled="true" aria-describedby="oc-lock-pending">
-                        {icon("lock")}{t("shell.user.lock")}<kbd class="oc-menu__kbd" aria-hidden="true">"⌘ L"</kbd>
-                    </button>
-                    <p class="oc-menu__note" id="oc-lock-pending">{t("shell.user.lock_pending")}</p>
+                    // Code (D010 · S22): o bloqueio passou a existir — o botão deixa de
+                    // estar desactivado e a nota «ainda não disponível» sai.
+                    <form method="post" action="/lock" data-oc="lock-form">
+                        <button type="submit" class="oc-menu__item" role="menuitem">
+                            {icon("lock")}{t("shell.user.lock")}<kbd class="oc-menu__kbd" aria-hidden="true">"⌘ L"</kbd>
+                        </button>
+                    </form>
                     <hr class="oc-menu__sep" />
                     <form method="post" action="/logout">
                         <button type="submit" class="oc-menu__item oc-menu__item--danger" role="menuitem">{icon("logout")}{t("shell.user.sign_out")}</button>
@@ -246,6 +406,7 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
                 </div>
             </details>
             {dist}
+            {context_chip(vm)}
             {crumb}
             <form class="oc-nyebar" method="get" action="/ask" role="search">
                 <label class="oc-sr" for="oc-q">{t("shell.search.ask")}</label>
@@ -671,9 +832,11 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn bloquear_ecra_e_uma_lacuna_honesta() {
+    fn bloquear_ecra_e_uma_accao_real() {
+        // D010 (S22): deixou de ser a lacuna declarada da D001 — é um `POST`.
         let html = top_bar(&vm()).to_html();
-        assert!(html.contains(r#"aria-describedby="oc-lock-pending""#));
+        assert!(html.contains(r#"action="/lock""#) && html.contains(r#"data-oc="lock-form""#));
+        assert!(!html.contains("oc-lock-pending"));
     }
 
     #[test]

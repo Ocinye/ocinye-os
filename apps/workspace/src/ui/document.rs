@@ -10,7 +10,11 @@ use crate::ui::view_models::{DocumentVm, Surface};
 /// Os estilos de cada superfície, por ordem de carga (a base primeiro).
 fn stylesheets(surface: Surface) -> &'static [&'static str] {
     match surface {
-        Surface::Auth => &["/static/oc-base.css", "/static/oc-auth.css"],
+        Surface::Auth => &[
+            "/static/oc-base.css",
+            "/static/oc-auth.css",
+            "/static/oc-access.css",
+        ],
         Surface::Shell => &[
             "/static/oc-base.css",
             "/static/oc-shell.css",
@@ -18,6 +22,9 @@ fn stylesheets(surface: Surface) -> &'static [&'static str] {
             "/static/oc-wm.css",
             "/static/oc-nye.css",
             "/static/oc-apps.css",
+            // D010: «ligar depois de oc-auth.css, oc-desk.css e oc-apps.css» —
+            // os alvos de toque das folhas e diálogos da casca também.
+            "/static/oc-access.css",
         ],
     }
 }

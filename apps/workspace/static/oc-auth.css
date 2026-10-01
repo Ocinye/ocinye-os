@@ -189,3 +189,21 @@
 /* D009 · o distintivo da Distribuição à porta leva o ícone em vez das duas letras */
 .oc-auth__dist-code { display: inline-flex; align-items: center; justify-content: center; }
 .oc-auth__dist-code .oc-icon { width: 13px; height: 13px; color: var(--oc-navy-900); stroke-width: 1.6; }
+
+/* ── D009 R2 · entrada por Distribuição e contexto dentro do Desktop (DESIGN TARGET, contratos D010) ── */
+.oc-auth__inst { margin: 10px 0 0; font: 600 15px/1.2 var(--oc-sans); color: #FFFFFF; }
+.oc-auth__host { margin: 6px 0 0; font: 500 11px var(--oc-mono); letter-spacing: .06em; color: rgba(255, 255, 255, .55); }
+.oc-dsel { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; text-align: left; }
+.oc-dsel__btn { width: 100%; min-height: 56px; display: grid; grid-template-columns: 36px minmax(0, 1fr) 16px; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid rgba(255, 255, 255, .16); border-radius: 16px; background: rgba(255, 255, 255, .05); color: #FFFFFF; font: inherit; text-align: left; cursor: pointer; }
+.oc-dsel__btn:hover { background: rgba(255, 255, 255, .1); }
+.oc-dsel__btn:focus-visible { outline: 2px solid var(--oc-gold-500); outline-offset: 2px; }
+.oc-dsel__ic { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(180deg, var(--oc-gold-300), var(--oc-gold-500)); color: var(--oc-navy-900); }
+.oc-dsel__ic .oc-icon { width: 20px; height: 20px; }
+.oc-dsel__txt strong { display: block; font: 600 14px var(--oc-sans); }
+.oc-dsel__txt span { display: block; margin-top: 2px; font-size: 12px; line-height: 1.4; color: rgba(255, 255, 255, .66); }
+.oc-auth__lead--l { text-align: left; }
+.oc-auth__stop { width: 44px; height: 44px; margin: 0 auto 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, .08); color: #FFFFFF; }
+.oc-auth__stop .oc-icon { width: 20px; height: 20px; }
+
+/* Code (D010): a referência (`reference/d010/d010.js`) escreve estes arranjos com `style=` em linha, que a CSP do Workspace descarta (`style-src 'self'`). As mesmas regras, em classe, sem desenho novo. */
+.oc-access-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }

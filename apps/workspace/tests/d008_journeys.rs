@@ -177,7 +177,7 @@ async fn um_comando_corre_pela_capability_e_o_eco_e_redigido() {
     let r = s
         .http
         .post(format!("{}/terminal/exec", s.url))
-        .header("origin", &s.url)
+        .header("origin", s.origin())
         .json(&json!({ "line": "whoami" }))
         .send()
         .await

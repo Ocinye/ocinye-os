@@ -557,6 +557,19 @@ fn icones_migrados(golden: &str) -> String {
     out
 }
 
+/// O que a D010 mudou de propósito: «Bloquear ecrã» deixou de ser uma lacuna
+/// declarada (D001) e passou a acção real (S22); e os alvos de toque da D010
+/// (`oc-access.css`) ligam-se também na casca.
+fn sem_d010(html: &str) -> String {
+    let html = html.replace(
+        r#"<link href="/static/oc-access.css" rel="stylesheet">"#,
+        "",
+    );
+    let s = drop_element(&html, "button", r#"aria-describedby="oc-lock-pending""#);
+    let s = drop_element(&s, "p", r#"id="oc-lock-pending""#);
+    drop_element(&s, "form", r#"action="/lock""#)
+}
+
 /// As peças da D001 que a D009 muda de propósito (ver o topo do ficheiro).
 fn sem_d009(html: &str) -> String {
     let s = drop_element(html, "details", r#"class="oc-dist""#);
@@ -621,8 +634,8 @@ fn sem_janelas_nem_paineis_a_d002_e_a_d001_2_1() {
     for (name, html) in scenes {
         let golden = std::fs::read_to_string(dir.join(format!("{name}.html")))
             .unwrap_or_else(|e| panic!("referência D001.2.1 em falta para {name}: {e}"));
-        let now = sem_d009(&d001_view(&html));
-        let golden = sem_d009(&icones_migrados(&canonical(&golden)));
+        let now = sem_d010(&sem_d009(&d001_view(&html)));
+        let golden = sem_d010(&sem_d009(&icones_migrados(&canonical(&golden))));
         if now != golden {
             let at = now
                 .bytes()

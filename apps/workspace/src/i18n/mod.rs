@@ -23,6 +23,7 @@
 //! não falta nenhuma; a queda existe para nunca mostrar uma chave, mesmo assim.
 
 mod catalog;
+mod ui_access;
 mod ui_apps;
 mod ui_auth;
 mod ui_base;

@@ -292,6 +292,8 @@ OCINYE_STORAGE_LOCATION_LABEL=$dominio
 OCINYE_STORAGE_RESIDENCY=UNDECLARED
 OCINYE_SEALING_KEY=$(if [ -n "$restaurar" ]; then tr -d '[:space:]' < "$ficheiro_selagem"; else chave_de_selagem; fi)
 OCINYE_CORS_ALLOWED_ORIGINS=$url_publico
+# O ponto de acesso canónico (ADR-0020): o Core semeia-o a partir daqui.
+OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
 EOF
     if [ -z "$restaurar" ]; then
         printf 'OCINYE_INSTANCE_NAME=%s\nOCINYE_INSTANCE_PROFILE=%s\n' \
@@ -506,6 +508,15 @@ upgrade_() {
     chmod 600 "$checkpoint"
     antes="$(versao_do_esquema)"
     nota "base em $checkpoint · esquema $antes"
+
+    # D010 (ADR-0020): o Core semeia o ponto de acesso canónico a partir do
+    # endereço público. Uma Instância anterior só o tinha no workspace.env;
+    # acrescentá-lo ao core.env é inofensivo para o release anterior.
+    if ! grep -q '^OCINYE_WORKSPACE_PUBLIC_URL=' "$CONFIG/core.env"; then
+        grep '^OCINYE_WORKSPACE_PUBLIC_URL=' "$CONFIG/workspace.env" >> "$CONFIG/core.env" \
+            || fatal "workspace.env não diz o endereço público desta Instância"
+        nota "core.env passa a dizer o endereço público (ponto de acesso canónico)"
+    fi
 
     passo "Release novo"
     install -d -m 755 "$RAIZ/releases/$novo"

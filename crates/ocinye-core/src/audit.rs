@@ -137,6 +137,20 @@ pub mod action {
     pub const MEMBER_SESSION_REVOKED: &str = "member_session_revoked";
     /// A platform administration operation.
     pub const ADMIN_OPERATION: &str = "admin_operation";
+    /// D010 · A Distribution was enabled on the Instance (ADR-0019).
+    pub const DISTRIBUTION_ENABLED: &str = "distribution_enabled";
+    /// D010 · A Distribution was disabled; its state is kept.
+    pub const DISTRIBUTION_DISABLED: &str = "distribution_disabled";
+    /// D010 · A member was given access to a Distribution.
+    pub const DISTRIBUTION_ACCESS_GRANTED: &str = "distribution_access_granted";
+    /// D010 · A member's access to a Distribution was removed.
+    pub const DISTRIBUTION_ACCESS_REVOKED: &str = "distribution_access_revoked";
+    /// D010 · A session entered, or switched to, a Distribution.
+    pub const DISTRIBUTION_ENTERED: &str = "distribution_entered";
+    /// D010 · An access endpoint was created, changed, activated or disabled.
+    pub const ACCESS_ENDPOINT_CHANGED: &str = "access_endpoint_changed";
+    /// D010 · The active context of a session changed.
+    pub const CONTEXT_CHANGED: &str = "context_changed";
     /// An authorization denial worth recording.
     pub const SECURITY_DENIAL: &str = "security_denial";
     /// A compute node was enrolled.

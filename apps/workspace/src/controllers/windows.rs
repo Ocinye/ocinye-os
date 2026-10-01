@@ -264,6 +264,7 @@ pub fn dirty_close(sessions: &SessionStore, session_id: &str, id: &str) -> Optio
                 can_save: w.can_save,
                 save_label: None,
                 save_form: None,
+                after: None,
             })
         })
         .flatten()

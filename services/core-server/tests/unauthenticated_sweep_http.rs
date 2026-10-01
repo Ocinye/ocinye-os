@@ -185,6 +185,12 @@ const PUBLICAS: &[(&str, &str, &str)] = &[
         "/instance/logo",
         "o logótipo da porta de entrada; mudá-lo exige administração",
     ),
+    (
+        "GET",
+        "/access/resolve",
+        "D010 · o Workspace resolve o anfitrião antes de haver sessão: devolve só o \
+         destino e o nome da Instância que a entrada mostra; desconhecido é 404 (ADR-0020)",
+    ),
 ];
 
 /// As rotas que se autenticam por outra coisa que não uma sessão de membro.

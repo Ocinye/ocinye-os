@@ -196,7 +196,7 @@ fn confirm_error(v: Option<&str>) -> Option<AppError> {
 // Administração
 // ═════════════════════════════════════════════════════════════════════════
 
-fn admin_nav(
+pub(super) fn admin_nav(
     ctx: &controllers::ShellContext,
     section: AdminSection,
 ) -> Vec<crate::ui::view_models::AppNavVm> {
@@ -221,11 +221,40 @@ fn admin_nav(
             "/admin/instance".to_owned(),
             section == AdminSection::Instance,
         ));
+        // D010: as Distribuições e as predefinições lêem-se com
+        // `organisation.view`; o acesso e os pontos de acesso mudam e lêem-se
+        // só com `organisation.manage`.
+        nav.push(rs::nav(
+            "adm.sec.distributions",
+            "apps",
+            "/admin/distributions".to_owned(),
+            section == AdminSection::Distributions,
+        ));
+        if ctx.viewer.can(Permission::OrganisationManage) {
+            nav.push(rs::nav(
+                "adm.sec.dist_access",
+                "key",
+                "/admin/distribution-access".to_owned(),
+                section == AdminSection::DistributionAccess,
+            ));
+            nav.push(rs::nav(
+                "adm.sec.endpoints",
+                "link",
+                "/admin/endpoints".to_owned(),
+                section == AdminSection::Endpoints,
+            ));
+        }
+        nav.push(rs::nav(
+            "adm.sec.defaults",
+            "workspace",
+            "/admin/defaults".to_owned(),
+            section == AdminSection::Defaults,
+        ));
     }
     nav
 }
 
-fn admin_vm(section: AdminSection) -> AdminVm {
+pub(super) fn admin_vm(section: AdminSection) -> AdminVm {
     AdminVm {
         section,
         nav: Vec::new(),
@@ -247,11 +276,12 @@ fn admin_vm(section: AdminSection) -> AdminVm {
         roles: Vec::new(),
         instance: None,
         list_href: "/admin".to_owned(),
+        d010: None,
     }
 }
 
 /// A aplicação inteira recusada: nem navegação, nem dados (A-10).
-fn admin_denied(state: &WorkspaceState, w: &AppWindow, e: AppError) -> Response {
+pub(super) fn admin_denied(state: &WorkspaceState, w: &AppWindow, e: AppError) -> Response {
     let mut vm = admin_vm(AdminSection::Members);
     vm.error = Some(e);
     let status = match e {
@@ -560,6 +590,7 @@ fn admin_dirty(w: &AppWindow) -> Option<DirtyCloseVm> {
         can_save: true,
         save_label: Some("admin.new.do"),
         save_form: Some(ui::apps::doc_form_id("admin", "new")),
+        after: None,
     })
 }
 
@@ -1483,6 +1514,7 @@ fn units_dirty(w: &AppWindow, doc: &str, save: &'static str) -> Option<DirtyClos
         can_save: true,
         save_label: Some(save),
         save_form: Some(ui::apps::doc_form_id("units", doc)),
+        after: None,
     })
 }
 

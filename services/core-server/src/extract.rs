@@ -17,6 +17,7 @@ use axum::http::request::Parts;
 use ocinye_contracts::Permission;
 use ocinye_contracts::SessionState;
 use ocinye_core::modules::identity::{self, AttemptContext, Person, StoredSession};
+use ocinye_core::modules::organisation;
 use ocinye_core::password::Secret;
 use ocinye_core::CoreError;
 use ocinye_domain::Principal;
@@ -249,12 +250,95 @@ impl FromRequestParts<AppState> for CurrentPrincipal {
             ));
         }
 
+        // D010 (ADR-0019 §3): a Distribuição em que esta sessão entrou ainda
+        // tem de estar activada e acessível — a cada pedido, para que uma
+        // desactivação ou uma revogação se veja no seguinte (S39, S18). Só as
+        // duas rotas de entrada passam, para o membro poder escolher outra.
+        // Uma sessão que nunca entrou numa Distribuição (um cliente da API) não
+        // é afectada: a Distribuição decide a experiência, não a autoridade.
+        if let Some(stored) = session.active_distribution.as_deref() {
+            let path = parts
+                .extensions
+                .get::<axum::extract::OriginalUri>()
+                .map_or_else(|| parts.uri.path().to_owned(), |uri| uri.path().to_owned());
+            let entry = path.ends_with("/me/distributions") || path.ends_with("/me/distribution");
+            if !entry {
+                let refused = match stored.parse::<ocinye_contracts::Distribution>() {
+                    Ok(active) => organisation::distributions::revalidate(
+                        &state.pool,
+                        principal.organisation_id,
+                        principal.person_id,
+                        active,
+                    )
+                    .await
+                    .err(),
+                    Err(_) => organisation::distributions::refusal_of(
+                        ocinye_contracts::EntryDecision::NotEnabled,
+                    ),
+                };
+                if let Some(error) = refused {
+                    return Err(ApiError::new(error, &ids));
+                }
+            }
+        }
+        parts.extensions.insert(SessionScope {
+            session_id: session.id,
+            active_distribution: session
+                .active_distribution
+                .as_deref()
+                .and_then(|d| d.parse().ok()),
+            active_context: session.active_context.clone(),
+        });
+
         // Best-effort activity record; never fails a request.
         if let Err(error) = identity::touch_session(&state.pool, session.id).await {
             tracing::warn!(error = %error, "could not record session activity");
         }
 
         Ok(Self(principal))
+    }
+}
+
+/// D010 · The session behind a [`CurrentPrincipal`]: its id, the Distribution
+/// it entered and its context. Inserted only after the Distribution was
+/// revalidated, so a handler never sees a stale one.
+#[derive(Debug, Clone)]
+pub struct SessionScope {
+    /// The Core session.
+    pub session_id: uuid::Uuid,
+    /// The active Distribution, if the session entered one.
+    pub active_distribution: Option<ocinye_contracts::Distribution>,
+    /// The active context kind and id.
+    pub active_context: Option<(String, Option<uuid::Uuid>)>,
+}
+
+/// The authenticated caller **and** its session scope (D010).
+pub struct CurrentSession(pub Principal, pub SessionScope);
+
+impl FromRequestParts<AppState> for CurrentSession {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let CurrentPrincipal(principal) =
+            CurrentPrincipal::from_request_parts(parts, state).await?;
+        let scope = parts
+            .extensions
+            .get::<SessionScope>()
+            .cloned()
+            .ok_or_else(|| {
+                ApiError::new(
+                    CoreError::Internal("session scope missing".to_owned()),
+                    &parts
+                        .extensions
+                        .get::<CorrelationIds>()
+                        .cloned()
+                        .unwrap_or_default(),
+                )
+            })?;
+        Ok(Self(principal, scope))
     }
 }
 
@@ -337,4 +421,5 @@ permission_markers! {
     NeedsRolesView         => RolesView,
     NeedsPermissionsView   => PermissionsView,
     NeedsPermissionsManage => PermissionsManage,
+    NeedsOrganisationManage => OrganisationManage,
 }

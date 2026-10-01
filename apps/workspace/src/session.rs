@@ -60,6 +60,15 @@ pub struct Session {
     pub mfa_required: bool,
     /// When the session expires.
     pub expires_at: Instant,
+    /// D010 (ADR-0020 §6): o ponto de acesso em que a sessão nasceu — o id e a
+    /// revisão. Um pedido noutro ponto, ou depois de o ponto mudar de destino,
+    /// não a usa: a sessão é deste endereço (S23, S31, S40).
+    pub endpoint: Option<(uuid::Uuid, String)>,
+    /// D010 · S22: o ecrã está bloqueado; as janelas ficam, escondidas.
+    pub locked: bool,
+    /// D010 · S22: tentativas falhadas de desbloquear nesta sessão. À quinta a
+    /// sessão termina — o limite do Core continua a contar por cima disto.
+    pub unlock_failures: u8,
 }
 
 /// Sessions held on members' behalf.
@@ -143,6 +152,20 @@ impl SessionStore {
     }
 
     /// End a session.
+    /// Muda uma sessão viva (D010: bloquear, desbloquear, falhas).
+    pub fn update(&self, id: &str, f: impl FnOnce(&mut Session)) -> bool {
+        let Ok(mut inner) = self.inner.lock() else {
+            return false;
+        };
+        match inner.sessions.get_mut(id) {
+            Some(session) => {
+                f(session);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn remove(&self, id: &str) {
         let mut inner = self.registo();
         inner.sessions.remove(id);
@@ -369,6 +392,9 @@ mod tests {
             must_change_password: false,
             mfa_required: false,
             expires_at: Instant::now() + Duration::from_secs(60),
+            endpoint: None,
+            locked: false,
+            unlock_failures: 0,
         }
     }
 
@@ -492,6 +518,9 @@ mod tests {
             must_change_password: false,
             mfa_required: false,
             expires_at: Instant::now() + Duration::from_secs(600),
+            endpoint: None,
+            locked: false,
+            unlock_failures: 0,
         }
     }
 }

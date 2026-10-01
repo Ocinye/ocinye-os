@@ -28,7 +28,8 @@ opcionais que se desactivam sem danificar o Core.
 
 **1. Um Perfil é um atributo da Instância.** Quatro, fechados:
 `research`, `business`, `personal`, `education`. Vive em
-`instance_identity.profile`. Muda-se depois da instalação, por quem tem
+`organisations.profile` (migração 0053), na linha da organização que é a
+Instância (ADR-0013 §2). Muda-se depois da instalação, por quem tem
 `organisation.manage`, e mudar nunca apaga dados.
 
 > **Um perfil não é autorização.** Decide que aplicações começam activas, que

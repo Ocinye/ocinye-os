@@ -239,3 +239,41 @@
 .oc-menu__pop--dist { max-height: calc(100vh - 76px); max-height: calc(100dvh - 76px); overflow-y: auto; overscroll-behavior: contain; }
 /* Code (D009 · alvos a 390): o distintivo continua com 26 px à vista, mas recebe o toque num quadrado de 44 — cabe entre o logótipo e a barra da Nye sem os cobrir; «Abrir aplicações» com 44 de altura */
 @media (max-width: 640px) { .oc-dist { position: relative; } .oc-dist::after { content: ""; position: absolute; inset: -9px; } .oc-dist-go { min-height: 44px; } }
+
+/* ── D009 R2 · entrada por Distribuição e contexto dentro do Desktop (DESIGN TARGET, contratos D010) ── */
+.oc-auth__inst { margin: 10px 0 0; font: 600 15px/1.2 var(--oc-sans); color: #FFFFFF; }
+.oc-auth__host { margin: 6px 0 0; font: 500 11px var(--oc-mono); letter-spacing: .06em; color: rgba(255, 255, 255, .55); }
+.oc-dsel { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; text-align: left; }
+.oc-dsel__btn { width: 100%; min-height: 56px; display: grid; grid-template-columns: 36px minmax(0, 1fr) 16px; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid rgba(255, 255, 255, .16); border-radius: 16px; background: rgba(255, 255, 255, .05); color: #FFFFFF; font: inherit; text-align: left; cursor: pointer; }
+.oc-dsel__btn:hover { background: rgba(255, 255, 255, .1); }
+.oc-dsel__btn:focus-visible { outline: 2px solid var(--oc-gold-500); outline-offset: 2px; }
+.oc-dsel__ic { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(180deg, var(--oc-gold-300), var(--oc-gold-500)); color: var(--oc-navy-900); }
+.oc-dsel__ic .oc-icon { width: 20px; height: 20px; }
+.oc-dsel__txt strong { display: block; font: 600 14px var(--oc-sans); }
+.oc-dsel__txt span { display: block; margin-top: 2px; font-size: 12px; line-height: 1.4; color: rgba(255, 255, 255, .66); }
+.oc-auth__lead--l { text-align: left; }
+.oc-auth__stop { width: 44px; height: 44px; margin: 0 auto 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, .08); color: #FFFFFF; }
+.oc-auth__stop .oc-icon { width: 20px; height: 20px; }
+.oc-ctxsw { flex: none; max-width: 300px; height: 34px; display: inline-flex; align-items: center; gap: 8px; padding: 0 10px 0 12px; border: 1px solid var(--oc-line); border-radius: 17px; background: var(--oc-surface); color: var(--oc-ink); font: 500 12.5px var(--oc-sans); cursor: pointer; list-style: none; }
+.oc-ctxsw::-webkit-details-marker { display: none; }
+.oc-ctxsw__k { font: 500 9.5px var(--oc-mono); letter-spacing: .12em; color: var(--oc-ink-4); }
+.oc-ctxsw__n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-ctxsw .oc-icon { width: 14px; height: 14px; color: var(--oc-ink-3); }
+.oc-menu__pop--ctx { width: 320px; }
+.oc-ctx-g { margin: 0; padding: 4px 10px 2px; font: 500 9.5px var(--oc-mono); letter-spacing: .14em; color: var(--oc-ink-4); text-transform: uppercase; }
+.oc-ctx-i { width: 100%; min-height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--oc-ink); font: 500 13px var(--oc-sans); text-align: left; cursor: pointer; }
+.oc-ctx-i:hover { background: var(--oc-muted); }
+.oc-ctx-i[aria-current="true"] { background: var(--oc-navy-900); color: #FFFFFF; }
+.oc-ctx-i .oc-icon { width: 15px; height: 15px; }
+.oc-dist-sw { margin: 0; padding: 0 6px 8px; list-style: none; display: grid; gap: 2px; }
+.oc-dist-sw button { width: 100%; min-height: 38px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border: 0; border-radius: 10px; background: transparent; color: var(--oc-ink); font: 500 13px var(--oc-sans); text-align: left; cursor: pointer; }
+.oc-dist-sw button:hover { background: var(--oc-muted); }
+.oc-dist-sw button[aria-current="true"] { background: var(--oc-navy-900); color: #FFFFFF; }
+.oc-dist-sw .oc-icon { width: 16px; height: 16px; }
+.oc-dist-bound { margin: 0 10px 10px; padding: 8px 10px; border-radius: 10px; background: var(--oc-muted); font-size: 12px; line-height: 1.45; color: var(--oc-ink-2); }
+@media (max-width: 640px) { .oc-ctxsw { max-width: 150px; } .oc-ctxsw__k { display: none; } .oc-menu__pop--ctx { position: fixed; top: 58px; left: 12px; right: 12px; width: auto; } }
+
+/* Code (D010): os arranjos que a referência escreve com `style=` em linha (a CSP descarta-os), em classe, sem desenho novo. */
+.oc-access-list { margin: 6px 0 0; padding-left: 18px; }
+.oc-access-toast { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); max-width: min(560px, calc(100% - 32px)); z-index: 40; background: var(--oc-surface); box-shadow: 0 8px 24px rgba(7, 30, 51, .18); }
+@media (max-width: 640px) { .oc-access-toast { bottom: 96px; } }

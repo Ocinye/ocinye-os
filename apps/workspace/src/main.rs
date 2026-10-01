@@ -28,6 +28,7 @@ async fn main() -> anyhow::Result<()> {
         config: std::sync::Arc::new(config),
         sessions: SessionStore::new(),
         http,
+        hosts: ocinye_workspace::access::HostCache::default(),
     };
 
     // Expired sessions are swept rather than left to accumulate.
@@ -37,6 +38,13 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(&bind_address).await.context("bind")?;
     tracing::info!(address = %bind_address, "Ocinye Workspace listening");
 
-    axum::serve(listener, app).await.context("server")?;
+    // D010: o par TCP é preciso para decidir se um `X-Forwarded-Host` vem de
+    // um proxy de confiança (ADR-0020 §5).
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+    .context("server")?;
     Ok(())
 }

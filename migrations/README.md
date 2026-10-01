@@ -29,6 +29,11 @@ o serviço recusa correr contra um schema que não compreende.
 | 0010 | Ocinye Mail: caixas, partilhas, mensagens, rascunhos, preferências |
 | 0011 | Plano agentic: planos de acção e aprovações |
 | 0012 | Guarda de `TRUNCATE` na trilha de auditoria |
+| 0013–0059 | Ver o cabeçalho de cada ficheiro (esta tabela não foi mantida nesse intervalo) |
+| 0060 | Distribuições activadas por Instância (`instance_distributions`) e acesso de cada membro (`member_distribution_access`); a última activada não se desactiva (trigger) |
+| 0061 | Disposição do Desktop e fixações por membro **e** Distribuição, migradas sem perda nem cópia |
+| 0062 | Pontos de acesso (`access_endpoints`): anfitrião, destino, estado, observações de DNS/TLS; um canónico por Instância |
+| 0063 | A Distribuição activa e o contexto activo de cada sessão |
 
 ## Regras
 

@@ -426,6 +426,13 @@ pub fn app(vm: &AdminVm) -> AnyView {
             || error(crate::ui::view_models::AppError::Unavailable).into_any(),
             instance,
         ),
+        AdminSection::Distributions
+        | AdminSection::DistributionAccess
+        | AdminSection::Endpoints
+        | AdminSection::Defaults => vm.d010.as_ref().map_or_else(
+            || error(crate::ui::view_models::AppError::Unavailable).into_any(),
+            |d| super::admin_access::section(d).into_any(),
+        ),
     };
     frame(
         "admin",
@@ -480,6 +487,7 @@ mod tests {
             roles: vec![],
             instance: None,
             list_href: "/admin".into(),
+            d010: None,
         }
     }
 

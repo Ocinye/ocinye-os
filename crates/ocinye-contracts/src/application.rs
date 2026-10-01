@@ -232,138 +232,14 @@ impl std::fmt::Display for UnknownApplication {
 
 impl std::error::Error for UnknownApplication {}
 
-/// O perfil de uma Instância (ADR-0014 §1).
-///
-/// Decide predefinições — aplicações activas, fixações iniciais, estrutura
-/// inicial — e nunca autoridade.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub enum InstanceProfile {
-    /// Investigação: o Ocinye como a Ocinye o usa — todas as aplicações.
-    Research,
-    /// Empresa: comunicação, projectos e unidades; sem os módulos científicos.
-    Business,
-    /// Educação: como a empresa, mais conhecimento e bibliografia.
-    Education,
-    /// Pessoal: uma pessoa e as suas coisas.
-    Personal,
-}
+/// O perfil de uma Instância (ADR-0014 §1) passou a ser uma Distribuição
+/// (ADR-0019): o mesmo conjunto fechado, agora em `distribution`. Fica como
+/// nome alternativo durante uma versão, para que `activates` e os testes não
+/// mudem de nome no mesmo passo.
+pub type InstanceProfile = crate::distribution::Distribution;
 
-impl InstanceProfile {
-    /// Os quatro, na ordem em que se apresentam.
-    pub const ALL: [InstanceProfile; 4] = [
-        Self::Research,
-        Self::Business,
-        Self::Education,
-        Self::Personal,
-    ];
-
-    /// O identificador persistido.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Research => "research",
-            Self::Business => "business",
-            Self::Education => "education",
-            Self::Personal => "personal",
-        }
-    }
-
-    /// Se esta aplicação começa activa neste perfil (ADR-0014 §4).
-    ///
-    /// Uma aplicação essencial está sempre activa, em qualquer perfil.
-    #[must_use]
-    pub const fn activates(self, app: ApplicationId) -> bool {
-        use ApplicationId as A;
-        if !app.is_optional() {
-            return true;
-        }
-        match self {
-            Self::Research => true,
-            Self::Business => matches!(
-                app,
-                A::Notes
-                    | A::Calendar
-                    | A::Mail
-                    | A::Prompt
-                    | A::Messages
-                    | A::Activity
-                    | A::Audit
-                    | A::Units
-                    | A::Projects
-                    | A::Terminal
-                    | A::Browser
-            ),
-            Self::Education => matches!(
-                app,
-                A::Notes
-                    | A::Calendar
-                    | A::Mail
-                    | A::Prompt
-                    | A::Messages
-                    | A::Activity
-                    | A::Audit
-                    | A::Units
-                    | A::Projects
-                    | A::Knowledge
-                    | A::Bibliography
-                    | A::Terminal
-                    | A::Browser
-            ),
-            Self::Personal => matches!(
-                app,
-                A::Notes | A::Calendar | A::Mail | A::Prompt | A::Terminal | A::Browser
-            ),
-        }
-    }
-
-    /// Se a estrutura inicial de unidades é semeada (ADR-0014 §7).
-    #[must_use]
-    pub const fn seeds_initial_units(self) -> bool {
-        matches!(self, Self::Research)
-    }
-}
-
-impl TryFrom<String> for InstanceProfile {
-    type Error = UnknownProfile;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        value.parse()
-    }
-}
-
-impl std::str::FromStr for InstanceProfile {
-    type Err = UnknownProfile;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::ALL
-            .into_iter()
-            .find(|profile| profile.as_str() == value.trim())
-            .ok_or_else(|| UnknownProfile(value.to_owned()))
-    }
-}
-
-impl From<InstanceProfile> for String {
-    fn from(value: InstanceProfile) -> Self {
-        value.as_str().to_owned()
-    }
-}
-
-/// Um valor que não nomeia nenhum perfil.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UnknownProfile(pub String);
-
-impl std::fmt::Display for UnknownProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "perfil desconhecido: «{}» (research, business, education ou personal)",
-            self.0
-        )
-    }
-}
-
-impl std::error::Error for UnknownProfile {}
+/// Um valor que não nomeia nenhuma Distribuição (nome antigo).
+pub type UnknownProfile = crate::distribution::UnknownDistribution;
 
 // ── O manifesto (ADR-0016) ──────────────────────────────────────────────
 

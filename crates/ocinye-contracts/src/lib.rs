@@ -20,6 +20,7 @@
 #![deny(missing_docs)]
 
 pub mod access;
+pub mod access_endpoint;
 pub mod agentic;
 pub mod application;
 pub mod avatar;
@@ -28,6 +29,7 @@ pub mod calendar;
 pub mod classification;
 pub mod compute;
 pub mod desktop;
+pub mod distribution;
 pub mod error;
 pub mod ids;
 pub mod intelligence;
@@ -54,6 +56,10 @@ pub use application::{
 pub use avatar::{AvatarChoice, AVATAR_PRESETS};
 pub use classification::Classification;
 pub use compute::{ComputeNodeStatus, ComputeStatus, InstitutionalControl, JobStatus, NodeKind};
+pub use distribution::{
+    Distribution, DistributionRefusal, DistributionSet, DistributionState, EnabledDistributions,
+    EntryDecision, EntryResolution, UnknownDistribution,
+};
 pub use error::{ErrorBody, ErrorCode};
 pub use ids::ResourceIdentifier;
 pub use intelligence::{

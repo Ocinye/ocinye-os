@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 239 caminhos e 285 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 254 caminhos e 302 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -148,7 +148,12 @@ sem que nada falhe.
   Administração › Instância (`instance_applications`, migração 0053), e uma
   inactiva desaparece do lançador, da barra, da paleta e do «+ Criar» sem perder
   dados. A Ocinye é `research`, com tudo activo. Ficheiros passou a ser
-  relevante a todo o membro interno, e não só a papéis de investigação.
+  relevante a todo o membro interno, e não só a papéis de investigação. Com a
+  D010 ([ADR-0019](docs/adrs/0019-multi-distribution-instance.md)), o perfil
+  passa a **conjunto de Distribuições activadas** (`instance_distributions`,
+  migração 0060; nunca vazio): uma opcional fica activa por omissão quando
+  alguma das activadas a traz, e `organisations.profile` fica um espelho de
+  leitura durante uma versão.
 - **Fronteira Core/aplicações: `IMPLEMENTED`**
   ([ADR-0015](docs/adrs/0015-core-and-applications-boundary.md),
   [fronteira](docs/architecture/CORE_AND_APPLICATIONS.md)). O Core recusa a API de
@@ -301,9 +306,17 @@ sem que nada falhe.
   aplicações** e **nenhuma fica provisória**. A D009 — pacote R2, um ponto
   de partida por Distribuição (widgets, fixações, fundo, primeiros passos) e
   um ícone canónico por aplicação, nada disto autorização
-  ([ADR-0624](docs/adrs/0624-distribution-defaults.md)) — está no ramo
-  `feat/design-d009`; uma Instância continua com **uma** Distribuição
-  (`organisations.profile`), e activar uma segunda fica para a D010. Tarefas é o alias de O Meu
+  ([ADR-0624](docs/adrs/0624-distribution-defaults.md)) — está em `main`
+  (#192). A D010 — **uma Instância com uma ou mais Distribuições** activadas
+  e acesso por membro, uma Distribuição activa por sessão no Core, pontos de
+  acesso que falham fechado num anfitrião desconhecido, mudança de
+  Distribuição pelo Gestor de Janelas, contexto da sessão, bloqueio do ecrã e
+  a Administração das Distribuições e dos pontos de acesso
+  ([ADR-0019](docs/adrs/0019-multi-distribution-instance.md),
+  [ADR-0020](docs/adrs/0020-access-endpoints.md),
+  [ADR-0625](docs/adrs/0625-distribution-context-and-switching.md)) — está no
+  ramo `feat/design-d010`; a instalação com várias Distribuições e domínios
+  próprios é da D011 ([ADR-0021](docs/adrs/0021-installer-consumes-typed-contracts.md), `Proposed`). Tarefas é o alias de O Meu
   Trabalho; Histórico não está registado. Equipas não existem: sem domínio,
   sem desenho, sem aplicação. **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
   produção (`os.ocinye.com`) continua em `4f8d048`, com a UI anterior ao
@@ -386,7 +399,7 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **59 migrations**, aplicáveis de base vazia; 93 tabelas.
+- **63 migrations**, aplicáveis de base vazia; 96 tabelas.
 - **Ocinye Terminal e ocsh: `IMPLEMENTED`, com o ecrã do Design (D008), em
   `main` (#191)** ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md),
   emendada na D008). Uma linha de comandos governada que **não é uma shell do
@@ -602,7 +615,7 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **103 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **107 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -619,14 +632,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1796 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1824 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **712 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **721 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -1630,7 +1643,16 @@ A escolha viaja no URL como `unit_id`, tipada, e é o Core que decide se o membr
 pode usá-la: **um identificador nomeia âmbito; não o concede.**
 
 Isto é o âmbito de *uma consulta*, e não uma «unidade activa» global do Ocinye
-OS. Não existe troca de unidade na shell, nem unidade corrente institucional.
+OS. Não existe unidade corrente institucional.
+
+> **Emendada em 2026-10-01** pela
+> [ADR-0625](docs/adrs/0625-distribution-context-and-switching.md) (D010): a
+> sessão pode ter um **contexto activo** — Organização, Unidade, Projecto ou
+> Espaço pessoal —, escolhido pelo membro no chip de contexto, dentro da
+> Distribuição activa. A regra acima continua: o contexto **nunca se infere**
+> (a sessão nasce sem contexto até o membro escolher), só se oferecem os que o
+> Core autoriza, reavaliados a cada pedido, e mudar de Distribuição repõe-no.
+> É apresentação da sessão, não autoridade nem «unidade principal».
 
 ## 35. Menor privilégio
 

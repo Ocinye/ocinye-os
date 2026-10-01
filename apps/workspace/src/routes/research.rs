@@ -265,6 +265,7 @@ fn dirty_for(
         can_save: true,
         save_label: Some(save_label),
         save_form: Some(ui::apps::doc_form_id(app, "new")),
+        after: None,
     })
 }
 

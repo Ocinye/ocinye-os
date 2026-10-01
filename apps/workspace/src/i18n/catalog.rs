@@ -489,6 +489,7 @@ pub const GROUPS: &[&[Entry]] = &[
     super::ui_reg::UI_REG,
     super::ui_sys::UI_SYS,
     super::ui_dist::UI_DIST,
+    super::ui_access::UI_ACCESS,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).

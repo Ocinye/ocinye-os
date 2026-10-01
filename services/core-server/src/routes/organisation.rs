@@ -17,7 +17,6 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/organisation", get(get_organisation))
         .route("/instance/applications", get(get_instance_applications))
-        .route("/instance/profile", put(put_instance_profile))
         .route(
             "/instance/applications/{application_id}",
             put(put_instance_application),
@@ -74,24 +73,6 @@ async fn get_instance_applications(
     CurrentPrincipal(principal): CurrentPrincipal,
 ) -> Result<Json<organisation::InstanceApplications>, ApiError> {
     organisation::instance_applications(&state.pool, &principal)
-        .await
-        .map(Json)
-        .map_err(|error| ApiError::new(error, &ids))
-}
-
-#[derive(Deserialize)]
-struct ProfileBody {
-    profile: InstanceProfile,
-}
-
-/// Change the Instance's profile. Explicit decisions stay; nothing is deleted.
-async fn put_instance_profile(
-    State(state): State<AppState>,
-    Ids(ids): Ids,
-    CurrentPrincipal(principal): CurrentPrincipal,
-    Json(body): Json<ProfileBody>,
-) -> Result<Json<organisation::InstanceApplications>, ApiError> {
-    organisation::set_profile(&state.pool, &principal, body.profile, &ids)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, &ids))

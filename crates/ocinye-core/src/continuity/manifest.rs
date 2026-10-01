@@ -166,6 +166,23 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
              identidade própria; viaja com a organização",
         ),
     ),
+    (
+        "instance_distributions",
+        Comparacao::Fora(
+            "D010 · que Distribuições a Instância activou, chaveada por organização \
+             e Distribuição e sem identidade própria; viaja com a organização",
+        ),
+    ),
+    (
+        "member_distribution_access",
+        Comparacao::Fora(
+            "D010 · que Distribuições cada membro pode abrir, chaveada por \
+             organização, pessoa e Distribuição; viaja com o membro",
+        ),
+    ),
+    // D010 · Um ponto de acesso tem identidade própria (`id`) e a navegação
+    // entre pontos usa-a: viaja e compara-se por identidade.
+    ("access_endpoints", Comparacao::Identidades),
     ("people", Comparacao::Identidades),
     ("credentials", Comparacao::Identidades),
     ("person_roles", Comparacao::Identidades),

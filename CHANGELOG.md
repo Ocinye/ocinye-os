@@ -7,6 +7,52 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Interface D010 (pacote D010B) — Acesso, várias Distribuições e superfície do sistema — 2026-10-01 (ramo `feat/design-d010`)
+
+- **Uma Instância, uma ou mais Distribuições** (ADR-0019): activadas por
+  Instância (`instance_distributions`, migração 0060), acesso por membro
+  (`member_distribution_access`), e a última activada **não se desactiva** — no
+  Core e por trigger na base. Activar dá acesso só a quem activa; desactivar
+  guarda acesso, disposição e fixações. Retirar o acesso ao último
+  administrador que entra é recusado. Três conjuntos distintos: disponíveis,
+  activadas e acessíveis ao membro.
+- **Estado por Distribuição** (migração 0061): disposição do Desktop, fundo e
+  fixações por membro + Distribuição, migrados para a Distribuição que a
+  Instância tinha, sem perda nem cópia.
+- **Uma Distribuição activa por sessão, no Core** (migração 0063), revalidada a
+  cada pedido: retirada (S18) ou desactivada (S39) a meio da sessão, o pedido
+  seguinte recusa com motivo tipado e as janelas fecham. Distribuição não é
+  autorização nem contexto.
+- **Pontos de acesso** (ADR-0020, migração 0062): genéricos ou fixos numa
+  Distribuição; o Workspace resolve o anfitrião de cada pedido no Core e
+  **falha fechado** num nome desconhecido (S13), num ponto por verificar (S14)
+  ou sem Core (S36); `X-Forwarded-Host` só de um proxy de confiança
+  (`OCINYE_TRUSTED_PROXIES`); sessão por anfitrião (cookie sem `Domain`);
+  origem esperada por ponto; desactivar um ponto termina as sessões nele (S40).
+  O ponto canónico semeia-se de `OCINYE_WORKSPACE_PUBLIC_URL`.
+- **Entrada** (ADR-0625): 0 acessíveis → S10, 1 → directa, várias → S09; num
+  ponto fixo, a sua (S08), sem acesso S11, desactivada S12.
+- **Mudar de Distribuição** (S15/S16): confirmação com as janelas que fecham;
+  uma janela por gravar passa pelo diálogo do D002 e Cancelar aborta a
+  mudança; o contexto repõe-se. Num ponto fixo, o painel oferece os endereços
+  configurados (S17). Ligação profunda para outra Distribuição (S34).
+- **Contexto** da sessão (S19–S21): Organização, Unidade, Projecto ou Espaço
+  pessoal, escolhido pelo membro, nunca inferido; um contexto retirado é reposto
+  e dito. CLAUDE.md §34.3 emendada.
+- **Bloquear o ecrã** (S22, ⌘L): a sessão e as janelas ficam; desbloqueia com a
+  palavra-passe, revalidada no Core (`POST /api/v1/auth/reauthenticate`), cinco
+  tentativas.
+- **Administração**: Distribuições (S26/S38, com confirmação governada),
+  Acesso a Distribuições (S37), Pontos de acesso (S27–S32: acrescentar,
+  observar DNS e ligação segura, activar, mudar destino, desactivar) e
+  Predefinições (S33, a camada da Instância «não disponível»).
+- `PUT /api/v1/instance/profile` retirado: a Distribuição muda-se por activar e
+  desactivar. `bootstrap-admin --distribution` (repetível; `--profile` mantém-se).
+- **Não implementado:** recuperação de palavra-passe (C9/S24 — sem ecrã de
+  conclusão nem correio de sistema), convite por ligação (S25), manutenção
+  (S35), a predefinição da Instância (S33), e tudo o que é do instalador (D011).
+  **Nada foi deployado.**
+
 ### Interface D009 (pacote R2) — Predefinições por Distribuição e iconografia canónica — 2026-09-30 (ramo `feat/design-d009`)
 
 - **Uma experiência de partida por Distribuição**, tipada em

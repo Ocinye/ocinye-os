@@ -10,6 +10,7 @@
 //! entretanto, e sobrepor seria perder essa gravação em silêncio.
 
 use ocinye_contracts::desktop::DesktopLayout;
+use ocinye_contracts::Distribution;
 use ocinye_domain::Principal;
 use sqlx::PgPool;
 
@@ -32,12 +33,17 @@ pub struct StoredDesktop {
 pub async fn get_desktop(
     pool: &PgPool,
     principal: &Principal,
+    distribution: Distribution,
 ) -> CoreResult<Option<StoredDesktop>> {
-    let linha: Option<(i32, serde_json::Value)> =
-        sqlx::query_as("SELECT version, layout FROM member_desktop_layouts WHERE person_id = $1")
-            .bind(principal.person_id)
-            .fetch_optional(pool)
-            .await?;
+    // D010: a disposição (com o fundo lá dentro) é por membro + Distribuição.
+    let linha: Option<(i32, serde_json::Value)> = sqlx::query_as(
+        "SELECT version, layout FROM member_desktop_layouts
+          WHERE person_id = $1 AND distribution = $2",
+    )
+    .bind(principal.person_id)
+    .bind(distribution.as_str())
+    .fetch_optional(pool)
+    .await?;
     linha
         .map(|(version, layout)| {
             serde_json::from_value(layout)
@@ -62,6 +68,7 @@ pub async fn put_desktop(
     expected_version: i32,
     layout: &DesktopLayout,
     admin: bool,
+    distribution: Distribution,
 ) -> CoreResult<i32> {
     layout.validate(admin).map_err(CoreError::Validation)?;
     let json = serde_json::to_value(layout)
@@ -69,25 +76,27 @@ pub async fn put_desktop(
 
     let gravada: Option<(i32,)> = if expected_version == 0 {
         sqlx::query_as(
-            "INSERT INTO member_desktop_layouts (person_id, version, layout)
-             VALUES ($1, 1, $2)
-             ON CONFLICT (person_id) DO NOTHING
+            "INSERT INTO member_desktop_layouts (person_id, distribution, version, layout)
+             VALUES ($1, $3, 1, $2)
+             ON CONFLICT (person_id, distribution) DO NOTHING
              RETURNING version",
         )
         .bind(principal.person_id)
         .bind(&json)
+        .bind(distribution.as_str())
         .fetch_optional(pool)
         .await?
     } else {
         sqlx::query_as(
             "UPDATE member_desktop_layouts
              SET layout = $3, version = version + 1, updated_at = now()
-             WHERE person_id = $1 AND version = $2
+             WHERE person_id = $1 AND version = $2 AND distribution = $4
              RETURNING version",
         )
         .bind(principal.person_id)
         .bind(expected_version)
         .bind(&json)
+        .bind(distribution.as_str())
         .fetch_optional(pool)
         .await?
     };
@@ -106,9 +115,15 @@ pub async fn put_desktop(
 /// # Errors
 ///
 /// Devolve erro quando a escrita falha.
-pub async fn reset_desktop(pool: &PgPool, principal: &Principal) -> CoreResult<()> {
-    sqlx::query("DELETE FROM member_desktop_layouts WHERE person_id = $1")
+pub async fn reset_desktop(
+    pool: &PgPool,
+    principal: &Principal,
+    distribution: Distribution,
+) -> CoreResult<()> {
+    // «Repor» apaga só a linha da Distribuição activa (ADR-0019 §8).
+    sqlx::query("DELETE FROM member_desktop_layouts WHERE person_id = $1 AND distribution = $2")
         .bind(principal.person_id)
+        .bind(distribution.as_str())
         .execute(pool)
         .await?;
     Ok(())

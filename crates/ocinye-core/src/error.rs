@@ -175,6 +175,22 @@ pub mod refusal {
     pub const LAST_UNIT_MANAGER: &str = "last_unit_manager";
     /// The actor would bar their own account.
     pub const SELF_LOCKOUT: &str = "self_lockout";
+    /// D010 · It would leave the Instance with no enabled Distribution.
+    pub const LAST_ENABLED_DISTRIBUTION: &str = "last_enabled_distribution";
+    /// D010 · It would leave no administrator able to enter any Distribution.
+    pub const LAST_ADMINISTRATOR_ACCESS: &str = "last_administrator_access";
+    /// D010 · The Distribution is not enabled on this Instance.
+    pub const DISTRIBUTION_NOT_ENABLED: &str = "distribution_not_enabled";
+    /// D010 · The member has no access to this Distribution.
+    pub const DISTRIBUTION_NO_ACCESS: &str = "distribution_no_access";
+    /// D010 · The host name is already an access endpoint.
+    pub const ENDPOINT_CONFLICT: &str = "endpoint_conflict";
+    /// D010 · The host name is not valid.
+    pub const ENDPOINT_INVALID: &str = "endpoint_invalid";
+    /// D010 · It is the canonical endpoint, or the last active one.
+    pub const ENDPOINT_LAST_OR_CANONICAL: &str = "endpoint_last_or_canonical";
+    /// D010 · The context is not one the member may use.
+    pub const CONTEXT_UNAVAILABLE: &str = "context_unavailable";
 }
 
 #[cfg(test)]

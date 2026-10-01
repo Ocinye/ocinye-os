@@ -1,0 +1,17 @@
+/* Ocinye OS · D010 · acesso e Distribuições (Claude Design)
+   Bloco novo, sem alterar regras existentes. Ligar depois de oc-auth.css, oc-desk.css e oc-apps.css.
+   Só alvos de toque no móvel (≥ 44×44 px efectivos) para as peças que a D010 usa em ecrãs de entrada,
+   folhas e diálogos; a aparência não muda acima de 600 px. */
+@media (max-width: 600px) {
+  .oc-auth__lang, .oc-auth__ghost, .oc-go, .oc-round-btn,
+  .oc-btn-solid, .oc-btn-line, .oc-btn-plain, .oc-btn-gold,
+  .oc-app-btn, .oc-dist-go, .oc-sheet__actions button {
+    min-height: 44px; min-width: 44px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .oc-pill { min-height: 48px; }
+  .oc-pill input { min-height: 44px; }
+  .oc-auth__langs { gap: 4px; }
+  /* as folhas (oc-sheet) fixam 41 px nos botões; a D010 sobe-os a 44 no móvel */
+  .oc-sheet .oc-btn-line, .oc-sheet .oc-btn-solid, .oc-sheet .oc-round-btn { height: auto; min-height: 44px; min-width: 44px; }
+}

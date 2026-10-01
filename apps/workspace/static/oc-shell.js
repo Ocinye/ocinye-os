@@ -99,7 +99,35 @@
     }));
   }
 
-  const init = () => { menus(); overlays(); dock(); pins(); };
+  /* Code (D010): as folhas que o servidor desenha abertas (S16, S17, S21, S34)
+     abrem como diálogo modal — foco inicial em Cancelar, Esc cancela e volta ao
+     endereço de cancelar (sem `?switch=`). ⌘L / Ctrl+L bloqueia o ecrã (S22).
+     Idempotente: cada folha só abre uma vez. */
+  function d010() {
+    $$('dialog[data-oc="auto-open"]').forEach((dlg) => {
+      if (dlg.dataset.opened) return;
+      dlg.dataset.opened = '1';
+      try { dlg.showModal(); } catch (_) { dlg.setAttribute('open', ''); }
+      const cancel = dlg.querySelector('[data-oc="dialog-close"]');
+      if (cancel) cancel.focus();
+      dlg.addEventListener('cancel', (e) => {
+        e.preventDefault();
+        location.assign(dlg.dataset.cancel || '/');
+      });
+    });
+    const lock = document.querySelector('form[data-oc="lock-form"]');
+    if (lock && !lock.dataset.bound) {
+      lock.dataset.bound = '1';
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key || '').toLowerCase() === 'l') {
+          e.preventDefault();
+          lock.submit();
+        }
+      });
+    }
+  }
+
+  const init = () => { menus(); overlays(); dock(); pins(); d010(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

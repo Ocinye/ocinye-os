@@ -144,12 +144,14 @@ pub fn workspace_state(core_url: &str, public_url: &str) -> WorkspaceState {
             log_format: "pretty".to_owned(),
             is_production: false,
             static_dir: format!("{}/static", env!("CARGO_MANIFEST_DIR")),
+            trusted_proxies: Vec::new(),
         }),
         sessions: SessionStore::new(),
         http: reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
             .expect("cliente"),
+        hosts: ocinye_workspace::access::HostCache::default(),
     }
 }
 
@@ -160,6 +162,10 @@ pub struct Sistema {
     pub core_url: String,
     pub url: String,
     pub http: reqwest::Client,
+    /// D010: o anfitrião deste sistema — um ponto de acesso canónico da sua
+    /// organização, único na base partilhada (ADR-0020: um nome, uma Instância).
+    /// O cliente manda-o no `Host`; a escrita manda a origem dele.
+    pub host: String,
     /// `(URL da base de testes, nome)` de uma base criada por
     /// [`Sistema::provisionar`], para a apagar no fim.
     pub base_descartavel: Option<(String, String)>,
@@ -308,9 +314,32 @@ impl Sistema {
             let _ = axum::serve(ws_listener, workspace_routes::router(ws)).await;
         });
 
+        // D010: o ponto de acesso canónico desta organização. O nome é único
+        // na base partilhada; o cliente liga-se a 127.0.0.1 e diz este `Host`.
+        let host = format!(
+            "s{}.ocinye.test",
+            &organisation_id.simple().to_string()[..16]
+        );
+        sqlx::query(
+            "INSERT INTO access_endpoints (id, organisation_id, hostname, state, canonical)
+             VALUES (gen_random_uuid(), $1, $2, 'active', true)
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(organisation_id)
+        .bind(&host)
+        .execute(&pool)
+        .await
+        .expect("ponto de acesso canónico");
+        let port = url.rsplit(':').next().unwrap_or_default().to_owned();
+        let mut defaults = reqwest::header::HeaderMap::new();
+        defaults.insert(
+            reqwest::header::HOST,
+            format!("{host}:{port}").parse().expect("Host"),
+        );
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(20))
+            .default_headers(defaults)
             .build()
             .expect("cliente");
         // O `TcpListener` aceita antes de o servidor servir: espera-se por uma
@@ -326,6 +355,7 @@ impl Sistema {
                     core_url,
                     url,
                     http,
+                    host,
                     base_descartavel: None,
                 };
             }
@@ -396,6 +426,89 @@ impl Sistema {
         .expect("seed TOTP");
     }
 
+    /// A origem deste ponto de acesso (o que um browser mandaria aqui).
+    pub fn origin(&self) -> String {
+        let port = self.url.rsplit(':').next().unwrap_or_default();
+        format!("http://{}:{port}", self.host)
+    }
+
+    /// D010: um ponto de acesso fixo numa Distribuição (ou genérico, com
+    /// `None`), activo, desta organização; devolve o anfitrião.
+    pub async fn ponto(&self, distribution: Option<&str>) -> String {
+        let host = format!(
+            "{}-{}",
+            distribution.unwrap_or("generico"),
+            &Uuid::new_v4().simple().to_string()[..12]
+        ) + "."
+            + &self.host;
+        sqlx::query(
+            "INSERT INTO access_endpoints (id, organisation_id, hostname, binding_distribution, state, canonical)
+             VALUES (gen_random_uuid(), $1, $2, $3, 'active', false)",
+        )
+        .bind(self.organisation_id)
+        .bind(&host)
+        .bind(distribution)
+        .execute(&self.pool)
+        .await
+        .expect("ponto de acesso");
+        host
+    }
+
+    /// A origem de outro anfitrião deste Workspace.
+    pub fn origin_de(&self, host: &str) -> String {
+        let port = self.url.rsplit(':').next().unwrap_or_default();
+        format!("http://{host}:{port}")
+    }
+
+    /// Um `GET` com o `Host` de outro ponto de acesso.
+    pub fn get_em(&self, host: &str, path: &str, cookie: &str) -> reqwest::RequestBuilder {
+        let port = self.url.rsplit(':').next().unwrap_or_default();
+        self.get(path, cookie)
+            .header(reqwest::header::HOST, format!("{host}:{port}"))
+    }
+
+    /// Uma escrita com o `Host` e a origem de outro ponto de acesso.
+    pub fn escrever_em(
+        &self,
+        host: &str,
+        method: reqwest::Method,
+        path: &str,
+        cookie: &str,
+    ) -> reqwest::RequestBuilder {
+        let port = self.url.rsplit(':').next().unwrap_or_default();
+        self.http
+            .request(method, format!("{}{path}", self.url))
+            .header(reqwest::header::HOST, format!("{host}:{port}"))
+            .header("origin", self.origin_de(host))
+            .header("cookie", format!("oc_boot=1; {cookie}"))
+    }
+
+    /// Entra por outro ponto de acesso; devolve (estado, destino, cookie).
+    pub async fn entrar_em(
+        &self,
+        host: &str,
+        email: &str,
+        password: &str,
+    ) -> (StatusCode, String, String) {
+        let r = self
+            .escrever_em(host, reqwest::Method::POST, "/login", "")
+            .form(&[("email", email), ("password", password)])
+            .send()
+            .await
+            .expect("POST /login");
+        let status = StatusCode::from_u16(r.status().as_u16()).expect("estado");
+        let destino = location(&r);
+        let cookie = r
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .find(|c| c.starts_with(&format!("{}=", ocinye_workspace::session::COOKIE_NAME)))
+            .map(|c| c.split(';').next().unwrap_or_default().to_owned())
+            .unwrap_or_default();
+        (status, destino, cookie)
+    }
+
     pub fn get(&self, path: &str, cookie: &str) -> reqwest::RequestBuilder {
         self.http
             .get(format!("{}{path}", self.url))
@@ -411,7 +524,7 @@ impl Sistema {
     ) -> reqwest::RequestBuilder {
         self.http
             .request(method, format!("{}{path}", self.url))
-            .header("origin", &self.url)
+            .header("origin", self.origin())
             .header("cookie", format!("oc_boot=1; {cookie}"))
     }
 

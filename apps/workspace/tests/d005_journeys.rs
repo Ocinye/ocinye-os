@@ -167,6 +167,19 @@ fn codigo() -> String {
 
 // ── Ideias ───────────────────────────────────────────────────────────────
 
+/// A página sem o selector de contexto (D010, S19): um projecto do membro
+/// é também um contexto seu, e o nome aparece lá — o que estes testes medem é
+/// a lista da aplicação.
+fn sem_contextos(html: &str) -> String {
+    match html.split_once(r#"class="oc-menu__pop oc-menu__pop--ctx""#) {
+        Some((antes, depois)) => {
+            let resto = depois.split_once("</details>").map_or("", |(_, r)| r);
+            format!("{antes}{resto}")
+        }
+        None => html.to_owned(),
+    }
+}
+
 #[tokio::test]
 async fn ideias_ciclo_motivo_e_promocao_que_guarda_a_ideia() {
     let Some(s) = Sistema::levantar("research").await else {
@@ -263,7 +276,7 @@ async fn ideias_ciclo_motivo_e_promocao_que_guarda_a_ideia() {
     let (_, html) = s.html("/ideas?nav=promoted", &c).await;
     assert!(html.contains(&format!("Vento {marca}")));
     let (_, html) = s.html("/ideas?nav=developing", &c).await;
-    assert!(!html.contains(&format!("Vento {marca}")));
+    assert!(!sem_contextos(&html).contains(&format!("Vento {marca}")));
 }
 
 #[tokio::test]
@@ -341,7 +354,7 @@ async fn projectos_filtros_pessoas_e_transicoes() {
     assert!(html.contains(&format!(r#"href="/projects/{pa}?nav=all""#)));
     // «Em curso» é `active`: um projecto acabado de nascer é rascunho.
     let (_, html) = s.html("/projects?nav=in_progress", &ca).await;
-    assert!(!html.contains(&format!("Projecto A {marca}")));
+    assert!(!sem_contextos(&html).contains(&format!("Projecto A {marca}")));
     let r = form(
         &s,
         &ca,

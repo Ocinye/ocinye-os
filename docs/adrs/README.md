@@ -132,6 +132,9 @@ O que o Ocinye OS é, onde reside a autoridade, e sobre que runtime assenta.
 - [ADR-0016](0016-application-manifest-contract.md) — O manifesto de aplicação
 - [ADR-0017](0017-instance-configuration-and-branding.md) — Configuração e marca da Instância
 - [ADR-0018](0018-universal-web-access-and-runtime-classes.md) — Acesso Web universal e as três classes de runtime
+- [ADR-0019](0019-multi-distribution-instance.md) — Uma Instância, uma ou mais Distribuições
+- [ADR-0020](0020-access-endpoints.md) — Pontos de acesso: o anfitrião escolhe o destino, nunca a autoridade
+- [ADR-0021](0021-installer-consumes-typed-contracts.md) — O instalador consome contratos tipados; as invariantes ficam no Core
 
 ### 0100–0199 · Identidade, Segurança, Autorização e Governação
 
@@ -241,6 +244,7 @@ A interface humana.
 - [ADR-0622](0622-completion-apps-history-evidence-and-agent-authority.md) — As aplicações de conclusão: a história relê o alvo, a prova mostra-se por lista branca, e um agente não empresta a sua autoridade
 - [ADR-0623](0623-terminal-and-browser-separate-boundaries.md) — Terminal e Browser: duas fronteiras, nenhuma ponte de execução comum
 - [ADR-0624](0624-distribution-defaults.md) — Predefinições de Distribuição: configuração de produto tipada, versionada, abaixo da Instância e sem autoridade
+- [ADR-0625](0625-distribution-context-and-switching.md) — Distribuição antes do contexto; mudar de Distribuição ≠ mudar de contexto
 
 ### 0700–0799 · Deployment, rede, operação e resiliência
 
@@ -281,6 +285,9 @@ preencher.
 | [0016](0016-application-manifest-contract.md) | O manifesto de aplicação | Foundation | `HIGH` | Accepted |
 | [0017](0017-instance-configuration-and-branding.md) | Configuração e marca da Instância | Foundation | `MEDIUM` | Accepted |
 | [0018](0018-universal-web-access-and-runtime-classes.md) | Acesso Web universal e as três classes de runtime | Foundation | `FOUNDATIONAL` | Proposed |
+| [0019](0019-multi-distribution-instance.md) | Uma Instância, uma ou mais Distribuições | Foundation | `HIGH` | Accepted |
+| [0020](0020-access-endpoints.md) | Pontos de acesso: o anfitrião escolhe o destino, nunca a autoridade | Foundation | `HIGH` | Accepted |
+| [0021](0021-installer-consumes-typed-contracts.md) | O instalador consome contratos tipados; as invariantes ficam no Core | Foundation | `MEDIUM` | Proposed |
 | [0100](0100-authorization-model.md) | RBAC + ABAC contextual, fail closed | Security | `FOUNDATIONAL` | Accepted |
 | [0101](0101-permissions-scopes-and-grants.md) | Permissões nomeadas, âmbitos e grants explícitos | Security | `HIGH` | Accepted |
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |
@@ -352,6 +359,7 @@ preencher.
 | [0622](0622-completion-apps-history-evidence-and-agent-authority.md) | As aplicações de conclusão: a história relê o alvo, a prova mostra-se por lista branca, e um agente não empresta a sua autoridade | Workspace | `HIGH` | Accepted |
 | [0623](0623-terminal-and-browser-separate-boundaries.md) | Terminal e Browser: duas fronteiras, nenhuma ponte de execução comum | Workspace | `HIGH` | Accepted |
 | [0624](0624-distribution-defaults.md) | Predefinições de Distribuição: configuração de produto tipada, versionada, abaixo da Instância e sem autoridade | Workspace | `HIGH` | Accepted |
+| [0625](0625-distribution-context-and-switching.md) | Distribuição antes do contexto; mudar de Distribuição ≠ mudar de contexto | Workspace | `HIGH` | Accepted |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
 | [0701](0701-release-bundle-and-host-installer.md) | O pacote de release e o instalador de anfitrião | Operations | `HIGH` | Accepted |
 | [0702](0702-desktop-shell-technology.md) | A casca Ocinye Desktop: Tauri 2 sobre o WebView do sistema | Operations | `HIGH` | Proposed |

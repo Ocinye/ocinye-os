@@ -275,6 +275,13 @@ pub struct StoredSession {
     /// Explicit and persisted: what decides whether privileged authority may be
     /// exercised, resolved at authorization time — not the state, not the role.
     pub mfa_satisfied: bool,
+    /// D010 · The Distribution this session entered (ADR-0019 §3), as stored.
+    /// Read only by `find_session`; revalidated on every request. Raw text on
+    /// purpose: a value that is not one of the four refuses, never passes.
+    pub active_distribution: Option<String>,
+    /// D010 · The active context (`organisation`, `unit`, `project`,
+    /// `personal`) and its id, inside the active Distribution (ADR-0625 §2).
+    pub active_context: Option<(String, Option<Uuid>)>,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for StoredSession {
@@ -292,6 +299,23 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for StoredSession {
             user_agent: row.try_get("user_agent")?,
             ip_prefix: row.try_get("ip_prefix")?,
             mfa_satisfied: row.try_get("mfa_satisfied")?,
+            // Only `find_session` selects these; elsewhere they are absent.
+            active_distribution: row
+                .try_get::<Option<String>, _>("active_distribution")
+                .ok()
+                .flatten(),
+            active_context: row
+                .try_get::<Option<String>, _>("active_context_kind")
+                .ok()
+                .flatten()
+                .map(|kind| {
+                    (
+                        kind,
+                        row.try_get::<Option<Uuid>, _>("active_context_id")
+                            .ok()
+                            .flatten(),
+                    )
+                }),
         })
     }
 }
@@ -355,7 +379,8 @@ pub async fn find_session<'e>(
 ) -> CoreResult<Option<StoredSession>> {
     let session = sqlx::query_as::<_, StoredSession>(
         "SELECT id, person_id, state, expires_at, issued_at, last_seen_at,
-                user_agent, ip_prefix, mfa_satisfied
+                user_agent, ip_prefix, mfa_satisfied,
+                active_distribution, active_context_kind, active_context_id
            FROM sessions
           WHERE token_digest = $1 AND state <> 'revoked' AND expires_at > now()",
     )

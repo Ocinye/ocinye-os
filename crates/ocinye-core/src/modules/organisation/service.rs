@@ -171,11 +171,9 @@ pub async fn resolve_instance(
                 let fallback = default_instance_name(slug);
                 let created =
                     bootstrap_organisation(pool, slug, name.unwrap_or(&fallback), ids).await?;
-                sqlx::query("UPDATE organisations SET profile = $2 WHERE id = $1")
-                    .bind(created.id)
-                    .bind(profile.as_str())
-                    .execute(pool)
-                    .await?;
+                // D010: a Instância nasce com esta Distribuição activada — a
+                // linha que o gatilho de 0060 criou passa a ser a dela.
+                super::distributions::initial(pool, created.id, profile, &[], ids).await?;
                 // A estrutura inicial é do perfil, e nasce com a Instância
                 // (ADR-0014 §7) — venha ela do bootstrap ou do arranque do Core.
                 if profile.seeds_initial_units() {

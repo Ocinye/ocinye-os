@@ -28,6 +28,7 @@ use crate::ui::view_models::{
 };
 
 pub mod admin;
+pub mod admin_access;
 pub mod browser;
 pub mod calendar;
 pub mod datasets;
