@@ -73,10 +73,8 @@ fn render(w: &AppWindow, vm: &AdminVm, dialog: Option<AnyView>, status: StatusCo
     response
 }
 
-async fn window(state: &WorkspaceState, headers: &HeaderMap) -> Result<AppWindow, Response> {
-    open_app(state, headers, Screen::Admin, ApplicationId::Administration)
-        .await
-        .map_err(|r| *r)
+async fn window(state: &WorkspaceState, headers: &HeaderMap) -> Result<AppWindow, Box<Response>> {
+    open_app(state, headers, Screen::Admin, ApplicationId::Administration).await
 }
 
 fn denied_of(state: &WorkspaceState, w: &AppWindow, f: &ApiFailure) -> Response {
@@ -175,7 +173,7 @@ async fn distributions_view(
 ) -> Response {
     let w = match window(state, headers).await {
         Ok(w) => w,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     if !w.ctx.viewer.can(Permission::OrganisationView) {
         return admin_denied(state, &w, AppError::PermissionDenied);
@@ -336,7 +334,7 @@ async fn access_view(
 ) -> Response {
     let w = match window(state, headers).await {
         Ok(w) => w,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     if !w.ctx.viewer.can(Permission::OrganisationManage) {
         return admin_denied(state, &w, AppError::PermissionDenied);
@@ -513,7 +511,7 @@ async fn endpoints_view(
 ) -> Response {
     let w = match window(state, headers).await {
         Ok(w) => w,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     if !w.ctx.viewer.can(Permission::OrganisationManage) {
         return admin_denied(state, &w, AppError::PermissionDenied);
@@ -782,7 +780,7 @@ pub(super) async fn defaults_page(
 ) -> Response {
     let w = match window(&state, &headers).await {
         Ok(w) => w,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     if !w.ctx.viewer.can(Permission::OrganisationView) {
         return admin_denied(&state, &w, AppError::PermissionDenied);

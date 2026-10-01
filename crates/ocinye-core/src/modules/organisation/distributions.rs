@@ -583,6 +583,9 @@ pub struct MemberAccess {
     pub active_sessions: std::collections::BTreeMap<Distribution, i64>,
 }
 
+/// `(pessoa, nome, estado, activadas com acesso, administrador, sessões vivas por Distribuição)`.
+type AccessRow = (Uuid, String, String, Vec<String>, bool, Vec<String>);
+
 /// Quem pode abrir cada Distribuição activada (S37). Não são papéis.
 ///
 /// # Errors
@@ -590,7 +593,7 @@ pub struct MemberAccess {
 /// [`CoreError::PermissionDenied`] without `organisation.manage`; database errors.
 pub async fn access_matrix(pool: &PgPool, principal: &Principal) -> CoreResult<Vec<MemberAccess>> {
     require(principal, Permission::OrganisationManage)?;
-    let rows: Vec<(Uuid, String, String, Vec<String>, bool, Vec<String>)> = sqlx::query_as(
+    let rows: Vec<AccessRow> = sqlx::query_as(
         "SELECT p.id, p.full_name, p.status,
                 COALESCE(array_agg(a.distribution ORDER BY a.distribution)
                          FILTER (WHERE a.distribution IS NOT NULL AND d.state = 'enabled'), '{}'),
