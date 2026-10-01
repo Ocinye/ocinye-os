@@ -561,7 +561,10 @@ fn icones_migrados(golden: &str) -> String {
 /// declarada (D001) e passou a acção real (S22); e os alvos de toque da D010
 /// (`oc-access.css`) ligam-se também na casca.
 fn sem_d010(html: &str) -> String {
-    let html = html.replace(r#"<link href="/static/oc-access.css" rel="stylesheet">"#, "");
+    let html = html.replace(
+        r#"<link href="/static/oc-access.css" rel="stylesheet">"#,
+        "",
+    );
     let s = drop_element(&html, "button", r#"aria-describedby="oc-lock-pending""#);
     let s = drop_element(&s, "p", r#"id="oc-lock-pending""#);
     drop_element(&s, "form", r#"action="/lock""#)
