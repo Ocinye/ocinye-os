@@ -41,9 +41,16 @@ async fn a_porta_e_a_do_design_com_a_distribuicao_da_instancia() {
     );
     assert!(html.contains("INSTÂNCIA OCINYE OS · OPERACIONAL"));
     assert!(html.contains("Acesso seguro à sua Instância Ocinye OS"));
-    // A distribuição da Instância, e não a de investigação por omissão.
-    assert!(html.contains(r#"data-distribution="business""#));
-    assert!(!html.contains(r#"data-distribution="research""#));
+    // D010 (S07): num ponto genérico a porta não nomeia Distribuição nenhuma
+    // antes da entrada — só a Instância.
+    assert!(!html.contains("data-distribution="));
+    // S08: num ponto fixo, a Distribuição dele, e não a de investigação.
+    let fixo = s.ponto(Some("business")).await;
+    let r = s.get_em(&fixo, "/login", "").send().await.unwrap();
+    assert_eq!(r.status().as_u16(), 200);
+    let html_fixo = r.text().await.unwrap();
+    assert!(html_fixo.contains(r#"data-distribution="business""#));
+    assert!(!html_fixo.contains(r#"data-distribution="research""#));
     assert!(!html.contains("Business Distribution") && !html.contains("Distribuição Business"));
     // Sem chave de acesso, sem SSO.
     assert!(!html.to_lowercase().contains("chave de acesso"));
@@ -421,6 +428,9 @@ async fn as_aplicacoes_sem_ecra_sao_janelas_honestas_e_as_fechadas_nao_existem()
     assert!(html.contains(r#"data-app="monitor""#) && !html.contains("oc-pending oc-win__state"));
 }
 
+/// D010: o ponto de acesso que o Core falso resolve para qualquer anfitrião.
+const PONTO: &str = "00000000-0000-0000-0000-00000000d010";
+
 /// Um Core falso: `/ready` com o `overall` dado, e 500 em tudo o resto. Serve
 /// para o que o Core verdadeiro não faz de propósito: não saber quem é a sessão.
 async fn core_falso(overall: &'static str) -> String {
@@ -430,6 +440,16 @@ async fn core_falso(overall: &'static str) -> String {
             axum::routing::get(move || async move {
                 axum::Json(serde_json::json!({
                     "overall": overall, "contract_version": 1, "components": []
+                }))
+            }),
+        )
+        // D010: o ponto de acesso deste Workspace (genérico, activo).
+        .route(
+            "/api/v1/access/resolve",
+            axum::routing::get(|| async {
+                axum::Json(serde_json::json!({
+                    "endpoint_id": PONTO, "binding": null, "state": "active",
+                    "binding_enabled": true, "revision": "1", "instance_name": "Teste"
                 }))
             }),
         )
@@ -457,6 +477,9 @@ fn workspace_com_sessao(core_url: &str) -> (axum::Router, String) {
         must_change_password: false,
         mfa_required: false,
         expires_at: std::time::Instant::now() + Duration::from_secs(60),
+        endpoint: Some((PONTO.parse().expect("uuid"), "1".to_owned())),
+        locked: false,
+        unlock_failures: 0,
     });
     (
         workspace_routes::router(ws),
@@ -484,6 +507,7 @@ async fn o_core_sem_resposta_a_identidade_falha_fechado() {
         app,
         axum::http::Request::builder()
             .uri("/notes")
+            .header("host", "127.0.0.1")
             .header("cookie", cookie)
             .body(axum::body::Body::empty())
             .expect("pedido"),
@@ -519,6 +543,7 @@ async fn uma_avaria_do_core_numa_accao_e_um_502_com_referencia() {
         axum::http::Request::builder()
             .method("POST")
             .uri(format!("/admin/members/{}/status", Uuid::new_v4()))
+            .header("host", "127.0.0.1")
             .header("cookie", cookie)
             .header("origin", "http://127.0.0.1")
             .header("accept", "text/html")
@@ -543,6 +568,7 @@ async fn a_porta_diz_operacional_com_o_ready_degradado() {
         app,
         axum::http::Request::builder()
             .uri("/login")
+            .header("host", "127.0.0.1")
             .header("cookie", "oc_boot=1")
             .body(axum::body::Body::empty())
             .expect("pedido"),
@@ -555,6 +581,7 @@ async fn a_porta_diz_operacional_com_o_ready_degradado() {
         app,
         axum::http::Request::builder()
             .uri("/login")
+            .header("host", "127.0.0.1")
             .header("cookie", "oc_boot=1")
             .body(axum::body::Body::empty())
             .expect("pedido"),

@@ -706,13 +706,10 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
     // Sem Distribuição (o Core não respondeu a `/organisation`), a da porta; e
     // sem essa, a predefinição mínima do sistema — nunca Research por omissão
     // (D009 §116). Com o Core a responder, nunca se chega aqui.
-    let distribution = match ctx.distribution {
-        Some(d) => Some(d),
-        None => crate::api::instance_door(state)
-            .await
-            .and_then(|(_, p)| p)
-            .and_then(|p| super::distribution_of(p.as_str())),
-    };
+    // D010: a Distribuição é a activa desta sessão (`ShellContext`), já
+    // decidida pelo Core. Sem ela — o que a entrada já impede — a predefinição
+    // mínima do sistema, nunca Research (D009 §116).
+    let distribution = ctx.distribution;
     let default = default_for(distribution);
     let (version, placed, can_customise) = match &ctx.desktop {
         Ok(d) => {

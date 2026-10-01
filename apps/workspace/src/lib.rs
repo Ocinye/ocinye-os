@@ -50,6 +50,7 @@
 //! um frontend isolado em vez de provar que uma pessoa consegue usar o sistema.
 //! Expor o router como biblioteca deixa o harness montar o Workspace verdadeiro.
 
+pub mod access;
 pub mod api;
 pub mod boot;
 pub mod config;
@@ -75,4 +76,6 @@ pub struct WorkspaceState {
     pub sessions: SessionStore,
     /// HTTP client used for the Core and the identity provider.
     pub http: reqwest::Client,
+    /// D010: as resoluções recentes de anfitrião → ponto de acesso.
+    pub hosts: access::HostCache,
 }

@@ -94,12 +94,19 @@ pub const fn instance_health(probe: &ProbeState) -> Health {
 /// O que a porta mostra antes de haver sessão: a Distribuição (do
 /// `GET /instance/branding`, público) e o estado sondado agora.
 pub async fn door(state: &WorkspaceState) -> DoorVm {
-    let (probe, branding) = tokio::join!(crate::boot::probe(state), api::instance_door(state));
+    // D010 (S07/S08): o que a porta mostra vem do ponto de acesso deste pedido
+    // — a Instância, o endereço e, se o ponto é fixo, a sua Distribuição.
+    // Num ponto genérico, nenhuma Distribuição antes da entrada.
+    let probe = crate::boot::probe(state).await;
+    let endpoint = crate::access::current();
     DoorVm {
-        distribution: branding
-            .and_then(|(_, profile)| profile)
-            .and_then(|p| distribution_of(p.as_str())),
+        distribution: endpoint
+            .as_ref()
+            .and_then(crate::access::Endpoint::bound)
+            .and_then(|d| distribution_of(d.as_str())),
         core: Some(instance_health(&probe.state)),
+        instance: endpoint.as_ref().map(|e| e.instance_name.clone()),
+        host: endpoint.map(|e| e.host),
     }
 }
 
@@ -108,7 +115,7 @@ pub async fn boot(state: &WorkspaceState) -> (BootVm, bool) {
     use ocinye_contracts::readiness::Criticality;
     use ocinye_contracts::system_capability::SystemCapabilityState;
 
-    let (outcome, branding) = tokio::join!(crate::boot::probe(state), api::instance_door(state));
+    let outcome = crate::boot::probe(state).await;
     let segue = outcome.state.may_hand_off();
     let components = outcome
         .readiness
@@ -131,11 +138,18 @@ pub async fn boot(state: &WorkspaceState) -> (BootVm, bool) {
         .unwrap_or_default();
     let reference = (!segue).then(|| reference(&format!("boot probe: {:?}", outcome.state)));
     let vm = BootVm {
-        door: DoorVm {
-            distribution: branding
-                .and_then(|(_, profile)| profile)
-                .and_then(|p| distribution_of(p.as_str())),
-            core: Some(instance_health(&outcome.state)),
+        door: {
+            // D010: a porta do arranque é a do ponto de acesso (S07/S08).
+            let endpoint = crate::access::current();
+            DoorVm {
+                distribution: endpoint
+                    .as_ref()
+                    .and_then(crate::access::Endpoint::bound)
+                    .and_then(|d| distribution_of(d.as_str())),
+                core: Some(instance_health(&outcome.state)),
+                instance: endpoint.as_ref().map(|e| e.instance_name.clone()),
+                host: endpoint.map(|e| e.host),
+            }
         },
         state: if segue {
             BootState::Ready
@@ -164,12 +178,258 @@ pub struct ShellContext {
     pub desktop: Result<Value, ApiFailure>,
     /// A zona horária do membro (a da Instância, pelo `/me`).
     pub zone: ocinye_contracts::temporal::TimeZoneName,
+    /// D010: as Distribuições desta sessão, como o Core as decidiu.
+    pub dists: Distributions,
+}
+
+/// D010 · As Distribuições desta sessão, como o Core as decidiu.
+#[derive(Clone, Debug, Default)]
+pub struct Distributions {
+    /// A activa (já revalidada).
+    pub active: Option<ocinye_contracts::Distribution>,
+    /// Activadas ∩ acesso do membro.
+    pub accessible: Vec<ocinye_contracts::Distribution>,
+    /// O ponto genérico canónico, para mudar a partir de um ponto fixo.
+    pub generic_host: Option<String>,
+    /// Os pontos fixos activos das acessíveis.
+    pub bound_hosts: Vec<(ocinye_contracts::Distribution, String)>,
+    /// Aplicações que a Distribuição activa não traz (ADR-0019 §9).
+    pub inactive_here: Vec<String>,
+}
+
+/// D010 · Porque a sessão não entra (ainda) numa Distribuição.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Entry {
+    /// Várias acessíveis: S09.
+    Choose(Vec<ocinye_contracts::Distribution>),
+    /// Nenhuma acessível: S10.
+    Zero,
+    /// Ponto fixo, sem acesso a essa Distribuição: S11.
+    BoundNoAccess(ocinye_contracts::Distribution),
+    /// Ponto fixo numa Distribuição desactivada: S12.
+    BoundDisabled(ocinye_contracts::Distribution),
+    /// A Distribuição da sessão deixou de estar acessível: S18.
+    Revoked(ocinye_contracts::Distribution),
+    /// A Distribuição da sessão foi desactivada: S39.
+    DisabledLive(ocinye_contracts::Distribution),
+}
+
+fn dist_list(v: Option<&Value>) -> Vec<ocinye_contracts::Distribution> {
+    v.and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .filter_map(|d| d.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn one_dist(v: Option<&Value>) -> Option<ocinye_contracts::Distribution> {
+    v.and_then(Value::as_str).and_then(|d| d.parse().ok())
+}
+
+fn parse_mine(v: &Value) -> Distributions {
+    Distributions {
+        active: one_dist(v.get("active")),
+        accessible: dist_list(v.get("accessible")),
+        generic_host: v
+            .get("generic_host")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        bound_hosts: v
+            .get("bound_hosts")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|pair| {
+                        let d = one_dist(pair.get(0))?;
+                        let h = pair.get(1)?.as_str()?.to_owned();
+                        Some((d, h))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        inactive_here: strings(v.get("inactive_here")),
+    }
+}
+
+/// D010 (ADR-0625 §1): a sessão tem de estar numa Distribuição antes de
+/// qualquer página. Ponto fixo → a dele, se o Core deixar (S11/S12); ponto
+/// genérico → 0 / 1 / várias (S10 / directo / S09). Uma Distribuição que
+/// deixou de valer → S18 ou S39. O Core decide; aqui só se pergunta e se
+/// mostra.
+///
+/// # Errors
+///
+/// [`Shell`] to render instead of the page.
+pub async fn ensure_entry(
+    state: &WorkspaceState,
+    caller: &Caller<'_>,
+) -> Result<Distributions, Shell> {
+    let mine = match caller.get(state, "/api/v1/me/distributions").await {
+        Ok(v) => v,
+        Err(ApiFailure::Unauthorised) => return Err(Shell::SignIn),
+        Err(other) => {
+            return Err(Shell::Indeterminate(reference(&format!(
+                "/me/distributions: {other}"
+            ))))
+        }
+    };
+    let enabled = dist_list(mine.get("enabled"));
+    let parsed = parse_mine(&mine);
+    if let (Some(stored), Some(why)) = (
+        one_dist(mine.get("stored")),
+        mine.get("stored_refusal").and_then(Value::as_str),
+    ) {
+        return Err(Shell::Entry(if why == "distribution_not_enabled" {
+            Entry::DisabledLive(stored)
+        } else {
+            Entry::Revoked(stored)
+        }));
+    }
+    let bound = crate::access::current().and_then(|e| e.bound());
+    let target = match (bound, parsed.active) {
+        // Um ponto fixo nunca mostra outra Distribuição.
+        (Some(b), Some(a)) if a == b => return Ok(parsed),
+        (Some(b), _) => {
+            if !enabled.contains(&b) {
+                return Err(Shell::Entry(Entry::BoundDisabled(b)));
+            }
+            if !parsed.accessible.contains(&b) {
+                return Err(Shell::Entry(Entry::BoundNoAccess(b)));
+            }
+            b
+        }
+        (None, Some(_)) => return Ok(parsed),
+        (None, None) => match parsed.accessible.as_slice() {
+            [] => return Err(Shell::Entry(Entry::Zero)),
+            [only] => *only,
+            many => return Err(Shell::Entry(Entry::Choose(many.to_vec()))),
+        },
+    };
+    enter(state, caller, target).await?;
+    match caller.get(state, "/api/v1/me/distributions").await {
+        Ok(v) => Ok(parse_mine(&v)),
+        Err(ApiFailure::Unauthorised) => Err(Shell::SignIn),
+        Err(other) => Err(Shell::Indeterminate(reference(&format!(
+            "/me/distributions: {other}"
+        )))),
+    }
+}
+
+/// Entra numa Distribuição nesta sessão (o Core decide).
+///
+/// # Errors
+///
+/// [`Shell`] when the Core refuses or does not answer.
+pub async fn enter(
+    state: &WorkspaceState,
+    caller: &Caller<'_>,
+    d: ocinye_contracts::Distribution,
+) -> Result<(), Shell> {
+    match api::post(
+        state,
+        &caller.session.access_token,
+        caller.correlation_id,
+        "/api/v1/me/distribution",
+        &serde_json::json!({ "distribution": d.as_str() }),
+    )
+    .await
+    {
+        Ok(_) => Ok(()),
+        Err(ApiFailure::Unauthorised) => Err(Shell::SignIn),
+        Err(ApiFailure::Forbidden | ApiFailure::Denied) => Err(Shell::Entry(Entry::Revoked(d))),
+        // A recusa tipada do Core (a escolha mudou por baixo do pedido): é a
+        // mesma página de quem a perdeu a meio, nunca uma sessão terminada.
+        Err(ApiFailure::Refused { reason, .. }) if reason == "distribution_not_enabled" => {
+            Err(Shell::Entry(Entry::DisabledLive(d)))
+        }
+        Err(ApiFailure::Refused { reason, .. }) if reason == "distribution_no_access" => {
+            Err(Shell::Entry(Entry::Revoked(d)))
+        }
+        Err(other) => Err(Shell::Indeterminate(reference(&format!(
+            "/me/distribution: {other}"
+        )))),
+    }
+}
+
+/// D010 · S15/S17: a mudança de Distribuição — só com mais de uma acessível.
+/// Num ponto fixo não se muda aqui: os endereços **configurados** das outras
+/// (o fixo dela, ou o genérico), nunca um URL vindo do pedido.
+fn switch_of(
+    state: &WorkspaceState,
+    d: &Distributions,
+) -> Option<crate::ui::view_models::DistSwitchVm> {
+    use crate::ui::view_models::{BoundSwitchVm, DistSwitchVm};
+    if d.accessible.len() < 2 {
+        return None;
+    }
+    let to_vm = |x: ocinye_contracts::Distribution| distribution_of(x.as_str());
+    let url = |host: &str| {
+        format!(
+            "{}/",
+            crate::access::expected_origin(&state.config.public_url, host)
+        )
+    };
+    let bound = crate::access::current()
+        .and_then(|e| e.bound())
+        .map(|_| BoundSwitchVm {
+            generic_host: d.generic_host.clone(),
+            targets: d
+                .accessible
+                .iter()
+                .filter(|x| Some(**x) != d.active)
+                .filter_map(|x| {
+                    let host = d
+                        .bound_hosts
+                        .iter()
+                        .find(|(b, _)| b == x)
+                        .map(|(_, h)| h.clone())
+                        .or_else(|| d.generic_host.clone())?;
+                    Some((to_vm(*x)?, host.clone(), url(&host)))
+                })
+                .collect(),
+        });
+    Some(DistSwitchVm {
+        choices: d.accessible.iter().filter_map(|x| to_vm(*x)).collect(),
+        bound,
+    })
+}
+
+/// D010 · S19–S21: o chip de contexto.
+fn context_of(v: &Value) -> crate::ui::view_models::ContextVm {
+    use crate::ui::view_models::{ContextItemVm, ContextVm};
+    let item = |c: &Value| ContextItemVm {
+        kind: c
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        id: c.get("id").and_then(Value::as_str).map(str::to_owned),
+        name: c
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+    };
+    ContextVm {
+        active: v.get("active").filter(|a| !a.is_null()).map(item),
+        items: v
+            .get("contexts")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().map(item).collect())
+            .unwrap_or_default(),
+        revoked: v.get("revoked").and_then(Value::as_str).map(str::to_owned),
+    }
 }
 
 /// O resultado de estabelecer a identidade da sessão contra o Core.
 pub enum Shell {
     /// Identidade estabelecida: a casca desenha-se.
     Ready(Box<ShellContext>),
+    /// D010: a sessão ainda não está (ou já não está) numa Distribuição.
+    Entry(Entry),
     /// O Core recusou o token: caminho de início de sessão.
     SignIn,
     /// O Core não deu resposta autoritária sobre a sessão. Falha fechado: nenhuma
@@ -204,7 +464,12 @@ pub async fn shell(
     active_href: &str,
     crumb: String,
 ) -> Shell {
-    let (me, organisation, notifications, pins, desktop, probe, ai, compute, storage) = tokio::join!(
+    // D010: antes de tudo, a Distribuição desta sessão (o Core decide).
+    let dists = match ensure_entry(state, caller).await {
+        Ok(d) => d,
+        Err(shell) => return shell,
+    };
+    let (me, organisation, notifications, pins, desktop, probe, ai, compute, storage, contexts) = tokio::join!(
         caller.get(state, "/api/v1/me"),
         caller.get(state, "/api/v1/organisation"),
         caller.get(state, "/api/v1/notifications"),
@@ -214,6 +479,7 @@ pub async fn shell(
         caller.get(state, "/api/v1/ai/status"),
         caller.get(state, "/api/v1/compute/status"),
         caller.get(state, "/api/v1/me/files?view=recents&limit=1"),
+        caller.get(state, "/api/v1/me/contexts"),
     );
     let me = match me {
         Ok(me) => me,
@@ -226,12 +492,9 @@ pub async fn shell(
         ProbeState::Blocked => CoreStatus::Unavailable,
         _ => CoreStatus::Silent,
     };
-    let perfil = organisation
-        .as_ref()
-        .ok()
-        .and_then(|o| o.get("profile"))
-        .and_then(Value::as_str)
-        .map(str::to_owned);
+    // D010: a Distribuição é a **activa desta sessão**, não «a» da Instância
+    // (`organisations.profile` é só um espelho, ADR-0019).
+    let perfil = dists.active.map(|d| d.as_str().to_owned());
     let distribution = perfil.as_deref().and_then(distribution_of);
     let roles = strings(me.get("roles"));
     let is_admin = roles
@@ -304,7 +567,11 @@ pub async fn shell(
             .unwrap_or_default(),
         capabilities: strings(me.get("capabilities")),
         pinned: pinned.clone(),
-        inactive_apps: strings(me.get("inactive_applications")),
+        // D010 (ADR-0019 §9): também as que a Distribuição activa não traz.
+        inactive_apps: strings(me.get("inactive_applications"))
+            .into_iter()
+            .chain(dists.inactive_here.iter().cloned())
+            .collect(),
         perfil,
     };
 
@@ -369,6 +636,8 @@ pub async fn shell(
         clock: Some(panels::clock(&clock, agenda)),
     };
 
+    let dist_switch = switch_of(state, &dists);
+    let context = contexts.ok().map(|c| context_of(&c));
     let vm = ShellVm {
         display_name: me
             .get("display_name")
@@ -410,6 +679,8 @@ pub async fn shell(
         )),
         // D009 · a ordem da barra é a das fixações (do membro ou da
         // Distribuição), já filtrada pelo que este membro vê.
+        dist_switch,
+        context,
         pin_order: apps::pinned_visible(&pinned, &viewer, core)
             .into_iter()
             .map(|a| a.id())
@@ -424,5 +695,6 @@ pub async fn shell(
         distribution,
         desktop,
         zone,
+        dists,
     }))
 }

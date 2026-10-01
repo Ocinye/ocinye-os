@@ -39,9 +39,11 @@ fn estado(producao: bool) -> WorkspaceState {
             log_format: "pretty".to_owned(),
             is_production: producao,
             static_dir: format!("{}/static", env!("CARGO_MANIFEST_DIR")),
+            trusted_proxies: Vec::new(),
         }),
         sessions: SessionStore::new(),
         http: reqwest::Client::new(),
+        hosts: ocinye_workspace::access::HostCache::default(),
     }
 }
 

@@ -285,6 +285,8 @@ pub fn dirty_close(vm: &DirtyCloseVm) -> impl IntoView {
     view! {
         <div class="oc-overlay oc-overlay--center" data-open="" data-oc="dirty-close" data-win=vm.window_id.clone() role="alertdialog" aria-modal="true" aria-labelledby="oc-dirty-title" aria-describedby="oc-dirty-body">
             <form class="oc-dialog" method="post" action=format!("/wm/{}/close", vm.window_id)>
+                // Code (D010 · S16): a continuação da mudança de Distribuição.
+                {vm.after.clone().map(|after| view! { <input type="hidden" name="after" value=after /> })}
                 <span class="oc-dialog__icon" aria-hidden="true">{icon("warning")}</span>
                 <h2 class="oc-dialog__title" id="oc-dirty-title">{tf("wm.dirty.title", &[("name", &vm.title)])}</h2>
                 <p class="oc-dialog__body" id="oc-dirty-body">{t("wm.dirty.body")}</p>
@@ -607,6 +609,7 @@ pub(crate) mod tests {
             can_save: true,
             save_label: None,
             save_form: None,
+            after: None,
         })
         .to_html();
         assert_contracts(&html);
@@ -622,6 +625,7 @@ pub(crate) mod tests {
             can_save: false,
             save_label: None,
             save_form: None,
+            after: None,
         })
         .to_html();
         assert!(!no.contains(r#"value="save""#) && no.contains(t("wm.dirty.cannot_save")));

@@ -59,6 +59,11 @@ pub(super) async fn open_app(
     let mut ctx = match controllers::shell(state, &quem, href, title.clone()).await {
         Shell::Ready(ctx) => ctx,
         Shell::SignIn => return Err(Box::new(session_ended(state, headers))),
+        Shell::Entry(e) => {
+            return Err(Box::new(
+                super::access::entry_response(state, headers, e).await,
+            ))
+        }
         Shell::Indeterminate(reference) => {
             return Err(Box::new(
                 identity_indeterminate(state, reference, href).await,
@@ -66,6 +71,28 @@ pub(super) async fn open_app(
         }
     };
     if !screen_open(&ctx, screen) {
+        // D010 · S34: uma aplicação que a Distribuição activa não traz, mas que
+        // outra Distribuição acessível traz → propõe-se a mudança (com o regresso
+        // a esta rota); sem nenhuma → a mesma recusa de algo que não existe.
+        // Decide-se pela aplicação, antes de qualquer recurso ser lido: um id
+        // válido no endereço nunca expõe nada.
+        if ctx.dists.inactive_here.iter().any(|a| a == app.as_str()) {
+            let target = ctx
+                .dists
+                .accessible
+                .iter()
+                .find(|d| Some(**d) != ctx.dists.active && d.activates(app));
+            let back = controllers::windows::page_query(href).href;
+            let to = match target {
+                Some(d) => format!(
+                    "/?deeplink={}&return={}",
+                    d.as_str(),
+                    crate::controllers::research::encode(&back)
+                ),
+                None => "/?deeplink=deny".to_owned(),
+            };
+            return Err(Box::new(Redirect::to(&to).into_response()));
+        }
         let vm = ErrorVm {
             kind: ErrorKind::NotFound,
             reference: None,
@@ -307,6 +334,7 @@ async fn notes_page(
             can_save: !e.read_only,
             save_label: None,
             save_form: (!e.read_only).then(|| ui::apps::doc_form_id("notes", &e.id)),
+            after: None,
         });
     let vm = NotesVm {
         nav: notes::nav(section),
@@ -1513,6 +1541,7 @@ fn render_mail(
                 "mail",
                 c.draft_id.as_deref().unwrap_or("new"),
             )),
+            after: None,
         });
     let vm = crate::ui::view_models::MailVm {
         mailboxes: mailboxes.to_vec(),

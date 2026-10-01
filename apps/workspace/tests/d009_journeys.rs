@@ -273,13 +273,10 @@ async fn instancia_nova(e: &Esperado) {
     );
 
     // 2 · À porta: o ícone da Distribuição, sem as duas letras.
-    let r = s
-        .http
-        .get(format!("{}/login", s.url))
-        .header("cookie", "oc_boot=1")
-        .send()
-        .await
-        .unwrap();
+    // D010 (S08): a Distribuição só se nomeia à porta num ponto fixo nela; num
+    // genérico (S07) a porta diz só a Instância.
+    let fixo = s.ponto(Some(p)).await;
+    let r = s.get_em(&fixo, "/login", "").send().await.unwrap();
     let porta = r.text().await.unwrap();
     assert!(
         porta.contains(&format!(r#"data-distribution="{p}""#)),

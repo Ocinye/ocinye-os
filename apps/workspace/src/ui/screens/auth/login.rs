@@ -204,6 +204,8 @@ mod tests {
         DoorVm {
             distribution: Some(Distribution::Research),
             core: Some(Health::Operational),
+            instance: None,
+            host: None,
         }
     }
 

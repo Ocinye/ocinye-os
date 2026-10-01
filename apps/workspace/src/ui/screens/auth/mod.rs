@@ -10,6 +10,7 @@ use crate::i18n::t;
 use crate::ui::components::icon;
 use crate::ui::view_models::{Distribution, DoorVm, Health};
 
+pub mod access;
 pub mod boot;
 pub mod first_access;
 pub mod identity;
@@ -71,10 +72,26 @@ pub(crate) fn identity(door: &DoorVm) -> impl IntoView {
             </p>
         }
     });
+    // Code (D010 · S07/S08, `idLine` da referência): a Instância, a
+    // Distribuição só se o ponto é fixo, e o endereço.
+    let instance = door
+        .instance
+        .clone()
+        .map(|name| view! { <p class="oc-auth__inst" data-part="instance">{name}</p> });
+    let host = door.host.clone().map(|host| {
+        view! {
+            <p class="oc-auth__host" data-part="host">
+                <span class="oc-sr">{t("endpoint.address")}" "</span>
+                {host}
+            </p>
+        }
+    });
     view! {
         <span class="oc-auth__mark"><img src="/static/ocinye-logo.png" alt="" width="68" height="68" /></span>
         <p class="oc-auth__product">{t("auth.product")}</p>
+        {instance}
         {dist}
+        {host}
     }
 }
 
@@ -174,6 +191,8 @@ mod tests {
         let door = DoorVm {
             distribution: Some(Distribution::Business),
             core: None,
+            instance: None,
+            host: None,
         };
         let html = identity(&door).to_html();
         assert!(html.contains(r#"data-distribution="business""#));

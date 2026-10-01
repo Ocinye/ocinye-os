@@ -131,11 +131,16 @@ impl Distribution {
 /// O que se sabe à porta, antes de haver sessão.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct DoorVm {
-    /// A distribuição da Instância, se o Core respondeu a
-    /// `GET /api/v1/instance/branding`.
+    /// D010: a Distribuição **fixa** do ponto de acesso deste pedido (S08). Num
+    /// ponto genérico, nenhuma antes da entrada (S07).
     pub distribution: Option<Distribution>,
     /// O estado da Instância, se foi sondado neste pedido. `None` não afirma nada.
     pub core: Option<Health>,
+    /// D010: o nome da Instância servida por este ponto (S07/S08). `None` fora
+    /// de uma Instância (S13, S14, S36).
+    pub instance: Option<String>,
+    /// D010: o endereço deste ponto de acesso.
+    pub host: Option<String>,
 }
 
 /// `GET /login` e a resposta a um `POST /login` recusado.
@@ -321,6 +326,53 @@ pub struct ShellVm {
     /// ordem; `apps` continua pela ordem do registo (o lançador). Vazio = a
     /// ordem de `apps` (comportamento anterior).
     pub pin_order: Vec<&'static str>,
+    /// D010 · S15: mudar de Distribuição, no painel do distintivo — só com
+    /// mais de uma acessível. `None`: só uma (nada a mudar).
+    pub dist_switch: Option<DistSwitchVm>,
+    /// D010 · S19–S21: o chip de contexto, dentro da Distribuição activa.
+    pub context: Option<ContextVm>,
+}
+
+/// D010 · A mudança de Distribuição (S15, S17).
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct DistSwitchVm {
+    /// As acessíveis, a activa incluída, pela ordem do produto.
+    pub choices: Vec<Distribution>,
+    /// Num ponto fixo não se muda aqui: os endereços **configurados** por onde
+    /// se entra nas outras (S17-bound). `None` num ponto genérico.
+    pub bound: Option<BoundSwitchVm>,
+}
+
+/// D010 · S17-bound: num ponto fixo, onde entrar nas outras Distribuições.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct BoundSwitchVm {
+    /// O anfitrião genérico configurado, se houver (o texto do aviso).
+    pub generic_host: Option<String>,
+    /// `(Distribuição, anfitrião, URL)` dos pontos configurados das outras —
+    /// e o genérico, se não houver ponto fixo da outra.
+    pub targets: Vec<(Distribution, String, String)>,
+}
+
+/// D010 · O contexto activo e os que o membro pode usar (ADR-0625).
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct ContextVm {
+    /// O activo, ou `None` (o chip pede para escolher).
+    pub active: Option<ContextItemVm>,
+    /// Os que o membro pode usar.
+    pub items: Vec<ContextItemVm>,
+    /// S21: o contexto activo deixou de ser do membro (o nome dele).
+    pub revoked: Option<String>,
+}
+
+/// Um contexto: `organisation` · `unit` · `project` · `personal`.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct ContextItemVm {
+    /// O tipo.
+    pub kind: String,
+    /// A unidade ou o projecto.
+    pub id: Option<String>,
+    /// Como se mostra.
+    pub name: String,
 }
 
 /// Um elemento de um widget da Home.
@@ -964,6 +1016,9 @@ pub struct DirtyCloseVm {
     /// D004 · O formulário da aplicação que «Guardar» submete (`form=`), para
     /// guardar o texto que ainda só existe no editor. `None` = POST ao gestor.
     pub save_form: Option<String>,
+    /// D010 · S16: a decisão desta janela faz parte de uma mudança de
+    /// Distribuição (`switch:<d>`); «Cancelar» aborta a mudança.
+    pub after: Option<String>,
 }
 
 /// Uma capacidade no painel de estado.
@@ -4354,6 +4409,14 @@ pub enum AdminSection {
     Roles,
     /// Instância (informação, aplicações).
     Instance,
+    /// D010 · S26/S38 — as Distribuições da Instância.
+    Distributions,
+    /// D010 · S37 — quem pode abrir cada Distribuição.
+    DistributionAccess,
+    /// D010 · S27–S32 — os pontos de acesso.
+    Endpoints,
+    /// D010 · S33 — as predefinições (a camada da Instância adiada).
+    Defaults,
 }
 
 /// A aplicação Administração (`/admin`, `members.manage`).
@@ -4385,6 +4448,150 @@ pub struct AdminVm {
     pub instance: Option<OrgInstanceVm>,
     /// O roster, com a página corrente (o «voltar»).
     pub list_href: String,
+    /// O corpo de uma secção D010 (`None` nas da D006).
+    pub d010: Option<AdminD010Vm>,
+}
+
+/// O corpo de uma secção D010 da Administração.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AdminD010Vm {
+    /// S26 · as quatro Distribuições.
+    Distributions {
+        /// Uma linha por Distribuição, pela ordem canónica.
+        rows: Vec<AdmDistRowVm>,
+        /// Quem vê tem `organisation.manage` (senão, só leitura).
+        manage: bool,
+    },
+    /// S37 · a matriz de acesso.
+    Access {
+        /// As Distribuições activadas (as colunas).
+        dists: Vec<Distribution>,
+        /// Um membro por linha.
+        rows: Vec<AdmAccessRowVm>,
+    },
+    /// S27 · os pontos de acesso, e o aberto (S29/S30).
+    Endpoints {
+        /// Todos.
+        rows: Vec<AdmEndpointRowVm>,
+        /// O aberto.
+        open: Option<AdmEndpointRowVm>,
+        /// As Distribuições activadas (os destinos possíveis).
+        enabled: Vec<Distribution>,
+        /// Quem vê pode mudar.
+        manage: bool,
+    },
+    /// S33 · as predefinições.
+    Defaults {
+        /// As Distribuições activadas.
+        dists: Vec<Distribution>,
+    },
+}
+
+/// Uma Distribuição da Instância (S26).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmDistRowVm {
+    /// Qual.
+    pub distribution: Distribution,
+    /// `enabled` · `disabled` · `available`.
+    pub state: String,
+    /// Membros com acesso.
+    pub members: i64,
+    /// Sessões vivas nela (facto de S38).
+    pub sessions: i64,
+    /// Os pontos fixos nela.
+    pub endpoints: Vec<String>,
+    /// É a única activada: desactivar é recusado (o Core recusa de qualquer modo).
+    pub last: bool,
+}
+
+/// Um membro na matriz de acesso (S37).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmAccessRowVm {
+    /// Quem.
+    pub person_id: String,
+    /// O nome.
+    pub name: String,
+    /// Uma célula por Distribuição activada.
+    pub cells: Vec<AdmAccessCellVm>,
+}
+
+/// Uma célula da matriz.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmAccessCellVm {
+    /// A coluna.
+    pub distribution: Distribution,
+    /// Tem acesso.
+    pub has: bool,
+    /// Retirar deixaria a Instância sem administrador que entre.
+    pub protected: bool,
+    /// As sessões vivas do membro nesta Distribuição.
+    pub sessions: i64,
+}
+
+/// Um ponto de acesso (S27).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmEndpointRowVm {
+    /// Identidade.
+    pub id: String,
+    /// O anfitrião.
+    pub host: String,
+    /// A Distribuição fixa (`None` = genérico).
+    pub binding: Option<Distribution>,
+    /// `active` · `disabled` · `unverified`.
+    pub state: String,
+    /// A última observação da ligação segura: `valid` · `invalid` · `pending`.
+    pub tls: String,
+    /// A última observação do nome: `resolves_here` · `resolves_elsewhere` · `not_observed`.
+    pub dns: String,
+    /// O canónico da Instância.
+    pub canonical: bool,
+}
+
+/// Um facto imutável de uma confirmação.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AdmFact {
+    /// Texto.
+    Text(String),
+    /// Em destaque.
+    Strong(String),
+    /// Um anfitrião.
+    Code(String),
+}
+
+/// A confirmação governada da D010 (S31, S32, S37, S38).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmConfirmVm {
+    /// O ícone.
+    pub icon: &'static str,
+    /// O título.
+    pub title: String,
+    /// O que acontece.
+    pub body: String,
+    /// Os factos.
+    pub facts: Vec<(String, AdmFact)>,
+    /// Para onde vai o `POST`.
+    pub action: String,
+    /// Campos escondidos do formulário.
+    pub hidden: Vec<(String, String)>,
+    /// A recusa (sem botão de confirmar).
+    pub refusal: Option<String>,
+    /// A chave do botão de confirmar.
+    pub ok_key: &'static str,
+    /// Cancelar volta aqui.
+    pub cancel: String,
+}
+
+/// S28 · acrescentar um ponto de acesso.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmAddEndpointVm {
+    /// O que foi escrito.
+    pub host: String,
+    /// O destino escolhido (`generic` ou uma Distribuição).
+    pub binding: String,
+    /// A chave do erro, quando o Core recusou.
+    pub error: Option<&'static str>,
+    /// As Distribuições activadas.
+    pub dists: Vec<Distribution>,
 }
 
 /// O estado de uma unidade (`active` | `archived`).

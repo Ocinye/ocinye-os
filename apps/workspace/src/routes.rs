@@ -213,6 +213,15 @@ pub const ROUTES: &[&str] = &[
     "/activity",
     "/admin",
     "/admin/instance",
+    "/admin/distributions",
+    "/admin/distributions/{distribution}/enable",
+    "/admin/distributions/{distribution}/disable",
+    "/admin/distribution-access",
+    "/admin/distribution-access/{person_id}/{distribution}/grant",
+    "/admin/distribution-access/{person_id}/{distribution}/revoke",
+    "/admin/endpoints",
+    "/admin/endpoints/{endpoint_id}/{action}",
+    "/admin/defaults",
     "/admin/roles",
     "/admin/monitor",
     "/admin/members/new",
@@ -238,6 +247,11 @@ pub const ROUTES: &[&str] = &[
     "/boot",
     "/login",
     "/login/language",
+    "/distribution",
+    "/distribution/switch",
+    "/lock",
+    "/unlock",
+    "/context",
     "/password/recover",
     "/first-access",
     "/mfa",
@@ -652,6 +666,38 @@ pub fn router(state: WorkspaceState) -> Router {
             "/admin/instance",
             get(org::admin_instance_page).post(org::admin_instance_save),
         )
+        // D010 · Administração › Distribuições, acesso, pontos de acesso,
+        // predefinições (`routes/admin_access.rs`).
+        .route(
+            "/admin/distributions",
+            get(admin_access::distributions_page),
+        )
+        .route(
+            "/admin/distributions/{distribution}/enable",
+            post(admin_access::distribution_enable),
+        )
+        .route(
+            "/admin/distributions/{distribution}/disable",
+            post(admin_access::distribution_disable),
+        )
+        .route("/admin/distribution-access", get(admin_access::access_page))
+        .route(
+            "/admin/distribution-access/{person_id}/{distribution}/grant",
+            post(admin_access::access_grant),
+        )
+        .route(
+            "/admin/distribution-access/{person_id}/{distribution}/revoke",
+            post(admin_access::access_revoke),
+        )
+        .route(
+            "/admin/endpoints",
+            get(admin_access::endpoints_page).post(admin_access::endpoint_create),
+        )
+        .route(
+            "/admin/endpoints/{endpoint_id}/{action}",
+            post(admin_access::endpoint_action),
+        )
+        .route("/admin/defaults", get(admin_access::defaults_page))
         .route(
             "/admin/members/new",
             get(org::admin_new_page).post(org::admin_create_member),
@@ -710,6 +756,18 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/mfa/challenge", post(mfa_challenge))
         .route("/mfa/recovery", post(mfa_recovery))
         .route("/logout", post(logout))
+        // D010 · entrada por Distribuição e bloqueio.
+        .route(
+            "/distribution",
+            get(access::choose_page).post(access::choose_submit),
+        )
+        .route("/lock", get(access::lock_page).post(access::lock_submit))
+        .route(
+            "/distribution/switch",
+            get(access::switch_page).post(access::switch_submit),
+        )
+        .route("/context", post(access::context_submit))
+        .route("/unlock", post(access::unlock_submit))
         .route("/health", get(health))
         .nest_service("/static", ServeDir::new(state.config.static_dir.clone()))
         .fallback(not_found)
@@ -732,6 +790,12 @@ pub fn router(state: WorkspaceState) -> Router {
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             same_origin_only,
+        ))
+        // D010 (ADR-0020): antes de tudo, o anfitrião resolve-se num ponto de
+        // acesso desta Instância — ou o pedido pára aqui (S13, S14, S36, S40).
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::access::layer,
         ))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -986,7 +1050,21 @@ async fn same_origin_only(
         .get(header::HOST)
         .and_then(|value| value.to_str().ok());
 
-    if origin_is_ours(origin, host, &state.config.public_url) {
+    // D010 (ADR-0020 §7): a origem esperada é a **deste** ponto de acesso —
+    // o esquema e a porta da instalação, o anfitrião do ponto resolvido. Fora
+    // de um ponto (a língua da página de recusa), a do próprio anfitrião.
+    let expected = match crate::access::current() {
+        Some(endpoint) => crate::access::expected_origin(&state.config.public_url, &endpoint.host),
+        None => host
+            .map(|h| {
+                crate::access::expected_origin(
+                    &state.config.public_url,
+                    h.split(':').next().unwrap_or(h),
+                )
+            })
+            .unwrap_or_default(),
+    };
+    if origin_is_ours(origin, host, &expected) {
         return next.run(request).await;
     }
 
@@ -1084,6 +1162,15 @@ fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member>
         .and_then(|value| value.to_str().ok());
     let id = session::session_id_from_cookies(cookie)?;
     let session = state.sessions.get(&id)?;
+    // D010 (ADR-0020 §6): a sessão é do ponto de acesso em que nasceu. Noutro
+    // ponto — ou depois de este mudar de destino — não vale, e acaba: a pessoa
+    // volta a entrar neste endereço (S23). Um cookie copiado para outro
+    // anfitrião não leva a sessão consigo.
+    let here = crate::access::current().map(|e| (e.endpoint_id, e.revision));
+    if session.endpoint != here {
+        state.sessions.remove(&id);
+        return None;
+    }
     Some(Member {
         session,
         session_id: id,
@@ -1297,6 +1384,8 @@ macro_rules! member_or_login {
             Some(member) if member.session.mfa_required => {
                 return Redirect::to("/mfa").into_response()
             }
+            // D010 · S22: um ecrã bloqueado não mostra nada por trás.
+            Some(member) if member.session.locked => return Redirect::to("/lock").into_response(),
             Some(member) => member,
             None => return Redirect::to(destino_de_entrada(&$headers)).into_response(),
         }
@@ -1462,6 +1551,7 @@ async fn pending_page(
             (status, shell_page(&page_title, engine, body, dialog)).into_response()
         }
         Shell::SignIn => session_ended(state, headers),
+        Shell::Entry(e) => access::entry_response(state, headers, e).await,
         Shell::Indeterminate(reference) => identity_indeterminate(state, reference, href).await,
     }
 }
@@ -1633,6 +1723,7 @@ async fn wm_open(
     let ctx = match controllers::shell(&state, &quem, app.manifest().route, String::new()).await {
         Shell::Ready(ctx) => ctx,
         Shell::SignIn => return session_ended(&state, &headers),
+        Shell::Entry(e) => return access::entry_response(&state, &headers, e).await,
         Shell::Indeterminate(reference) => {
             return identity_indeterminate(&state, reference, "/").await
         }
@@ -1747,6 +1838,9 @@ async fn wm_op(
 #[derive(Deserialize)]
 struct WmCloseForm {
     decision: String,
+    /// D010 · S16: `switch:<d>` quando a decisão é parte de uma mudança.
+    #[serde(default)]
+    after: Option<String>,
 }
 
 /// `POST /wm/{id}/close` (FG-026): a decisão do diálogo de fechar, executada
@@ -1769,6 +1863,23 @@ async fn wm_close(
     let Some((outcome, desk)) = result else {
         return nao_autenticado();
     };
+    // D010 · S16: dentro de uma mudança de Distribuição, «Cancelar» aborta-a
+    // (nada mais fecha); qualquer outra decisão volta à confirmação, que pede
+    // a próxima janela por gravar ou deixa confirmar.
+    if let Some(d) = form
+        .after
+        .as_deref()
+        .and_then(|a| a.strip_prefix("switch:"))
+        .and_then(|d| d.parse::<ocinye_contracts::Distribution>().ok())
+    {
+        if outcome.is_ok() {
+            return if decision == window_manager::Decision::Cancel {
+                Redirect::to("/?switched=aborted").into_response()
+            } else {
+                Redirect::to(&format!("/?switch={}", d.as_str())).into_response()
+            };
+        }
+    }
     match outcome {
         Ok(_) => wm_reply(&headers, &desk),
         Err(error) => wm_error(&headers, &error, &desk, &id),
@@ -1863,7 +1974,11 @@ async fn desktop_restore(State(state): State<WorkspaceState>, headers: HeaderMap
 // ── Pessoal ──────────────────────────────────────────────────────────────
 
 /// `GET /` — o Desktop (D001): a disposição do membro e os 14 widgets.
-async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+async fn home(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(extra): Query<access::HomeQuery>,
+) -> Response {
     let member = member_or_login!(state, headers);
     let quem = caller(&member);
     let crumb = Screen::Home.label().to_owned();
@@ -1878,7 +1993,13 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
                 .and_then(|id| {
                     controllers::windows::dirty_close(&state.sessions, &member.session_id, id)
                 })
-                .map(|d| dirty_dialog(&d));
+                // D010 · S16: dentro de uma mudança, a decisão continua-a.
+                .map(|mut d| {
+                    d.after = extra.after();
+                    d
+                })
+                .map(|d| dirty_dialog(&d))
+                .or_else(|| access::home_dialog(&state, &member.session_id, &ctx, &extra));
             let engine = ctx.vm.wm.is_some();
             let vm = controllers::desktop::desktop(*ctx, &quem, &state).await;
             shell_page(
@@ -1889,6 +2010,7 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
             )
         }
         Shell::SignIn => session_ended(&state, &headers),
+        Shell::Entry(e) => access::entry_response(&state, &headers, e).await,
         Shell::Indeterminate(reference) => identity_indeterminate(&state, reference, "/").await,
     }
 }
@@ -3205,6 +3327,7 @@ async fn prompt(
     let mut ctx = match controllers::shell(&state, &quem, href, title.clone()).await {
         Shell::Ready(ctx) => ctx,
         Shell::SignIn => return session_ended(&state, &headers),
+        Shell::Entry(e) => return access::entry_response(&state, &headers, e).await,
         Shell::Indeterminate(reference) => {
             return identity_indeterminate(&state, reference, href).await
         }
@@ -3478,6 +3601,7 @@ async fn ask(
     let mut ctx = match controllers::shell(&state, &quem, "/", crumb).await {
         Shell::Ready(ctx) => ctx,
         Shell::SignIn => return session_ended(&state, &headers),
+        Shell::Entry(e) => return access::entry_response(&state, &headers, e).await,
         Shell::Indeterminate(reference) => {
             return identity_indeterminate(&state, reference, "/ask").await
         }
@@ -4070,6 +4194,9 @@ fn password_changed(
         must_change_password: session.must_change_password,
         mfa_required: session.mfa_required,
         expires_at: Instant::now() + state.config.session_ttl,
+        endpoint: crate::access::current().map(|e| (e.endpoint_id, e.revision)),
+        locked: false,
+        unlock_failures: 0,
     });
     // Uma identidade que exige MFA reautentica o segundo factor depois de
     // mudar a palavra-passe — a sessão nova é um portão, não uma sessão
@@ -4872,6 +4999,9 @@ async fn login_submit(
         must_change_password: session.must_change_password,
         mfa_required: session.mfa_required,
         expires_at: Instant::now() + ttl,
+        endpoint: crate::access::current().map(|e| (e.endpoint_id, e.revision)),
+        locked: false,
+        unlock_failures: 0,
     });
 
     let destination = if session.must_change_password {
@@ -5054,6 +5184,9 @@ async fn first_access_submit(
         must_change_password: false,
         mfa_required: session.mfa_required,
         expires_at: Instant::now() + state.config.session_ttl,
+        endpoint: crate::access::current().map(|e| (e.endpoint_id, e.revision)),
+        locked: false,
+        unlock_failures: 0,
     });
 
     // Uma identidade privilegiada que acaba de definir a palavra-passe cai
@@ -5280,6 +5413,9 @@ fn trocar_sessao(
         must_change_password: session.must_change_password,
         mfa_required: session.mfa_required,
         expires_at: Instant::now() + state.config.session_ttl,
+        endpoint: crate::access::current().map(|e| (e.endpoint_id, e.revision)),
+        locked: false,
+        unlock_failures: 0,
     });
     (
         StatusCode::SEE_OTHER,
@@ -5511,9 +5647,28 @@ mod router_tests {
                 log_format: "pretty".to_owned(),
                 is_production: false,
                 static_dir: format!("{}/static", env!("CARGO_MANIFEST_DIR")),
+                trusted_proxies: Vec::new(),
             }),
             sessions: session::SessionStore::new(),
             http: reqwest::Client::new(),
+            hosts: {
+                // Sem Core: o anfitrião da sonda resolve-se à mão, como um
+                // ponto genérico activo (D010) — senão tudo seria S36.
+                let hosts = crate::access::HostCache::default();
+                hosts.seed(
+                    "workspace.ocinye.com",
+                    crate::access::Resolution::Serve(crate::access::Endpoint {
+                        endpoint_id: uuid::Uuid::nil(),
+                        binding: None,
+                        state: "active".to_owned(),
+                        binding_enabled: false,
+                        revision: String::new(),
+                        instance_name: "Ocinye".to_owned(),
+                        host: "workspace.ocinye.com".to_owned(),
+                    }),
+                );
+                hosts
+            },
         }
     }
 
@@ -7177,6 +7332,8 @@ mod carregamento_tests {
 }
 
 // D004 · As aplicações de produtividade. Declarado no fim: usa `member_or_login!`.
+mod access;
+mod admin_access;
 mod ops;
 mod org;
 mod productivity;

@@ -1166,3 +1166,37 @@ a.oc-res-link:hover { background: #F7F9FB; text-decoration: none; }
    transferências) não tem marcação desenhada; na Web não se mostra um botão
    que não abre nada (B-28). */
 .oc-brw[data-runtime="web"] [data-oc="brw-menu"] { display: none; }
+
+/* ── Code (D010): Administração › Distribuições, Acesso, Pontos de acesso,
+ * Predefinições. A referência (`reference/d010/d010.js`) escreve estes
+ * arranjos com `style=`, que a CSP descarta; são os mesmos valores, em classes.
+ * A referência escolhe tabela ou lista pelo `mob` do JavaScript; aqui saem as
+ * duas, e a largura da janela decide qual se vê. */
+.oc-adm-d010 { container: admd010 / inline-size; display: grid; gap: 16px; padding: 20px 24px; max-width: 1040px; overflow: auto; height: 100%; box-sizing: border-box; align-content: start; }
+.oc-adm-title { margin: 0; font: 600 20px var(--oc-sans); }
+.oc-adm-lead { margin: 0; color: var(--oc-ink-2); max-width: 70ch; }
+.oc-adm-sub { margin: 6px 0 0; color: var(--oc-ink-2); }
+.oc-adm-dname { display: inline-flex; align-items: center; gap: 8px; }
+.oc-adm-host { font: 500 13px var(--oc-mono); }
+.oc-adm-hostlink { color: inherit; }
+.oc-adm-inline { display: inline; margin: 0; }
+.oc-adm-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.oc-adm-cell-action { display: block; margin-top: 6px; }
+.oc-adm-detail { display: grid; gap: 10px; border-top: 1px solid var(--oc-line); padding-top: 14px; }
+.oc-adm-subtitle { margin: 0; font: 600 16px var(--oc-sans); }
+.oc-adm-form { display: grid; gap: 12px; }
+.oc-adm-fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+.oc-adm-fieldset legend { font-weight: 600; margin-bottom: 4px; }
+.oc-adm-radio { display: flex; gap: 8px; align-items: center; min-height: 44px; }
+.oc-adm-list { display: none; list-style: none; margin: 0; padding: 0; gap: 10px; }
+.oc-adm-item { border: 1px solid var(--oc-line); border-radius: var(--oc-radius-tile); padding: 12px; display: grid; gap: 8px; }
+.oc-adm-item__kv { display: grid; gap: 2px; }
+.oc-adm-item__k { font-size: 12px; color: var(--oc-ink-3); }
+@container admd010 (max-width: 600px) {
+  .oc-adm-tablewrap { display: none; }
+  .oc-adm-list { display: grid; }
+}
+@media (max-width: 600px) {
+  .oc-adm-d010 { padding: 16px; }
+  .oc-adm-hostlink { display: inline-flex; align-items: center; min-height: 44px; }
+}

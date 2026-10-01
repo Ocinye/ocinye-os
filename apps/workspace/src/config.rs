@@ -38,6 +38,10 @@ pub struct WorkspaceConfig {
     /// silêncio noutro sítio — o HTML chegava e o JS não, o que faz uma
     /// interface parecer partida sem dizer porquê.
     pub static_dir: String,
+    /// D010 (ADR-0020 §5): os proxies cujo `X-Forwarded-Host` se aceita
+    /// (`OCINYE_TRUSTED_PROXIES`, CIDR separados por vírgulas). Vazio por
+    /// omissão: só o `Host` conta.
+    pub trusted_proxies: Vec<crate::access::Cidr>,
 }
 
 fn var(key: &str) -> Option<String> {
@@ -182,6 +186,16 @@ impl WorkspaceConfig {
             static_dir: var("OCINYE_WORKSPACE_STATIC_DIR")
                 .unwrap_or_else(|| "apps/workspace/static".to_owned()),
             core_transport: CoreTransport::from_env(var)?,
+            trusted_proxies: var("OCINYE_TRUSTED_PROXIES")
+                .map(|raw| {
+                    raw.split(',')
+                        .filter(|v| !v.trim().is_empty())
+                        .map(crate::access::Cidr::parse)
+                        .collect::<std::result::Result<Vec<_>, _>>()
+                })
+                .transpose()
+                .map_err(|e| anyhow::anyhow!(e))?
+                .unwrap_or_default(),
         };
 
         config.validate()?;
@@ -269,6 +283,7 @@ mod fronteira_de_transporte {
             log_format: "json".to_owned(),
             is_production: true,
             static_dir: "/srv/ocinye/static".to_owned(),
+            trusted_proxies: Vec::new(),
         }
     }
 
