@@ -135,6 +135,10 @@ O que o Ocinye OS é, onde reside a autoridade, e sobre que runtime assenta.
 - [ADR-0019](0019-multi-distribution-instance.md) — Uma Instância, uma ou mais Distribuições
 - [ADR-0020](0020-access-endpoints.md) — Pontos de acesso: o anfitrião escolhe o destino, nunca a autoridade
 - [ADR-0021](0021-installer-consumes-typed-contracts.md) — O instalador consome contratos tipados; as invariantes ficam no Core
+- [ADR-0022](0022-graphical-remote-installer.md) — O Ocinye OS Installer: controlador gráfico local, bootstrap remoto tipado
+- [ADR-0023](0023-installation-plan-and-journal.md) — Plano de Instalação imutável e diário de instalação no servidor
+- [ADR-0024](0024-installer-tls-and-endpoints.md) — TLS do Installer v1 e pontos de acesso na instalação
+- [ADR-0025](0025-hardware-discovery-and-compute-boundary.md) — Descoberta de capacidades de hardware e a fronteira do futuro Nó de Computação
 
 ### 0100–0199 · Identidade, Segurança, Autorização e Governação
 
@@ -288,6 +292,10 @@ preencher.
 | [0019](0019-multi-distribution-instance.md) | Uma Instância, uma ou mais Distribuições | Foundation | `HIGH` | Accepted |
 | [0020](0020-access-endpoints.md) | Pontos de acesso: o anfitrião escolhe o destino, nunca a autoridade | Foundation | `HIGH` | Accepted |
 | [0021](0021-installer-consumes-typed-contracts.md) | O instalador consome contratos tipados; as invariantes ficam no Core | Foundation | `MEDIUM` | Proposed |
+| [0022](0022-graphical-remote-installer.md) | O Ocinye OS Installer: controlador gráfico local, bootstrap remoto tipado | Foundation | `HIGH` | Proposed |
+| [0023](0023-installation-plan-and-journal.md) | Plano de Instalação imutável e diário de instalação no servidor | Foundation | `MEDIUM` | Proposed |
+| [0024](0024-installer-tls-and-endpoints.md) | TLS do Installer v1 e pontos de acesso na instalação | Foundation | `MEDIUM` | Proposed |
+| [0025](0025-hardware-discovery-and-compute-boundary.md) | Descoberta de capacidades de hardware e a fronteira do futuro Nó de Computação | Compute | `MEDIUM` | Proposed |
 | [0100](0100-authorization-model.md) | RBAC + ABAC contextual, fail closed | Security | `FOUNDATIONAL` | Accepted |
 | [0101](0101-permissions-scopes-and-grants.md) | Permissões nomeadas, âmbitos e grants explícitos | Security | `HIGH` | Accepted |
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |
