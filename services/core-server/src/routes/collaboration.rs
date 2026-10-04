@@ -263,6 +263,7 @@ async fn create_comment(
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
     let comment = collaboration::add_comment(
         &mut tx,
+        &state.pool,
         &principal,
         workspace_id,
         &request.subject_type,

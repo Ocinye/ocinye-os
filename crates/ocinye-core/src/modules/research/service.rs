@@ -938,6 +938,34 @@ pub async fn transition_project(
         .ok_or_else(|| CoreError::Internal("project vanished during transition".to_owned()))
 }
 
+/// Esta pessoa é a última liderança viva do ambiente? Serializado na linha do
+/// ambiente, para que duas mudanças em simultâneo não passem as duas a guarda
+/// (A001-M007, o mesmo erro que U-12 fechou nas unidades).
+async fn is_last_live_lead(
+    tx: &mut Tx<'_>,
+    workspace_id: Uuid,
+    person_id: Uuid,
+) -> CoreResult<bool> {
+    sqlx::query("SELECT 1 FROM research_workspaces WHERE id = $1 FOR UPDATE")
+        .bind(workspace_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM workspace_memberships
+              WHERE workspace_id = $1 AND person_id = $2 AND role = 'lead'
+                AND revoked_at IS NULL
+         ) AND (
+             SELECT count(*) FROM workspace_memberships
+              WHERE workspace_id = $1 AND role = 'lead' AND revoked_at IS NULL
+         ) = 1",
+    )
+    .bind(workspace_id)
+    .bind(person_id)
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
 /// Add or update a workspace membership.
 ///
 /// # Errors
@@ -965,6 +993,16 @@ pub async fn add_workspace_member(
     .await?;
     if !exists {
         return Err(CoreError::NotFound("Person not found.".to_owned()));
+    }
+
+    // Despromover a última liderança deixa o ambiente sem quem o possa gerir,
+    // tal como removê-la (A001-M007).
+    if role != WorkspaceRole::Lead && is_last_live_lead(tx, workspace.id, person_id).await? {
+        return Err(CoreError::Conflict(
+            "Esta é a última pessoa que lidera o ambiente. Nomeie outra \
+             liderança antes de mudar o seu papel."
+                .to_owned(),
+        ));
     }
 
     let membership_id = repo::upsert_workspace_member(
@@ -1153,19 +1191,7 @@ pub async fn remove_workspace_member(
     authorize(principal, Action::ManageMembers, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
-    let ultimo_lead: bool = sqlx::query_scalar(
-        "SELECT EXISTS (
-             SELECT 1 FROM workspace_memberships
-              WHERE workspace_id = $1 AND person_id = $2 AND role = 'lead'
-         ) AND (
-             SELECT count(*) FROM workspace_memberships
-              WHERE workspace_id = $1 AND role = 'lead'
-         ) = 1",
-    )
-    .bind(workspace.id)
-    .bind(person_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let ultimo_lead = is_last_live_lead(tx, workspace.id, person_id).await?;
 
     if ultimo_lead {
         return Err(CoreError::Conflict(

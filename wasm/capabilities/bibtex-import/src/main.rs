@@ -8,6 +8,8 @@
 //! it handles the entry shapes the institution actually receives and reports
 //! what it could not parse instead of guessing.
 
+#![forbid(unsafe_code)]
+
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 

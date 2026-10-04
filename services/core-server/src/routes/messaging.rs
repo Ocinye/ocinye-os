@@ -118,15 +118,19 @@ struct ReactionView {
 /// mensagens em cinquenta e uma idas à base.
 async fn nomes(
     pool: &sqlx::PgPool,
+    organisation_id: Uuid,
     ids: &[Uuid],
 ) -> Result<std::collections::HashMap<Uuid, String>, sqlx::Error> {
     if ids.is_empty() {
         return Ok(std::collections::HashMap::new());
     }
+    // Só desta Instância (A001-L013).
     let linhas: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, COALESCE(display_name, full_name) FROM people WHERE id = ANY($1)",
+        "SELECT id, COALESCE(display_name, full_name) FROM people
+          WHERE id = ANY($1) AND organisation_id = $2",
     )
     .bind(ids)
+    .bind(organisation_id)
     .fetch_all(pool)
     .await?;
     Ok(linhas.into_iter().collect())
@@ -145,7 +149,7 @@ async fn list(
         .map_err(|error| ApiError::new(error, &ids))?;
 
     let outros: Vec<Uuid> = listadas.iter().filter_map(|l| l.other_id).collect();
-    let mapa = nomes(&state.pool, &outros)
+    let mapa = nomes(&state.pool, state.organisation_id, &outros)
         .await
         .map_err(|error| ApiError::new(error.into(), &ids))?;
 
@@ -248,7 +252,7 @@ async fn one(
         .await
         .map_err(|error| ApiError::new(error, &ids))?;
     let membros: Vec<Uuid> = com_papel.iter().map(|(p, _)| *p).collect();
-    let mapa = nomes(&state.pool, &membros)
+    let mapa = nomes(&state.pool, state.organisation_id, &membros)
         .await
         .map_err(|error| ApiError::new(error.into(), &ids))?;
 
@@ -342,7 +346,7 @@ async fn montar(
     };
     pessoas.extend(citadas.iter().map(|m| m.author_id));
 
-    let mapa = nomes(&state.pool, &pessoas)
+    let mapa = nomes(&state.pool, state.organisation_id, &pessoas)
         .await
         .map_err(|error| ApiError::new(error.into(), ids))?;
 
@@ -641,7 +645,7 @@ async fn typing(
         .filter(|p| *p != principal.person_id)
         .collect();
 
-    let mapa = nomes(&state.pool, &quem)
+    let mapa = nomes(&state.pool, state.organisation_id, &quem)
         .await
         .map_err(|error| ApiError::new(error.into(), &ids))?;
     let etiquetas: Vec<String> = quem.iter().filter_map(|p| mapa.get(p).cloned()).collect();

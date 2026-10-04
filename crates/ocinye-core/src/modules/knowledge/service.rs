@@ -2068,7 +2068,40 @@ pub async fn list_links(
     workspace_id: Uuid,
 ) -> CoreResult<Vec<ResearchLink>> {
     let workspace = get_workspace(pool, principal, workspace_id).await?;
-    repo::list_links(pool, workspace.id).await
+    // Ler o ambiente não é ler as duas pontas de cada relação: uma relação
+    // cujo extremo esta pessoa não alcança não sai pela lista, nem o seu
+    // identificador (A001-M019) — a mesma resolução que a criação faz, e a que
+    // a linhagem faz nó a nó.
+    let mut visible = Vec::new();
+    for link in repo::list_links(pool, workspace.id).await? {
+        let mut readable = true;
+        for (kind, id) in [
+            (link.source_type_name.as_str(), link.source_id),
+            (link.target_type_name.as_str(), link.target_id),
+        ] {
+            let reference = ocinye_contracts::agentic::ResourceKind::parse(kind).map(|kind| {
+                ocinye_contracts::agentic::ResourceRef {
+                    kind,
+                    id,
+                    label: None,
+                }
+            });
+            let reached = match reference {
+                Some(reference) => crate::resources::resolve(pool, principal, &reference)
+                    .await
+                    .is_ok(),
+                None => false,
+            };
+            if !reached {
+                readable = false;
+                break;
+            }
+        }
+        if readable {
+            visible.push(link);
+        }
+    }
+    Ok(visible)
 }
 /// Rever uma bibliografia BibTeX: ler o que lá está e escrevê-lo em forma canónica.
 ///

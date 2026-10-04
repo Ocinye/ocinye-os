@@ -318,17 +318,22 @@ pub async fn add_member(
         "INSERT INTO conversation_participants (conversation_id, person_id, role)
               VALUES ($1, $2, 'member')
          ON CONFLICT (conversation_id, person_id)
-         DO UPDATE SET left_at = NULL, joined_at = now()",
+         DO UPDATE SET left_at = NULL, joined_at = now(), role = 'member'",
     )
     .bind(conversation_id)
     .bind(quem)
     .execute(&mut *tx)
     .await?;
+    // Voltar a um grupo é entrar como membro: o papel de antes de sair não
+    // regressa sozinho (A001-M017). E o registo diz quem entrou.
     audit::record(
         &mut tx,
         Some(principal),
         ids,
-        AuditEntry::new(action::UPDATE, "conversation").resource(conversation_id),
+        AuditEntry::new(action::UPDATE, "conversation")
+            .resource(conversation_id)
+            .detail("person_id", quem.to_string())
+            .detail("event", "member_added"),
     )
     .await?;
     tx.commit().await?;
@@ -371,6 +376,24 @@ pub async fn remove_member(
         ));
     }
 
+    // Quem governa retira membros; não retira quem é dono do grupo — só o
+    // próprio dono sai (A001-M017).
+    if !a_propria {
+        let papel_alvo: Option<String> = sqlx::query_scalar(
+            "SELECT role FROM conversation_participants
+              WHERE conversation_id = $1 AND person_id = $2 AND left_at IS NULL",
+        )
+        .bind(conversation_id)
+        .bind(quem)
+        .fetch_optional(pool)
+        .await?;
+        if papel_alvo.as_deref() == Some("owner") {
+            return Err(CoreError::PermissionDenied(
+                "O dono do grupo não se retira; só ele pode sair.".to_owned(),
+            ));
+        }
+    }
+
     let mut tx = pool.begin().await?;
     // A linha fica, com `left_at`. Apagá-la deixaria a conversa cheia de
     // mensagens de ninguém.
@@ -386,7 +409,10 @@ pub async fn remove_member(
         &mut tx,
         Some(principal),
         ids,
-        AuditEntry::new(action::UPDATE, "conversation").resource(conversation_id),
+        AuditEntry::new(action::UPDATE, "conversation")
+            .resource(conversation_id)
+            .detail("person_id", quem.to_string())
+            .detail("event", "member_removed"),
     )
     .await?;
     tx.commit().await?;

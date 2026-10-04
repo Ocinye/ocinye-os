@@ -11,6 +11,8 @@
 //! `ocinye-convert`. Nada no worker ganha autoridade nova: continua a pedir um
 //! nome de uma lista fechada.
 
+#![forbid(unsafe_code)]
+
 /// Um perfil de conversão: o que o conversor faz, e o tecto que o runner dá ao
 /// contentor descartável que o corre.
 ///

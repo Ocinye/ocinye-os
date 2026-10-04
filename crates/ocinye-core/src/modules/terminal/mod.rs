@@ -579,13 +579,15 @@ fn parse_error(principal: &Principal, error: &ParseError) -> Block {
         ParseError::UnexpectedArgument(w) => note(
             Tone::Err,
             "ocsh.err.unexpected_arg",
-            vec![("cmd".into(), w.clone())],
+            // A palavra que sobrou pode ser um segredo mal escrito: passa pela
+            // mesma redacção que o eco (A001-M014).
+            vec![("cmd".into(), ocinye_contracts::ocsh::redact(w))],
             vec![],
         ),
         ParseError::UnknownOption(o) => note(
             Tone::Err,
             "ocsh.err.bad_opt",
-            vec![("opt".into(), o.clone())],
+            vec![("opt".into(), ocinye_contracts::ocsh::redact(o))],
             vec![],
         ),
         ParseError::MissingOptionValue(o) => note(
