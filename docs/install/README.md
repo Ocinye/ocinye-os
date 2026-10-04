@@ -48,16 +48,21 @@ tar -xf ocinye-os-<sha>.tar && cd ocinye-os-<sha>
 sudo ./install/ocinye install \
   --domain os.exemplo.org \
   --instance-name "Exemplo" \
-  --profile business \
+  --distribution business \
   --name "Pessoa Responsável" --email pessoa@exemplo.org \
   --admin-name "Pessoa Responsável (Admin)" --admin-email admin@exemplo.org \
   --tls provided --cert /caminho/cert.pem --key /caminho/key.pem
 ```
 
-- `--profile` escolhe as aplicações com que a Instância nasce: `research`,
-  `business`, `education` ou `personal`
-  ([ADR-0014](../adrs/0014-instance-profiles-and-application-activation.md)).
-  Não há perfil por omissão.
+- `--distribution` escolhe as Distribuições com que a Instância nasce:
+  `research`, `business`, `education` ou `personal`, e repete-se para activar
+  várias ([ADR-0014](../adrs/0014-instance-profiles-and-application-activation.md),
+  [ADR-0019](../adrs/0019-multi-distribution-instance.md)). `--profile` é o
+  nome antigo, aceite como sinónimo. Não há Distribuição por omissão.
+- `--endpoint anfitrião=distribuição` semeia um ponto de acesso ligado a uma
+  Distribuição activada (repetível); o nginx e o certificado auto-assinado
+  passam a cobrir esses anfitriões
+  ([ADR-0024](../adrs/0024-installer-tls-and-endpoints.md)).
 - `--tls self-signed` gera um certificado para laboratório; em uso real, forneça
   o seu.
 - `--public-url` só é preciso quando o endereço público não é
@@ -133,3 +138,14 @@ evidência de que esta página descreve o que acontece.
 
 - Instalação sem rede (imagens de terceiros dentro do pacote).
 - Pacote assinado (Parte 17): hoje as somas provam integridade, não origem.
+
+## O Ocinye OS Installer (gráfico, remoto)
+
+O mesmo release instala-se também a partir do computador do operador, com o
+**Ocinye OS Installer** (`apps/installer`, D011,
+[ADR-0022](../adrs/0022-graphical-remote-installer.md) a
+[ADR-0025](../adrs/0025-hardware-discovery-and-compute-boundary.md)): liga por
+SSH a um **Ubuntu Server 24.04 LTS** novo (único alvo suportado; o resto é
+recusado no preflight), envia o `ocinye-bootstrap` do pacote e conduz as fases
+de `install/ocinye` por um protocolo tipado, com plano selado e diário no
+servidor. Arquitectura, fases e prova: [installer.md](installer.md).
