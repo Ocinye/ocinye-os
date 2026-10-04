@@ -224,6 +224,12 @@ fn main() {
             save_receipt,
             open_ocinye
         ])
-        .run(tauri::generate_context!())
-        .expect("Ocinye OS Installer");
+        .build(tauri::generate_context!())
+        .expect("Ocinye OS Installer")
+        .run(|handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let w = handle.state::<Window>();
+                tauri::async_runtime::block_on(w.app.shutdown());
+            }
+        });
 }

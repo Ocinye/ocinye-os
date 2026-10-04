@@ -150,7 +150,7 @@ pub fn observe_docker() -> DockerObservation {
             v.ok()
                 .then(|| v.stdout.trim().to_owned())
                 .filter(|s| !s.is_empty()),
-            c.ok() && c.stdout.trim().starts_with('2'),
+            c.ok() && pf::compose_plugin_supported(&c.stdout),
         )
     } else {
         (None, false)

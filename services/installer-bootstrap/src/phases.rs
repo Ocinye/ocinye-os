@@ -228,13 +228,51 @@ fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
     for e in fs::read_dir(from)? {
         let e = e?;
         let target = to.join(e.file_name());
-        if e.file_type()?.is_dir() {
+        let kind = e.file_type()?;
+        if kind.is_dir() {
             copy_tree(&e.path(), &target)?;
-        } else {
+        } else if kind.is_file() {
             fs::copy(e.path(), &target)?;
+        } else {
+            // A link copied by root would carry whatever it points at.
+            return Err(std::io::Error::other("not a regular file"));
         }
     }
     Ok(())
+}
+
+/// Files in a staged bundle that are run, rather than read.
+const BUNDLE_EXECUTABLES: [&str; 2] = ["install/ocinye", "ocinye-bootstrap"];
+
+/// Makes a staged tree root's: owned by root, nothing writable by anyone else,
+/// the bundle's two programs executable, and nothing but directories and
+/// regular files. The upload arrives owned by the SSH user; verifying it
+/// before this would check bytes that account could still change.
+pub(crate) fn seal_tree(root: &Path) -> std::io::Result<()> {
+    fn walk(root: &Path, dir: &Path) -> std::io::Result<()> {
+        for e in fs::read_dir(dir)? {
+            let path = e?.path();
+            let meta = fs::symlink_metadata(&path)?;
+            std::os::unix::fs::lchown(&path, Some(0), Some(0))?;
+            if meta.is_dir() {
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o755))?;
+                walk(root, &path)?;
+            } else if meta.is_file() {
+                let rel = path.strip_prefix(root).unwrap_or(&path);
+                let exec = BUNDLE_EXECUTABLES.iter().any(|x| rel == Path::new(x));
+                fs::set_permissions(
+                    &path,
+                    fs::Permissions::from_mode(if exec { 0o755 } else { 0o644 }),
+                )?;
+            } else {
+                return Err(std::io::Error::other("not a regular file"));
+            }
+        }
+        Ok(())
+    }
+    std::os::unix::fs::lchown(root, Some(0), Some(0))?;
+    fs::set_permissions(root, fs::Permissions::from_mode(0o700))?;
+    walk(root, root)
 }
 
 /// P01 · the executor in its place, verified.
@@ -254,32 +292,34 @@ pub fn p01(ctx: &mut Ctx<'_>) -> Result<Effects, Failure> {
 pub fn p02(ctx: &mut Ctx<'_>) -> Result<Effects, Failure> {
     let uploaded = ctx.upload.join("bundle");
     let staged = staging(ctx.id);
-    let source = if uploaded.join("MANIFEST.json").exists() {
-        &uploaded
-    } else {
-        &staged
-    };
+    let mut fx = Effects::default();
+    if !Path::new(paths::ROOT).exists() {
+        fx.created_paths.push(paths::ROOT.to_owned());
+    }
+    // Into root's staging first, sealed, and only then verified: what is
+    // checked is what will run.
+    if uploaded.join("MANIFEST.json").exists() {
+        move_tree(&uploaded, &staged)
+            .map_err(|e| Failure::new("DISK_FULL", true, Some(e.kind().to_string())))?;
+    }
+    if let Some(parent) = staged.parent() {
+        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+    }
+    seal_tree(&staged)
+        .map_err(|e| Failure::new("TRANSFER_INCOMPLETE", true, Some(e.to_string())))?;
     let emit = &mut *ctx.emit;
-    verify_bundle(source, &ctx.plan.release.manifest_sha256, &mut |op| {
+    verify_bundle(&staged, &ctx.plan.release.manifest_sha256, &mut |op| {
         emit(Event::StepProgress {
             phase: PhaseId::P02,
             operation: op,
         });
     })?;
-    let mut fx = Effects::default();
-    if !Path::new(paths::ROOT).exists() {
-        fx.created_paths.push(paths::ROOT.to_owned());
-    }
-    if source == &uploaded {
-        move_tree(&uploaded, &staged)
-            .map_err(|e| Failure::new("DISK_FULL", true, Some(e.kind().to_string())))?;
-    }
     // Operator TLS material: into the root-only state directory.
     let tls_in = ctx.upload.join("tls");
     if tls_in.exists() {
         let tls = ctx.dir.join("tls");
         move_tree(&tls_in, &tls).map_err(|_| Failure::new("TLS_INSTALL_FAILED", true, None))?;
-        let _ = fs::set_permissions(&tls, fs::Permissions::from_mode(0o700));
+        seal_tree(&tls).map_err(|_| Failure::new("TLS_INSTALL_FAILED", true, None))?;
         let _ = fs::set_permissions(tls.join("instance.key"), fs::Permissions::from_mode(0o600));
     }
     Ok(fx)

@@ -238,6 +238,9 @@ pub struct Installer {
     session: Option<Session>,
     upload_dir: Option<String>,
     conn: Option<BootstrapConn>,
+    /// This session handed the channel to an executor that has not yet been
+    /// seen to finish: its upload directory may still be needed.
+    executor_unfinished: bool,
     /// The probe after authentication.
     pub probe: Option<Probe>,
     /// Server facts.
@@ -299,6 +302,7 @@ impl Installer {
             session: None,
             upload_dir: None,
             conn: None,
+            executor_unfinished: false,
             probe: None,
             facts: None,
             preflight: None,
@@ -348,6 +352,10 @@ impl Installer {
     ///
     /// I04 (unknown key), I26 (mismatch), I24, I25, I23.
     pub async fn test_connection(&mut self) -> Result<&Probe, Refusal> {
+        // A new connection replaces the old session: leave nothing behind.
+        self.end_session().await;
+        self.conn = None;
+        self.session = None;
         let target = self.target.clone().ok_or(Refusal::NotReady("target"))?;
         let (decision, key) = ssh::probe_host_key(&target, Arc::clone(&self.known)).await?;
         match decision {
@@ -673,6 +681,7 @@ impl Installer {
         self.save_plan(&plan);
         self.started_at = Some(now());
         self.transfer(sink).await?;
+        self.executor_unfinished = true;
         self.conn()?
             .send(&Command::Execute {
                 plan: Box::new(plan),
@@ -746,6 +755,10 @@ impl Installer {
     ) -> Result<Ending, Refusal> {
         let installation_id = self.installation_id.clone();
         let mut ending = None;
+        // A credential announced in this session and not yet received: the
+        // follow waits for it after completion. One delivered in an earlier
+        // session (a resume past P11) is not waited for.
+        let mut credential_pending = false;
         loop {
             let Some(msg) = self.conn()?.rx.recv().await else {
                 break;
@@ -754,6 +767,10 @@ impl Installer {
                 Incoming::Secret(secret) => {
                     // Held for the one display; never logged, never stored.
                     self.secret = Some(secret);
+                    credential_pending = false;
+                    if matches!(ending, Some(Ending::Completed)) {
+                        break;
+                    }
                 }
                 Incoming::Event(env) => {
                     self.last_seq = self.last_seq.max(env.seq);
@@ -762,6 +779,7 @@ impl Installer {
                     }
                     match &env.event {
                         Event::CredentialIssued { .. } => {
+                            credential_pending = true;
                             self.conn()?
                                 .send(&Command::ClaimSecret {
                                     installation_id: installation_id.clone(),
@@ -798,7 +816,7 @@ impl Installer {
                         _ => {}
                     }
                     self.events.push(env);
-                    if matches!(ending, Some(Ending::Completed)) && self.secret.is_some() {
+                    if matches!(ending, Some(Ending::Completed)) && !credential_pending {
                         break;
                     }
                     if matches!(
@@ -811,7 +829,41 @@ impl Installer {
             }
         }
         self.ended_at = Some(now());
+        if ending.is_some() {
+            self.executor_unfinished = false;
+        }
         Ok(ending.unwrap_or(Ending::Interrupted))
+    }
+
+    /// Ends the bootstrap session and removes its upload directory, so a
+    /// session leaves nothing in `/tmp`. An executor that may still need the
+    /// directory (an interrupted follow) keeps it: it removes it itself once
+    /// P02 has staged the bundle.
+    pub async fn end_session(&mut self) {
+        let dir = self.upload_dir.take();
+        let conn = self.conn.take();
+        if let Some(mut conn) = conn {
+            if !self.executor_unfinished && conn.send(&Command::Cleanup {}).await.is_ok() {
+                let done = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+                    while let Some(m) = conn.rx.recv().await {
+                        if matches!(m, Incoming::Event(ref e) if matches!(e.event, Event::CleanedUp)) {
+                            return true;
+                        }
+                    }
+                    false
+                })
+                .await;
+                if matches!(done, Ok(true)) {
+                    return;
+                }
+            }
+        }
+        if self.executor_unfinished {
+            return;
+        }
+        if let (Some(dir), Some(session)) = (dir, self.session.as_ref()) {
+            let _ = session.exec(&ssh::remove_upload(&dir), None).await;
+        }
     }
 
     /// A cloneable sender, for stopping while [`Self::install`] follows.
@@ -850,12 +902,14 @@ impl Installer {
         &mut self,
         sink: Option<&UnboundedSender<Progress>>,
     ) -> Result<Ending, Refusal> {
+        self.end_session().await;
         self.conn = None;
         self.session = None;
         self.test_connection().await?;
         self.start_bootstrap().await?;
         let from = self.last_seq + 1;
         let id = self.installation_id.clone();
+        self.executor_unfinished = true;
         self.conn()?
             .send(&Command::Attach {
                 installation_id: id,
@@ -884,6 +938,7 @@ impl Installer {
         {
             self.transfer(sink).await?;
         }
+        self.executor_unfinished = true;
         self.conn()?
             .send(&Command::Resume {
                 plan: Box::new(plan),
@@ -977,6 +1032,32 @@ impl Installer {
         self.lifecycle
             .as_ref()
             .ok_or(Refusal::NotReady("lifecycle"))
+    }
+
+    /// Re-runs the server-side items (V01–V09, V12b, V16), read-only, for an
+    /// installation this session did not follow to the end.
+    ///
+    /// # Errors
+    ///
+    /// Order, transport, or the bootstrap's refusal (no journal, executor busy).
+    pub async fn verify_on_server(&mut self) -> Result<(), Refusal> {
+        let id = self.installation_id.clone();
+        let conn = self.conn()?;
+        conn.send(&Command::Verify {
+            installation_id: id,
+        })
+        .await?;
+        loop {
+            match next_event(conn).await {
+                Some(Event::VerificationCompleted { report }) => {
+                    self.server_report = report;
+                    return Ok(());
+                }
+                Some(Event::Refused { code }) => return Err(Refusal::Bootstrap(code)),
+                Some(_) => {}
+                None => return Err(Refusal::Transport("verify".into())),
+            }
+        }
     }
 
     /// I18 · the receipt (non-secret).

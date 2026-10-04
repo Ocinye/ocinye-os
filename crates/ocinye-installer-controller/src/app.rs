@@ -140,6 +140,15 @@ impl App {
         })
     }
 
+    /// The window is closing: end the bootstrap session (and its `/tmp`
+    /// upload). A session busy following an installation is left alone — the
+    /// executor carries on detached and removes the upload itself.
+    pub async fn shutdown(&self) {
+        if let Ok(mut s) = self.session.try_lock() {
+            s.inst.end_session().await;
+        }
+    }
+
     /// Test-only resolver entries (controlled DNS fixtures; never in the product).
     pub async fn set_test_resolver(&self, fixed: BTreeMap<String, Vec<std::net::IpAddr>>) {
         self.session.lock().await.inst.resolver.fixed = fixed;

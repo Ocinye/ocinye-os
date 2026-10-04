@@ -345,6 +345,11 @@ pub fn run(root: &StateRoot, id: &InstallationId, upload: &Path) -> std::io::Res
                 journal.completed(phase, &state::now());
                 state::write_journal(&dir, &journal)?;
                 hub.emit(Event::StepCompleted { phase });
+                if phase == PhaseId::P02 {
+                    // Everything the session uploaded is now in root's
+                    // staging; the upload directory has nothing left to give.
+                    discard_upload(upload);
+                }
                 start = PhaseId::ALL.get(phase.number()).copied();
             }
             Err(f) => {
@@ -385,5 +390,15 @@ pub fn run(root: &StateRoot, id: &InstallationId, upload: &Path) -> std::io::Res
     // Give a connected Installer a moment to read the last events.
     std::thread::sleep(Duration::from_secs(2));
     let _ = fs::remove_file(&sock);
+    if journal.summary().completed.contains(&PhaseId::P02) {
+        discard_upload(upload);
+    }
     Ok(())
+}
+
+/// Removes a session's upload directory — only ever a `/tmp/ocinye-bootstrap-…`.
+fn discard_upload(upload: &Path) {
+    if phases::is_upload_dir(upload) {
+        let _ = fs::remove_dir_all(upload);
+    }
 }

@@ -101,26 +101,30 @@ pub fn endpoints_match(plan: &InstallationPlan, got: &[VerifyEndpoint]) -> bool 
 }
 
 /// `curl --resolve host:443:127.0.0.1` → status code.
-fn in_server_status(host: &str, path: &str) -> Option<u16> {
+/// Several paths in one `curl`, in order, with its in-memory cookie engine on
+/// (`-b ""`): a cookie the server sets on one answer goes with the next
+/// request, as a browser would send it.
+fn in_server_walk(host: &str, paths: &[&str]) -> Vec<Option<u16>> {
     let resolve = format!("{host}:443:127.0.0.1");
-    let url = format!("https://{host}{path}");
-    let o = exec::run(
-        program::CURL,
-        &[
-            "-ks",
-            "-o",
-            "/dev/null",
-            "-w",
-            "%{http_code}",
-            "--max-time",
-            "20",
-            "--resolve",
-            &resolve,
-            &url,
-        ],
-        exec::secs(30),
-    );
-    o.stdout.trim().parse().ok()
+    let urls: Vec<String> = paths.iter().map(|p| format!("https://{host}{p}")).collect();
+    let mut args = vec![
+        "-ks",
+        "-b",
+        "",
+        "-w",
+        "%{http_code}\n",
+        "--max-time",
+        "20",
+        "--resolve",
+        &resolve,
+    ];
+    for u in &urls {
+        args.extend(["-o", "/dev/null", u.as_str()]);
+    }
+    let o = exec::run(program::CURL, &args, exec::secs(60));
+    let mut codes: Vec<Option<u16>> = o.stdout.lines().map(|l| l.trim().parse().ok()).collect();
+    codes.resize(paths.len(), None);
+    codes
 }
 
 /// Run the server items, in order, calling `emit` for each.
@@ -351,17 +355,19 @@ pub fn run(
 
     // V09 · login surface, inside the server.
     let canonical = plan.configuration.endpoints.canonical.as_str();
-    let root = in_server_status(canonical, "/");
-    let login = in_server_status(canonical, "/login");
+    // A visitor without a session is sent to the Workspace's boot page,
+    // which answers and sets its marker; the login page then renders.
+    let walk = in_server_walk(canonical, &["/", "/boot", "/login"]);
+    let code = |i: usize| walk.get(i).copied().flatten().unwrap_or(0);
     push(
         item(
             VerificationId::V09,
-            if root == Some(303) && login == Some(200) {
+            if (code(0), code(1), code(2)) == (303, 200, 200) {
                 ItemStatus::Pass
             } else {
                 ItemStatus::Fail
             },
-            &format!("HTTP_{}_{}", root.unwrap_or(0), login.unwrap_or(0)),
+            &format!("HTTP_{}_{}_{}", code(0), code(1), code(2)),
         ),
         &mut out,
     );

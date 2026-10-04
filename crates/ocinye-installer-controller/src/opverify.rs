@@ -135,7 +135,41 @@ impl ServerCertVerifier for Capture {
 
 /// One HTTPS request through a pinned connection: status, leaf fingerprint,
 /// and whether the public roots trust the chain for this name.
-async fn https_get(addr: SocketAddr, host: &str, path: &str) -> Option<(u16, String, bool)> {
+/// One HTTPS answer as the operator's machine sees it.
+struct Answer {
+    status: u16,
+    /// SHA-256 of the served leaf certificate.
+    fingerprint: String,
+    /// Whether public roots trust the chain for this name.
+    trusted: bool,
+    /// `name=value` of every `Set-Cookie`.
+    cookies: Vec<String>,
+}
+
+/// The status line and headers of a response (bounded).
+fn parse_head(head: &[u8]) -> Option<(u16, Vec<String>)> {
+    let text = std::str::from_utf8(head).ok()?;
+    let mut lines = text.split("\r\n");
+    let status = lines.next()?.split_whitespace().nth(1)?.parse().ok()?;
+    let cookies = lines
+        .take_while(|l| !l.is_empty())
+        .filter_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            k.trim()
+                .eq_ignore_ascii_case("set-cookie")
+                .then(|| v.trim().split(';').next().unwrap_or("").trim().to_owned())
+        })
+        .filter(|c| c.contains('='))
+        .collect();
+    Some((status, cookies))
+}
+
+async fn https_get(
+    addr: SocketAddr,
+    host: &str,
+    path: &str,
+    cookie: Option<&str>,
+) -> Option<Answer> {
     let provider = Arc::new(ring::default_provider());
     let seen = Arc::new(Mutex::new(None));
     let config = ClientConfig::builder_with_provider(Arc::clone(&provider))
@@ -183,20 +217,31 @@ async fn https_get(addr: SocketAddr, host: &str, path: &str) -> Option<(u16, Str
                 .is_ok()
             })
     };
-    let req = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: ocinye-installer\r\nConnection: close\r\n\r\n");
+    let cookie = cookie
+        .map(|c| format!("Cookie: {c}\r\n"))
+        .unwrap_or_default();
+    let req = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: ocinye-installer\r\n{cookie}Connection: close\r\n\r\n");
     tls.write_all(req.as_bytes()).await.ok()?;
-    let mut head = vec![0u8; 64];
-    let n = tokio::time::timeout(Duration::from_secs(15), tls.read(&mut head))
-        .await
-        .ok()?
-        .ok()?;
-    let status = std::str::from_utf8(&head[..n])
-        .ok()?
-        .split_whitespace()
-        .nth(1)?
-        .parse()
-        .ok()?;
-    Some((status, fingerprint, trusted))
+    // The head only, up to 16 KiB: the body is not read.
+    let mut head = Vec::new();
+    let mut buf = [0u8; 2048];
+    while !head.windows(4).any(|w| w == b"\r\n\r\n") && head.len() < 16 * 1024 {
+        let n = tokio::time::timeout(Duration::from_secs(15), tls.read(&mut buf))
+            .await
+            .ok()?
+            .ok()?;
+        if n == 0 {
+            break;
+        }
+        head.extend_from_slice(&buf[..n]);
+    }
+    let (status, cookies) = parse_head(&head)?;
+    Some(Answer {
+        status,
+        fingerprint,
+        trusted,
+        cookies,
+    })
 }
 
 fn item(id: VerificationId, status: ItemStatus, evidence: impl Into<String>) -> VerificationItem {
@@ -281,14 +326,30 @@ pub async fn run(e: &Expectation, resolver: &Resolver) -> Vec<VerificationItem> 
     let mut answered = Vec::new();
     let mut refused = Vec::new();
     for h in &e.hosts {
-        match https_get(addr, h.as_str(), "/login").await {
-            Some((status, fp, t)) => {
-                cert_ok &= fp == e.cert_sha256;
-                trusted &= t;
-                if status == 200 {
+        // The Workspace's own entry: `/boot` answers and hands the visitor
+        // its marker, and `/login` then renders. An unknown name gets no
+        // answer at all (ADR-0020), so this is per-name evidence.
+        match https_get(addr, h.as_str(), "/boot", None).await {
+            Some(boot) => {
+                cert_ok &= boot.fingerprint == e.cert_sha256;
+                trusted &= boot.trusted;
+                let jar = boot.cookies.join("; ");
+                let login = if boot.status == 200 {
+                    https_get(addr, h.as_str(), "/login", Some(&jar))
+                        .await
+                        .map(|a| a.status)
+                } else {
+                    None
+                };
+                if login == Some(200) {
                     answered.push(h.as_str().to_owned());
                 } else {
-                    refused.push(format!("{}={status}", h.as_str()));
+                    refused.push(format!(
+                        "{}={}_{}",
+                        h.as_str(),
+                        boot.status,
+                        login.unwrap_or(0)
+                    ));
                 }
             }
             None => {
@@ -387,5 +448,18 @@ mod tests {
         };
         let items = run(&e, &r).await;
         assert!(items[0].evidence.starts_with("DNS_WRONG_TARGET"));
+    }
+
+    #[test]
+    fn a_cabeca_da_resposta_da_o_estado_e_os_cookies() {
+        let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nSet-Cookie: oc_boot=1; Path=/; SameSite=Lax\r\nset-cookie: outro=x\r\n\r\n<html>";
+        let (status, cookies) = parse_head(head).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(cookies, vec!["oc_boot=1".to_owned(), "outro=x".to_owned()]);
+        assert_eq!(
+            parse_head(b"HTTP/1.1 303 See Other\r\n\r\n").unwrap(),
+            (303, vec![])
+        );
+        assert!(parse_head(b"lixo").is_none());
     }
 }

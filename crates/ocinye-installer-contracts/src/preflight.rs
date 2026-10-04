@@ -156,6 +156,21 @@ pub enum RuntimeConflict {
     ForeignSocket,
 }
 
+/// Whether `docker compose version --short` names a supported Compose plugin.
+///
+/// "Compose v2" is the plugin generation (`docker compose`, not the old
+/// `docker-compose`), not a major version: the official repository ships the
+/// same plugin as 2.x and, since 2026, as 5.x. Anything from 2.0 up is that
+/// plugin; 1.x, empty or unparsable output is not.
+#[must_use]
+pub fn compose_plugin_supported(short_version: &str) -> bool {
+    let v = short_version.trim().trim_start_matches('v');
+    v.split('.')
+        .next()
+        .is_some_and(|m| !m.is_empty() && m.bytes().all(|b| b.is_ascii_digit()))
+        && crate::manifest::version_at_least(v, "2.0")
+}
+
 /// Classify the container runtime.
 #[must_use]
 pub fn classify_runtime(
@@ -736,5 +751,15 @@ mod tests {
         r.items
             .push(item(PreflightCheckId::PfSrvdir, CheckStatus::Blocked));
         assert!(!r.install_allowed());
+    }
+
+    #[test]
+    fn o_plugin_compose_e_uma_geracao_e_nao_uma_versao_maior() {
+        for ok in ["2.0.0", "2.29.7", "v2.40.3", "5.6.0", "5.6.0\n"] {
+            assert!(compose_plugin_supported(ok), "{ok}");
+        }
+        for no in ["1.29.2", "", "v", "abc", "1.0", " "] {
+            assert!(!compose_plugin_supported(no), "{no:?}");
+        }
     }
 }

@@ -38,6 +38,7 @@ use ocinye_installer_contracts::plan::{
 };
 use ocinye_installer_contracts::protocol::Event;
 use ocinye_installer_contracts::secret::SecretText;
+use ocinye_installer_contracts::verification::LifecycleState;
 use ocinye_installer_controller::installer::{Ending, Installer, Progress, Refusal, TlsFiles};
 use ocinye_installer_controller::ssh::{Auth, Elevation, Target};
 use serde::Deserialize;
@@ -95,6 +96,11 @@ struct Config {
     /// Test-only: names made to resolve on purpose (controlled DNS fixture).
     #[serde(default)]
     resolve: BTreeMap<String, Vec<IpAddr>>,
+    /// Test-only: where to keep the one-time credential (0600), so a proof
+    /// can log in with it without it passing through any output. Only a
+    /// plain file name, kept inside `state_dir`.
+    #[serde(default)]
+    credential_file: Option<String>,
 }
 
 fn fail(msg: &str) -> ! {
@@ -257,8 +263,34 @@ fn load_session(c: &Config, inst: &mut Installer) {
     }
 }
 
-async fn finish(c: &Config, inst: &mut Installer, ending: Ending) {
+/// The process exit status is the outcome, not the printed text: 0 only for a
+/// completed installation, 10 a failed phase, 11 a stop at a safe point, 12 an
+/// interrupted channel, 13 a refusal by the executor.
+fn keep_credential(c: &Config, name: &str, value: &str) {
+    use std::io::Write as _;
+    use std::os::unix::fs::OpenOptionsExt as _;
+    if name.is_empty() || name.contains('/') || name.starts_with('.') {
+        fail("credential_file: só um nome de ficheiro");
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(c.state_dir.join(name))
+        .unwrap_or_else(|_| fail("credential_file"));
+    f.write_all(value.as_bytes())
+        .unwrap_or_else(|_| fail("credential_file"));
+}
+
+async fn finish(c: &Config, inst: &mut Installer, ending: Ending) -> i32 {
     save_session(c, inst);
+    let code = match ending {
+        Ending::Completed => 0,
+        Ending::Failed { .. } => 10,
+        Ending::Stopped { .. } => 11,
+        Ending::Interrupted => 12,
+        Ending::Refused(_) => 13,
+    };
     out("ending", &ending);
     if let Some(s) = &inst.secret {
         // Never the value.
@@ -266,6 +298,9 @@ async fn finish(c: &Config, inst: &mut Installer, ending: Ending) {
             "credential_received",
             &serde_json::json!({ "user": s.user, "expires_at": s.expires_at, "length": s.value.expose().len() }),
         );
+    }
+    if let (Some(name), Some(s)) = (&c.credential_file, &inst.secret) {
+        keep_credential(c, name, s.value.expose());
     }
     inst.acknowledge_credential();
     if ending == Ending::Completed {
@@ -281,6 +316,7 @@ async fn finish(c: &Config, inst: &mut Installer, ending: Ending) {
         }
         save_session(c, inst);
     }
+    code
 }
 
 #[tokio::main]
@@ -296,6 +332,7 @@ async fn main() {
     let c = config(path);
     std::fs::create_dir_all(&c.state_dir).unwrap_or_else(|_| fail("state_dir"));
     let mut inst = Installer::new(c.state_dir.clone());
+    let mut code = 0;
     inst.resolver.fixed.clone_from(&c.resolve);
 
     if cmd == "fingerprint" {
@@ -326,12 +363,32 @@ async fn main() {
         load_session(&c, &mut inst);
         inst.open_release(&c.bundle).unwrap_or_else(|e| refusal(&e));
         connect(&c, &mut inst).await;
-        match inst.verify_from_here(None).await {
-            Ok(state) => out("lifecycle", state),
+        // Both sides again: the server items from the bootstrap, the rest
+        // from here. A report saved by an earlier session is not evidence.
+        inst.verify_on_server()
+            .await
+            .unwrap_or_else(|e| refusal(&e));
+        // The receipt states the hardware as found now (read-only).
+        inst.discover_hardware()
+            .await
+            .unwrap_or_else(|e| refusal(&e));
+        let complete = match inst.verify_from_here(None).await {
+            Ok(state) => {
+                out("lifecycle", state);
+                *state != LifecycleState::InstallationIncomplete
+            }
             Err(e) => refusal(&e),
-        }
+        };
         out("verification", &inst.report);
-        return;
+        if let Some(r) = inst.receipt() {
+            let path = c.state_dir.join(r.file_name());
+            std::fs::write(&path, r.to_json()).unwrap_or_else(|_| fail("recibo"));
+            out("receipt", &path);
+        }
+        save_session(&c, &inst);
+        inst.end_session().await;
+        // 14: the installation does not verify as complete.
+        std::process::exit(if complete { 0 } else { 14 });
     }
 
     match inst.open_release(&c.bundle) {
@@ -346,7 +403,15 @@ async fn main() {
     match cmd {
         "preflight" => {
             match inst.run_preflight(Some(&tx)).await {
-                Ok(r) => out("preflight", r),
+                Ok(r) => {
+                    out("preflight", r);
+                    // 15: something blocks installing here.
+                    if r.items.iter().any(|i| {
+                        i.status == ocinye_installer_contracts::preflight::CheckStatus::Blocked
+                    }) {
+                        code = 15;
+                    }
+                }
                 Err(e) => refusal(&e),
             }
             match inst.discover_hardware().await {
@@ -436,14 +501,14 @@ async fn main() {
             drop(tx2);
             let _ = watch.await;
             match ending {
-                Ok(e) => finish(&c, &mut inst, e).await,
+                Ok(e) => code = finish(&c, &mut inst, e).await,
                 Err(e) => refusal(&e),
             }
         }
         "reattach" => {
             load_session(&c, &mut inst);
             match inst.reattach(Some(&tx)).await {
-                Ok(e) => finish(&c, &mut inst, e).await,
+                Ok(e) => code = finish(&c, &mut inst, e).await,
                 Err(e) => refusal(&e),
             }
         }
@@ -453,7 +518,7 @@ async fn main() {
                 .await
                 .unwrap_or_else(|e| refusal(&e));
             match inst.resume(Some(&tx)).await {
-                Ok(e) => finish(&c, &mut inst, e).await,
+                Ok(e) => code = finish(&c, &mut inst, e).await,
                 Err(e) => refusal(&e),
             }
         }
@@ -467,6 +532,8 @@ async fn main() {
         }
         _ => fail("comando desconhecido"),
     }
+    inst.end_session().await;
     drop(tx);
     let _ = printer.await;
+    std::process::exit(code);
 }

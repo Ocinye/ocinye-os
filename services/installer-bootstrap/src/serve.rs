@@ -528,6 +528,11 @@ fn relay_session(
             }
             let _ = stdout.flush();
         }
-    });
-    0
+        // The executor closed the socket: the session is over. The stdin
+        // reader is blocked on a line that will never come, and joining it
+        // would hold the SSH channel open while the Installer waits for it
+        // to close. This process exists for this one session; leave now.
+        let _ = stdout.flush();
+        std::process::exit(0);
+    })
 }
