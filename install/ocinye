@@ -28,6 +28,7 @@
 # ligar um nó ou registar um fornecedor.
 #
 # Subcomandos: install · status · upgrade · rollback · backup · uninstall
+# (e `phase`, que só o executor do Ocinye OS Installer chama)
 set -euo pipefail
 
 CONFIG="${OCINYE_CONFIG_DIR:-/etc/ocinye}"
@@ -46,7 +47,7 @@ uso() {
     cat <<'EOF'
 Uso:
   ocinye install --domain os.exemplo.org --instance-name "Nome" \
-                 --profile research|business|education|personal \
+                 --distribution research|business|education|personal [--distribution …] \
                  --name "Pessoa" --email pessoa@exemplo.org \
                  --admin-name "Pessoa (Admin)" --admin-email admin@exemplo.org \
                  [--public-url https://os.exemplo.org] \
@@ -162,16 +163,276 @@ backup_() {
 }
 
 # ── install ──────────────────────────────────────────────────────────────
+#
+# A instalação é uma sequência de fases, e cada fase é uma função. `install`
+# corre-as todas, de seguida, num anfitrião onde quem instala está ao teclado.
+# O Ocinye OS Installer (D011) corre as mesmas funções, uma a uma, pelo
+# executor temporário `ocinye-bootstrap`, com `ocinye phase <fase> …`: uma só
+# verdade sobre como se instala, duas formas de a conduzir.
+#
+# As fases são as do Installer (D011_INSTALL_STEP_MATRIX): P05 release, P06
+# configuração, P07 proxy e TLS, P09 imagens, P10 persistência, P11 Instância,
+# P12 pontos de acesso, P13 serviços, P14 arranque automático. P01–P04, P08,
+# P15 e P16 são do executor (transporte, pré-requisitos, firewall,
+# verificação, limpeza).
+
+DISTRIBUICOES=()
+PONTOS=()      # HOST=DISTRIBUIÇÃO
+
+validar_dominio() {
+    [[ "$1" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] \
+        && [ "${#1}" -le 253 ] \
+        || fatal "«$1» não é um nome de anfitrião"
+}
+
+validar_distribuicao() {
+    case "$1" in research|business|education|personal) ;;
+        *) fatal "Distribuição desconhecida: $1 (research, business, education, personal)" ;;
+    esac
+}
+
+acrescentar_distribuicao() {
+    validar_distribuicao "$1"
+    local d
+    for d in "${DISTRIBUICOES[@]+"${DISTRIBUICOES[@]}"}"; do [ "$d" = "$1" ] && return 0; done
+    DISTRIBUICOES+=("$1")
+}
+
+acrescentar_ponto() {  # HOST=DIST
+    local host="${1%%=*}" dist="${1#*=}"
+    [ "$host" != "$1" ] || fatal "--endpoint é HOST=DISTRIBUIÇÃO (um ponto fixo)"
+    validar_dominio "$host"
+    validar_distribuicao "$dist"
+    PONTOS+=("$host=$dist")
+}
+
+sha_do_pacote() {
+    [ -r "$AQUI/RELEASE" ] && [ -r "$AQUI/SHA256SUMS" ] \
+        || fatal "isto não é um pacote de release (faltam RELEASE e SHA256SUMS)"
+    SHA="$(tr -d '[:space:]' < "$AQUI/RELEASE")"
+    [[ "$SHA" =~ ^[0-9a-f]{12}$ ]] || fatal "RELEASE não contém um SHA curto válido"
+}
+
+# P05 · a árvore do release no sítio. Idempotente: o mesmo SHA, o mesmo sítio.
+fase_release() {
+    sha_do_pacote
+    install -d -m 755 "$RAIZ/releases/$SHA" "$RAIZ/conversion-spool" "$RAIZ/backups"
+    tar -xzf "$AQUI/source.tar.gz" -C "$RAIZ/releases/$SHA"
+    ln -sfn "$RAIZ/releases/$SHA" "$RAIZ/current"
+    nota "$RAIZ/current → releases/$SHA"
+}
+
+# P06 · configuração e segredos, gerados aqui, escritos de uma vez.
+#
+# Tudo vai primeiro para uma pasta ao lado e só no fim passa para o lugar, num
+# `mv`: ou a configuração inteira existe, ou nenhuma. Uma fase interrompida a
+# meio deixa só a pasta parcial, que a repetição apaga — e uma configuração que
+# já existe nunca é regerada: os segredos dela cifram dados.
+fase_config() {  # dominio url_publico nome_instancia [restaurar ficheiro_selagem] [destinatario]
+    local dominio="$1" url_publico="$2" nome_instancia="$3" restaurar="${4:-}" \
+          ficheiro_selagem="${5:-}" destinatario="${6:-}"
+    sha_do_pacote
+    [ ! -e "$CONFIG/core.env" ] \
+        || fatal "já existe uma Instância neste anfitrião ($CONFIG/core.env).
+  Instalar por cima apagaria a raiz de selagem de dados que existem."
+    local parcial="$CONFIG.parcial"
+    rm -rf "$parcial"
+    install -d -m 750 "$parcial" "$parcial/nginx" "$parcial/tls"
+    umask 077
+    local pg_senha s3_chave s3_segredo
+    pg_senha="$(aleatorio 48 40)"
+    # O formato que o Garage exige para uma chave importada: `GK` e 24 hexadecimais,
+    # e um segredo de 64 hexadecimais (ADR-0208).
+    s3_chave="GK$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    s3_segredo="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+
+    printf 'OCINYE_RELEASE_SHA=%s\nOCINYE_PROXY_HEALTH_HOST=%s\n' "$SHA" "$dominio" \
+        > "$parcial/release.env"
+    cat > "$parcial/comum.env" <<EOF
+OCINYE_ENVIRONMENT=production
+OCINYE_LOG_FORMAT=json
+OCINYE_LOG_LEVEL=info
+EOF
+    cat > "$parcial/postgres.env" <<EOF
+POSTGRES_USER=ocinye
+POSTGRES_DB=ocinye
+POSTGRES_PASSWORD=$pg_senha
+EOF
+    cat > "$parcial/object-store.env" <<EOF
+GARAGE_RPC_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+GARAGE_ADMIN_TOKEN=$(aleatorio 48 40)
+EOF
+    cat > "$parcial/core.env" <<EOF
+OCINYE_DATABASE_URL=postgres://ocinye:$pg_senha@postgres:5432/ocinye
+OCINYE_REDIS_URL=redis://redis:6379
+OCINYE_STORAGE_ENDPOINT_URL=http://object-store:3900
+OCINYE_STORAGE_REGION=us-east-1
+OCINYE_STORAGE_ACCESS_KEY=$s3_chave
+OCINYE_STORAGE_SECRET_KEY=$s3_segredo
+OCINYE_STORAGE_BUCKET=ocinye-artifacts
+OCINYE_STORAGE_BACKEND_CODE=local-object-store
+OCINYE_STORAGE_LOCATION_LABEL=$dominio
+OCINYE_STORAGE_RESIDENCY=UNDECLARED
+OCINYE_SEALING_KEY=$(if [ -n "$restaurar" ]; then tr -d '[:space:]' < "$ficheiro_selagem"; else chave_de_selagem; fi)
+OCINYE_CORS_ALLOWED_ORIGINS=$url_publico
+# O ponto de acesso canónico (ADR-0020): o Core semeia-o a partir daqui.
+OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
+EOF
+    if [ -z "$restaurar" ]; then
+        # O nome da Instância e a Distribuição de nascimento; as outras
+        # activam-se com ela no `bootstrap-admin` (P11).
+        printf 'OCINYE_INSTANCE_NAME=%s\nOCINYE_INSTANCE_PROFILE=%s\n' \
+            "$nome_instancia" "${DISTRIBUICOES[0]}" >> "$parcial/core.env"
+    fi
+    # O backup institucional desta Instância (ADR-0700). Sem destinatário `age`
+    # o conjunto fica em claro, e por isso nunca sai do anfitrião.
+    printf 'OCINYE_BACKUP_DIR=%s\nOCINYE_BACKUP_BACKEND=none\nOCINYE_BACKUP_KEEP=7\nOCINYE_BACKUP_RECIPIENT=%s\n' \
+        "$RAIZ/backups" "$destinatario" > "$parcial/backup.env"
+    cat > "$parcial/workspace.env" <<EOF
+OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
+EOF
+    umask 022
+    chmod 600 "$parcial"/*.env
+    mv "$parcial" "$CONFIG"
+    nota "segredos gerados neste anfitrião: base de dados, armazenamento, raiz de selagem"
+    nota "a raiz de selagem está em $CONFIG/core.env — sem ela, um backup não se lê"
+}
+
+# P07 · o proxy, para **todos** os pontos de acesso, e o TLS.
+#
+# Os nomes chegam validados (validar_dominio): entram no `server_name` e na
+# lista de SAN separados por espaço e vírgula, sem passar por nenhuma shell.
+fase_proxy() {  # tls cert chave dominio [host…]
+    local tls="$1" cert="$2" chave="$3"; shift 3
+    local canonico="$1" nomes="" sans="" h
+    for h in "$@"; do
+        validar_dominio "$h"
+        nomes="${nomes:+$nomes }$h"
+        sans="${sans:+$sans,}DNS:$h"
+    done
+    sed -e "s|{{SERVER_NAMES}}|$nomes|g" -e "s|{{DOMINIO}}|$canonico|g" \
+        "$RAIZ/current/infra/nginx/instance/30-instance.conf.template" \
+        > "$CONFIG/nginx/30-instance.conf"
+    cp "$RAIZ/current/infra/nginx/instance/00-comum.conf" "$CONFIG/nginx/00-comum.conf"
+    cp "$RAIZ/current/infra/nginx/instance/10-default.conf" "$CONFIG/nginx/10-default.conf"
+    if [ "$tls" = provided ]; then
+        [ -r "$cert" ] && [ -r "$chave" ] || fatal "--tls provided exige --cert e --key legíveis"
+        install -m 644 "$cert" "$CONFIG/tls/instance.pem"
+        install -m 600 "$chave" "$CONFIG/tls/instance.key"
+        nota "TLS: certificado fornecido"
+    elif [ -s "$CONFIG/tls/instance.pem" ] && [ -s "$CONFIG/tls/instance.key" ]; then
+        # Repetir a fase não troca o certificado que já foi registado.
+        nota "TLS: certificado auto-assinado já gerado"
+    else
+        docker run --rm -v "$CONFIG/tls:/tls" --entrypoint /bin/sh nginx:1.27-alpine -c \
+            "apk add --no-cache openssl >/dev/null 2>&1 && \
+             openssl req -x509 -newkey rsa:3072 -nodes -days 825 \
+               -subj '/CN=$canonico' -addext 'subjectAltName=$sans' \
+               -keyout /tls/instance.key -out /tls/instance.pem 2>/dev/null && \
+             chmod 600 /tls/instance.key" \
+            || fatal "a geração do certificado auto-assinado falhou"
+        nota "TLS: certificado auto-assinado para $nomes (modo de teste)"
+    fi
+}
+
+# P09 · as imagens do release.
+fase_imagens() {
+    sha_do_pacote
+    for imagem in "$AQUI"/images/*.tar; do
+        docker load -q -i "$imagem" | sed 's/^/  /'
+    done
+    for servico in core-server workspace worker conversion-runner converter; do
+        docker image inspect "ocinye/ocinye-$servico:$SHA" >/dev/null 2>&1 \
+            || fatal "o pacote não trouxe ocinye/ocinye-$servico:$SHA"
+    done
+}
+
+# P10 · base de dados e armazenamento.
+fase_dados() {
+    compose up -d postgres redis object-store >/dev/null
+    esperar_saudavel postgres
+    esperar_saudavel object-store
+    # `run`, e não `up`: o código de saída do init é o que diz se o bucket e a
+    # chave do Core ficaram como se pediu.
+    local registo
+    registo="$(mktemp)"
+    compose run --rm -T object-store-init > "$registo" 2>&1 \
+        || { cat "$registo" >&2; rm -f "$registo"; fatal "a preparação do armazenamento falhou"; }
+    rm -f "$registo"
+    nota "base de dados e armazenamento (Garage) prontos; bucket privado"
+}
+
+# P11 · a Instância, as migrações e o primeiro administrador.
+#
+# Deixa em CREDENCIAL_* a credencial temporária, para quem chama decidir o que
+# lhe faz: o `install` imprime-a uma vez; a fase isolada (`phase instance`)
+# escreve-a numa única linha no stdout, que o executor lê para a memória — e
+# tudo o resto vai para o stderr.
+fase_instancia() {  # nome_instancia nome email admin_nome admin_email [installation_id]
+    local nome_instancia="$1" nome="$2" email="$3" admin_nome="$4" admin_email="$5" \
+          instalacao="${6:-}" saida d
+    local args=(bootstrap-admin --instance-name "$nome_instancia")
+    for d in "${DISTRIBUICOES[@]}"; do args+=(--distribution "$d"); done
+    args+=(--name "$nome" --email "$email" --admin-name "$admin_nome" --admin-email "$admin_email")
+    [ -z "$instalacao" ] || args+=(--installation-id "$instalacao")
+    saida="$(compose run --rm --no-deps -T core "${args[@]}" 2>&1)" \
+        || { printf '%s\n' "$saida" | grep -v 'Palavra-passe' >&2
+             fatal "o bootstrap da Instância falhou"; }
+    CREDENCIAL_SEGREDO="$(printf '%s\n' "$saida" | sed -n 's/^ *Palavra-passe  *//p' | head -1)"
+    CREDENCIAL_UTILIZADOR="$(printf '%s\n' "$saida" | sed -n 's/^ *Utilizador  *//p' | head -1)"
+    CREDENCIAL_VALIDADE="$(printf '%s\n' "$saida" | sed -n 's/^ *Válida até  *//p' | head -1)"
+    saida=""
+    [ -n "$CREDENCIAL_SEGREDO" ] || fatal "o bootstrap não devolveu a credencial temporária"
+    nota "Instância «$nome_instancia» criada, Distribuições ${DISTRIBUICOES[*]}"
+}
+
+# P12 · um ponto de acesso fixo numa Distribuição (o canónico semeia-se com ele).
+fase_ponto() {  # installation_id host distribuição
+    validar_dominio "$2"
+    validar_distribuicao "$3"
+    compose run --rm --no-deps -T core endpoint-seed \
+        --installation-id "$1" --host "$2" --distribution "$3"
+}
+
+# P13 · os serviços.
+fase_servicos() {
+    compose up -d --remove-orphans >/dev/null
+    esperar_saudavel core
+    esperar_saudavel workspace
+    esperar_saudavel proxy
+}
+
+# A saúde vista do próprio anfitrião: o Workspace responde e manda entrar.
+fase_saude() {  # dominio
+    local codigo
+    codigo="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$1:443:127.0.0.1" \
+              "https://$1/")"
+    [ "$codigo" = 303 ] || fatal "o Workspace respondeu $codigo em https://$1/ (esperado 303 → /login)"
+    nota "https://$1/ → 303 (início de sessão)"
+}
+
+# P14 · a Instância volta depois de um reboot.
+fase_systemd() {
+    if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
+        install -m 644 "$RAIZ/current/infra/systemd/ocinye.service" /etc/systemd/system/ocinye.service
+        systemctl daemon-reload && systemctl enable ocinye.service >/dev/null 2>&1
+        nota "ocinye.service activo: a Instância volta depois de um reboot"
+    else
+        nota "sem systemd: a Instância não volta sozinha depois de um reboot"
+    fi
+}
 
 install_() {
-    local dominio="" nome_instancia="" perfil="" nome="" email="" admin_nome="" \
+    local dominio="" nome_instancia="" nome="" email="" admin_nome="" \
           admin_email="" url_publico="" tls="self-signed" cert="" chave="" \
           ficheiro_credencial="" restaurar="" ficheiro_selagem="" destinatario=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --domain) dominio="$2"; shift 2 ;;
             --instance-name) nome_instancia="$2"; shift 2 ;;
-            --profile) perfil="$2"; shift 2 ;;
+            # `--profile` é o nome antigo da primeira Distribuição.
+            --profile|--distribution) acrescentar_distribuicao "$2"; shift 2 ;;
+            --endpoint) acrescentar_ponto "$2"; shift 2 ;;
             --name) nome="$2"; shift 2 ;;
             --email) email="$2"; shift 2 ;;
             --admin-name) admin_nome="$2"; shift 2 ;;
@@ -189,22 +450,20 @@ install_() {
         esac
     done
     if [ -n "$restaurar" ]; then
-        # A Instância vem do conjunto: nome, perfil e pessoas já lá estão.
+        # A Instância vem do conjunto: nome, Distribuições e pessoas já lá estão.
         [ -n "$dominio" ] || { uso; fatal "falta --domain"; }
         [ -d "$restaurar" ] || fatal "--restore aponta para «$restaurar», que não é um conjunto"
         [ -r "$ficheiro_selagem" ] \
             || fatal "--restore exige --sealing-key-file: sem a raiz de selagem da origem,
   as credenciais e os segundos factores chegam íntegros e ilegíveis"
+        [ "${#PONTOS[@]}" -eq 0 ] || fatal "--endpoint não se usa num restauro: os pontos vêm do conjunto"
     else
-        for obrigatorio in dominio nome_instancia perfil nome email admin_nome admin_email; do
+        for obrigatorio in dominio nome_instancia nome email admin_nome admin_email; do
             [ -n "${!obrigatorio}" ] || { uso; fatal "falta --${obrigatorio//_/-}"; }
         done
-        case "$perfil" in research|business|education|personal) ;;
-            *) fatal "perfil desconhecido: $perfil (research, business, education, personal)" ;;
-        esac
+        [ "${#DISTRIBUICOES[@]}" -gt 0 ] || { uso; fatal "falta --distribution"; }
     fi
-    [[ "$dominio" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \
-        || fatal "o domínio «$dominio» não é um nome de anfitrião"
+    validar_dominio "$dominio"
     url_publico="${url_publico:-https://$dominio}"
     [[ "$url_publico" == https://* ]] \
         || fatal "o endereço público tem de ser https: o Workspace recusa cookies de sessão fora dele"
@@ -214,6 +473,12 @@ install_() {
                       || fatal "--tls provided exige --cert e --key legíveis" ;;
         *) fatal "--tls é self-signed ou provided" ;;
     esac
+    local ponto hosts=("$dominio")
+    for ponto in "${PONTOS[@]+"${PONTOS[@]}"}"; do
+        [ "${ponto%%=*}" != "$dominio" ] \
+            || fatal "o ponto canónico é genérico: não se fixa numa Distribuição"
+        hosts+=("${ponto%%=*}")
+    done
 
     # ── 1. O anfitrião ────────────────────────────────────────────────
     passo "O anfitrião"
@@ -237,182 +502,120 @@ install_() {
 
     # ── 2. O pacote ──────────────────────────────────────────────────
     passo "O pacote"
-    [ -r "$AQUI/RELEASE" ] && [ -r "$AQUI/SHA256SUMS" ] \
-        || fatal "isto não é um pacote de release (faltam RELEASE e SHA256SUMS)"
-    SHA="$(tr -d '[:space:]' < "$AQUI/RELEASE")"
-    [[ "$SHA" =~ ^[0-9a-f]{12}$ ]] || fatal "RELEASE não contém um SHA curto válido"
+    sha_do_pacote
     (cd "$AQUI" && sha256sum -c SHA256SUMS >/dev/null) \
         || fatal "as somas do pacote não conferem: não instalo um pacote alterado"
     nota "release $SHA · somas conferidas"
 
-    # ── 3. O release no sítio ────────────────────────────────────────
-    passo "O release"
-    install -d -m 755 "$RAIZ/releases/$SHA" "$RAIZ/conversion-spool" "$RAIZ/backups"
-    tar -xzf "$AQUI/source.tar.gz" -C "$RAIZ/releases/$SHA"
-    ln -sfn "$RAIZ/releases/$SHA" "$RAIZ/current"
-    nota "$RAIZ/current → releases/$SHA"
+    passo "O release";        fase_release
+    passo "Configuração";     fase_config "$dominio" "$url_publico" "$nome_instancia" \
+                                  "$restaurar" "$ficheiro_selagem" "$destinatario"
+    passo "Proxy e TLS";      fase_proxy "$tls" "$cert" "$chave" "${hosts[@]}"
+    passo "Imagens";          fase_imagens
+    passo "Persistência";     fase_dados
 
-    # ── 4. Configuração e segredos ───────────────────────────────────
-    passo "Configuração"
-    install -d -m 750 "$CONFIG" "$CONFIG/nginx" "$CONFIG/tls"
-    umask 077
-    local pg_senha s3_chave s3_segredo
-    pg_senha="$(aleatorio 48 40)"
-    # O formato que o Garage exige para uma chave importada: `GK` e 24 hexadecimais,
-    # e um segredo de 64 hexadecimais (ADR-0208).
-    s3_chave="GK$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    s3_segredo="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-
-    printf 'OCINYE_RELEASE_SHA=%s\nOCINYE_PROXY_HEALTH_HOST=%s\n' "$SHA" "$dominio" \
-        > "$CONFIG/release.env"
-    cat > "$CONFIG/comum.env" <<EOF
-OCINYE_ENVIRONMENT=production
-OCINYE_LOG_FORMAT=json
-OCINYE_LOG_LEVEL=info
-EOF
-    cat > "$CONFIG/postgres.env" <<EOF
-POSTGRES_USER=ocinye
-POSTGRES_DB=ocinye
-POSTGRES_PASSWORD=$pg_senha
-EOF
-    cat > "$CONFIG/object-store.env" <<EOF
-GARAGE_RPC_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
-GARAGE_ADMIN_TOKEN=$(aleatorio 48 40)
-EOF
-    cat > "$CONFIG/core.env" <<EOF
-OCINYE_DATABASE_URL=postgres://ocinye:$pg_senha@postgres:5432/ocinye
-OCINYE_REDIS_URL=redis://redis:6379
-OCINYE_STORAGE_ENDPOINT_URL=http://object-store:3900
-OCINYE_STORAGE_REGION=us-east-1
-OCINYE_STORAGE_ACCESS_KEY=$s3_chave
-OCINYE_STORAGE_SECRET_KEY=$s3_segredo
-OCINYE_STORAGE_BUCKET=ocinye-artifacts
-OCINYE_STORAGE_BACKEND_CODE=local-object-store
-OCINYE_STORAGE_LOCATION_LABEL=$dominio
-OCINYE_STORAGE_RESIDENCY=UNDECLARED
-OCINYE_SEALING_KEY=$(if [ -n "$restaurar" ]; then tr -d '[:space:]' < "$ficheiro_selagem"; else chave_de_selagem; fi)
-OCINYE_CORS_ALLOWED_ORIGINS=$url_publico
-# O ponto de acesso canónico (ADR-0020): o Core semeia-o a partir daqui.
-OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
-EOF
-    if [ -z "$restaurar" ]; then
-        printf 'OCINYE_INSTANCE_NAME=%s\nOCINYE_INSTANCE_PROFILE=%s\n' \
-            "$nome_instancia" "$perfil" >> "$CONFIG/core.env"
-    fi
-    # O backup institucional desta Instância (ADR-0700). Sem destinatário `age`
-    # o conjunto fica em claro, e por isso nunca sai do anfitrião.
-    printf 'OCINYE_BACKUP_DIR=%s\nOCINYE_BACKUP_BACKEND=none\nOCINYE_BACKUP_KEEP=7\nOCINYE_BACKUP_RECIPIENT=%s\n' \
-        "$RAIZ/backups" "$destinatario" > "$CONFIG/backup.env"
-    cat > "$CONFIG/workspace.env" <<EOF
-OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
-EOF
-    umask 022
-    chmod 600 "$CONFIG"/*.env
-    nota "segredos gerados neste anfitrião: base de dados, armazenamento, raiz de selagem"
-    nota "a raiz de selagem está em $CONFIG/core.env — sem ela, um backup não se lê"
-
-    # O proxy: um anfitrião, o Workspace. O Core não tem porta pública.
-    sed -e "s|{{DOMINIO}}|$dominio|g" \
-        "$RAIZ/current/infra/nginx/instance/30-instance.conf.template" \
-        > "$CONFIG/nginx/30-instance.conf"
-    cp "$RAIZ/current/infra/nginx/instance/00-comum.conf" "$CONFIG/nginx/00-comum.conf"
-    cp "$RAIZ/current/infra/nginx/instance/10-default.conf" "$CONFIG/nginx/10-default.conf"
-    if [ "$tls" = provided ]; then
-        install -m 644 "$cert" "$CONFIG/tls/instance.pem"
-        install -m 600 "$chave" "$CONFIG/tls/instance.key"
-        nota "TLS: certificado fornecido"
-    else
-        docker run --rm -v "$CONFIG/tls:/tls" --entrypoint /bin/sh nginx:1.27-alpine -c \
-            "apk add --no-cache openssl >/dev/null 2>&1 && \
-             openssl req -x509 -newkey rsa:3072 -nodes -days 825 \
-               -subj '/CN=$dominio' -addext 'subjectAltName=DNS:$dominio' \
-               -keyout /tls/instance.key -out /tls/instance.pem 2>/dev/null && \
-             chmod 600 /tls/instance.key"
-        nota "TLS: certificado auto-assinado para $dominio (substitua-o antes de uso real)"
-    fi
-
-    # ── 5. As imagens do release ─────────────────────────────────────
-    passo "Imagens"
-    for imagem in "$AQUI"/images/*.tar; do
-        docker load -q -i "$imagem" | sed 's/^/  /'
-    done
-    for servico in core-server workspace worker conversion-runner converter; do
-        docker image inspect "ocinye/ocinye-$servico:$SHA" >/dev/null 2>&1 \
-            || fatal "o pacote não trouxe ocinye/ocinye-$servico:$SHA"
-    done
-
-    # ── 6. Persistência ──────────────────────────────────────────────
-    passo "Persistência"
-    compose up -d postgres redis object-store >/dev/null
-    esperar_saudavel postgres
-    esperar_saudavel object-store
-    # `run`, e não `up`: o código de saída do init é o que diz se o bucket e a
-    # chave do Core ficaram como se pediu.
-    compose run --rm -T object-store-init > /tmp/ocinye-object-store-init.log 2>&1 \
-        || { cat /tmp/ocinye-object-store-init.log >&2; fatal "a preparação do armazenamento falhou"; }
-    nota "base de dados e armazenamento (Garage) prontos; bucket privado"
-
-    # ── 7. A Instância: criada, ou trazida de um conjunto ────────────
+    # ── A Instância: criada, ou trazida de um conjunto ───────────────
     if [ -n "$restaurar" ]; then
         restaurar_conjunto "$restaurar"
-        passo "Serviços"
-        compose up -d --remove-orphans >/dev/null
-        esperar_saudavel core
-        esperar_saudavel workspace
-        esperar_saudavel proxy
-        passo "Saúde"
-        local codigo_r
-        codigo_r="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$dominio:443:127.0.0.1" \
-                    "https://$dominio/")"
-        [ "$codigo_r" = 303 ] || fatal "o Workspace respondeu $codigo_r em https://$dominio/"
+        passo "Serviços";     fase_servicos
+        passo "Saúde";        fase_saude "$dominio"
         printf '\n  Ocinye OS %s restaurado a partir de %s.\n' "$SHA" "$(basename "$restaurar")"
         printf '  Workspace: %s — as pessoas entram com as credenciais de origem.\n\n' "$url_publico"
         return 0
     fi
-    passo "Instância"
-    local saida
-    saida="$(compose run --rm --no-deps -T core bootstrap-admin \
-        --instance-name "$nome_instancia" --profile "$perfil" \
-        --name "$nome" --email "$email" \
-        --admin-name "$admin_nome" --admin-email "$admin_email" 2>&1)" \
-        || { printf '%s\n' "$saida" | grep -v 'Palavra-passe' >&2
-             fatal "o bootstrap da Instância falhou"; }
-    local credencial
-    credencial="$(printf '%s\n' "$saida" | sed -n 's/^ *Palavra-passe  *//p' | head -1)"
-    [ -n "$credencial" ] || fatal "o bootstrap não devolveu a credencial temporária"
-    nota "Instância «$nome_instancia» criada, perfil $perfil"
-
-    # ── 8. Levantar ──────────────────────────────────────────────────
-    passo "Serviços"
-    compose up -d --remove-orphans >/dev/null
-    esperar_saudavel core
-    esperar_saudavel workspace
-    esperar_saudavel proxy
-
-    # ── 9. Saúde, vista de fora ──────────────────────────────────────
-    passo "Saúde"
-    local codigo
-    codigo="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$dominio:443:127.0.0.1" \
-              "https://$dominio/")"
-    [ "$codigo" = 303 ] || fatal "o Workspace respondeu $codigo em https://$dominio/ (esperado 303 → /login)"
-    nota "https://$dominio/ → 303 (início de sessão)"
-
-    if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
-        install -m 644 "$RAIZ/current/infra/systemd/ocinye.service" /etc/systemd/system/ocinye.service
-        systemctl daemon-reload && systemctl enable ocinye.service >/dev/null 2>&1
-        nota "ocinye.service activo: a Instância volta depois de um reboot"
+    passo "Instância";        fase_instancia "$nome_instancia" "$nome" "$email" "$admin_nome" "$admin_email"
+    if [ "${#PONTOS[@]}" -gt 0 ]; then
+        # A linha de comandos não tem diário de instalação: o `endpoint-seed`
+        # só serve uma Instância que nasceu de uma instalação registada, que é
+        # a do Ocinye OS Installer. Aqui os pontos fixos fazem-se depois, na
+        # Administração (D010).
+        nota "pontos fixos (--endpoint): configure-os na Administração depois do primeiro acesso"
     fi
+    passo "Serviços";         fase_servicos
+    passo "Saúde";            fase_saude "$dominio"
+    fase_systemd
 
     printf '\n  Ocinye OS %s instalado.\n' "$SHA"
     printf '  Workspace:        %s\n' "$url_publico"
     printf '  Administrador:    %s\n' "$admin_email"
     if [ -n "$ficheiro_credencial" ]; then
-        (umask 077 && printf '%s\n' "$credencial" > "$ficheiro_credencial")
+        (umask 077 && printf '%s\n' "$CREDENCIAL_SEGREDO" > "$ficheiro_credencial")
         printf '  Credencial temporária escrita em %s (0600).\n\n' "$ficheiro_credencial"
     else
-        printf '  Credencial temporária: %s\n' "$credencial"
+        printf '  Credencial temporária: %s\n' "$CREDENCIAL_SEGREDO"
         printf '  (mostrada uma vez; troca-se no primeiro acesso, com segundo factor)\n\n'
     fi
+    CREDENCIAL_SEGREDO=""
+}
+
+# ── phase: uma fase, para o executor do Installer ────────────────────────
+#
+# `ocinye phase <fase> [opções]`. Só o `ocinye-bootstrap` a chama, com argv
+# fixo e valores já validados pelos contratos tipados — e a fase valida-os
+# outra vez. A saída para máquinas vai para o stdout (uma linha); o resto para
+# o stderr.
+phase_() {
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    local fase="${1:-}"; shift || true
+    local dominio="" url_publico="" nome_instancia="" nome="" email="" admin_nome="" \
+          admin_email="" tls="self-signed" cert="" chave="" instalacao="" host="" dist="" fp
+    local hosts=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --domain) validar_dominio "$2"; dominio="$2"; shift 2 ;;
+            --public-url) url_publico="$2"; shift 2 ;;
+            --instance-name) nome_instancia="$2"; shift 2 ;;
+            --distribution) acrescentar_distribuicao "$2"; shift 2 ;;
+            --host) validar_dominio "$2"; hosts+=("$2"); host="$2"; shift 2 ;;
+            --name) nome="$2"; shift 2 ;;
+            --email) email="$2"; shift 2 ;;
+            --admin-name) admin_nome="$2"; shift 2 ;;
+            --admin-email) admin_email="$2"; shift 2 ;;
+            --tls) tls="$2"; shift 2 ;;
+            --cert) cert="$2"; shift 2 ;;
+            --key) chave="$2"; shift 2 ;;
+            --installation-id) [[ "$2" =~ ^inst-[0-9a-f]{16}$ ]] \
+                                   || fatal "--installation-id inválido"
+                               instalacao="$2"; shift 2 ;;
+            --bind) validar_distribuicao "$2"; dist="$2"; shift 2 ;;
+            *) fatal "opção desconhecida: $1" ;;
+        esac
+    done
+    case "$fase" in
+        release) fase_release >&2 ;;
+        config)
+            [ -n "$dominio" ] && [ -n "$nome_instancia" ] && [ "${#DISTRIBUICOES[@]}" -gt 0 ] \
+                || fatal "config exige --domain, --instance-name e --distribution"
+            fase_config "$dominio" "${url_publico:-https://$dominio}" "$nome_instancia" >&2 ;;
+        proxy)
+            [ -n "$dominio" ] || fatal "proxy exige --domain"
+            case "$tls" in self-signed|provided) ;; *) fatal "--tls é self-signed ou provided" ;; esac
+            fase_proxy "$tls" "$cert" "$chave" "$dominio" "${hosts[@]+"${hosts[@]}"}" >&2
+            # O certificado que o proxy vai servir, para a verificação de fora (V11).
+            fp="$(docker run --rm -v "$CONFIG/tls:/tls:ro" --entrypoint /bin/sh nginx:1.27-alpine -c \
+                'apk add --no-cache openssl >/dev/null 2>&1 && openssl x509 -in /tls/instance.pem -outform DER | sha256sum' \
+                | awk '{print $1}')"
+            [[ "$fp" =~ ^[0-9a-f]{64}$ ]] || fatal "não foi possível ler o certificado instalado"
+            printf 'cert_sha256\t%s\n' "$fp" ;;
+        images) fase_imagens >&2 ;;
+        data) fase_dados >&2 ;;
+        instance)
+            [ -n "$nome_instancia" ] && [ -n "$nome" ] && [ -n "$email" ] && [ -n "$admin_nome" ] \
+                && [ -n "$admin_email" ] && [ -n "$instalacao" ] && [ "${#DISTRIBUICOES[@]}" -gt 0 ] \
+                || fatal "instance exige a Instância, as Distribuições, as duas identidades e --installation-id"
+            fase_instancia "$nome_instancia" "$nome" "$email" "$admin_nome" "$admin_email" "$instalacao" >&2
+            printf 'credential\t%s\t%s\t%s\n' "$CREDENCIAL_UTILIZADOR" "$CREDENCIAL_VALIDADE" "$CREDENCIAL_SEGREDO"
+            CREDENCIAL_SEGREDO="" ;;
+        endpoint)
+            [ -n "$instalacao" ] && [ -n "$host" ] && [ -n "$dist" ] \
+                || fatal "endpoint exige --installation-id, --host e --bind"
+            fase_ponto "$instalacao" "$host" "$dist" ;;
+        services) fase_servicos >&2 ;;
+        systemd) fase_systemd >&2 ;;
+        # Só leitura: a Instância existe? (retoma depois de um corte na P11)
+        check-instance) compose run --rm --no-deps -T core verify-instance --json ;;
+        *) fatal "fase desconhecida: $fase" ;;
+    esac
 }
 
 # ── upgrade / rollback ───────────────────────────────────────────────────
@@ -463,8 +666,11 @@ trocar_para() {  # sha
     # O proxy vem do release para onde se vai, e não do que lá estava.
     local nginx="$RAIZ/releases/$destino/infra/nginx/instance"
     cp "$nginx/00-comum.conf" "$nginx/10-default.conf" "$CONFIG/nginx/"
-    sed -e "s|{{DOMINIO}}|$dominio|g" "$nginx/30-instance.conf.template" \
-        > "$CONFIG/nginx/30-instance.conf"
+    # Os nomes que o proxy já servia continuam a ser servidos (D011: vários pontos).
+    local nomes
+    nomes="$(sed -n 's/^ *server_name \(.*\);$/\1/p' "$CONFIG/nginx/30-instance.conf" | head -1)"
+    sed -e "s|{{SERVER_NAMES}}|${nomes:-$dominio}|g" -e "s|{{DOMINIO}}|$dominio|g" \
+        "$nginx/30-instance.conf.template" > "$CONFIG/nginx/30-instance.conf"
     docker exec ocinye-proxy-1 nginx -s reload >/dev/null 2>&1 || true
 }
 
@@ -629,6 +835,7 @@ uninstall_() {
 
 case "${1:-}" in
     install) shift; install_ "$@" ;;
+    phase) shift; phase_ "$@" ;;
     status) status_ ;;
     upgrade) shift; upgrade_ "$@" ;;
     backup) backup_ ;;
