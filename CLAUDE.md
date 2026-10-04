@@ -314,8 +314,8 @@ sem que nada falhe.
   a Administração das Distribuições e dos pontos de acesso
   ([ADR-0019](docs/adrs/0019-multi-distribution-instance.md),
   [ADR-0020](docs/adrs/0020-access-endpoints.md),
-  [ADR-0625](docs/adrs/0625-distribution-context-and-switching.md)) — está no
-  ramo `feat/design-d010`; a instalação com várias Distribuições e domínios
+  [ADR-0625](docs/adrs/0625-distribution-context-and-switching.md)) — está em
+  `main` (#193); a instalação com várias Distribuições e domínios
   próprios é da D011 ([ADR-0021](docs/adrs/0021-installer-consumes-typed-contracts.md), `Proposed`). Tarefas é o alias de O Meu
   Trabalho; Histórico não está registado. Equipas não existem: sem domínio,
   sem desenho, sem aplicação. **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
@@ -399,7 +399,7 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **63 migrations**, aplicáveis de base vazia; 96 tabelas.
+- **64 migrations**, aplicáveis de base vazia; 96 tabelas.
 - **Ocinye Terminal e ocsh: `IMPLEMENTED`, com o ecrã do Design (D008), em
   `main` (#191)** ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md),
   emendada na D008). Uma linha de comandos governada que **não é uma shell do
@@ -632,14 +632,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1824 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1843 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **721 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **731 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -653,18 +653,16 @@ sem que nada falhe.
 
 **Continua a não existir:**
 
-- **Nem todas as aplicações têm ecrã.** Em `main`: a casca, a autenticação, o
-  Desktop, as janelas (D001.2.1, D002), a Nye (D003), Ficheiros, Notas,
-  Calendário e Correio (D004) e Projectos, O Meu Trabalho, Ideias, Dados e
-  Conhecimento (D005), Unidades e Administração (D006), as nove da conclusão
-  (D007) e Monitor de Actividade, Resultados e Lixo (D007.1); o Terminal e o
-  Browser (D008), em `main` (#191). As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
-  contra um Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
+- **Viagens de browser automatizadas (Chrome) não existem.** Todas as 28
+  aplicações registadas têm ecrã do Claude Design, de D001 a D010, em `main`.
+  As viagens de browser com Chrome saíram com a UI antiga; as de HTTP contra um
+  Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
   `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`,
   `d004_journeys.rs`, `d005_journeys.rs`, `d006_journeys.rs`,
   `d007_journeys.rs`, `d007_1_journeys.rs`, `d008_journeys.rs`,
-  `d009_journeys.rs`). As provas de instalação,
-  actualização, restauro e hardware continuam em `NOT_RUN`
+  `d009_journeys.rs`, `d010_journeys.rs`), e cada fatia foi certificada num
+  browser real à mão. As provas de instalação, actualização, restauro e
+  hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 
 - **Nenhum runtime além da Web.** Não há PWA, casca Ocinye Desktop, posto

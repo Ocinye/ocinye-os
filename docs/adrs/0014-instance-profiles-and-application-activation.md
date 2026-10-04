@@ -113,3 +113,16 @@ fixações, Desktop, fundo, primeiros passos — em `experience::distribution`
 nada e não autoriza nada. Mudar o perfil depois da instalação (§1) mudaria as
 predefinições de quem não tem disposição nem fixações gravadas; a D009 não
 desenha essa mudança, que fica só de leitura na casca.
+
+## Emenda D010 (2026-10-01)
+
+O perfil desta ADR passou a **conjunto de Distribuições activadas** pela
+[ADR-0019](0019-multi-distribution-instance.md): a verdade é
+`instance_distributions` (migração 0060), com pelo menos uma activada, e o
+acesso de cada membro em `member_distribution_access`. `organisations.profile`
+fica um **espelho de leitura** durante uma versão, para que um binário anterior
+arranque. «Mudar o perfil depois da instalação» faz-se por activar e desactivar
+Distribuições (S26/S38) — nunca por substituir um valor. O resto desta ADR
+(activação de aplicações por Instância, essenciais que não se desactivam,
+inactiva ≠ desinstalada) mantém-se, com «perfil» lido como «Distribuições
+activadas».

@@ -1,8 +1,8 @@
 # Interface do Workspace
 
-**Estado: Claude Design D001 a D009 em `main`** (a D006 no PR #189, a D007
-com a D007.1 no PR #190, a D008 no PR #191, a D009 no PR #192; nenhuma
-deployada, produção continua em `4f8d048`).
+**Estado: Claude Design D001 a D010 em `main`** (a D006 no PR #189, a D007
+com a D007.1 no PR #190, a D008 no PR #191, a D009 no PR #192, a D010 no PR
+#193; nenhuma deployada, produção continua em `4f8d048`).
 A D003 traz o Nye ([ADR-0619](../adrs/0619-nye-universal-surface.md)); a D004
 Ficheiros, Notas, Calendário e Correio
 ([ADR-0620](../adrs/0620-productivity-apps-in-managed-windows.md)); a D005
@@ -23,8 +23,7 @@ está em `main`**
 [`iconography.md`](iconography.md)): um ponto de partida por Distribuição
 (widgets, fixações, fundo, primeiros passos), um ícone por aplicação e quatro
 de Distribuição; nada disto é autorização. **A D010 (pacote D010B) — acesso,
-várias Distribuições e superfície do sistema — foi integrada no ramo
-`feat/design-d010`** ([ADR-0019](../adrs/0019-multi-distribution-instance.md),
+várias Distribuições e superfície do sistema — está em `main`** ([ADR-0019](../adrs/0019-multi-distribution-instance.md),
 [ADR-0020](../adrs/0020-access-endpoints.md),
 [ADR-0625](../adrs/0625-distribution-context-and-switching.md)): Distribuições
 activadas por Instância e acesso por membro, uma activa por sessão no Core,

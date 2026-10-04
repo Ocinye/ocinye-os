@@ -428,8 +428,8 @@ services/
                          nós computacionais; ainda sem execução operacional.
 
 apps/
-  workspace              Experience Runtime — Axum, BFF. Sem interface desde
-                         2026-09-28 (docs/ui/UI_WIPE_REPORT.md).
+  workspace              Experience Runtime — Axum, BFF, com a interface do
+                         Claude Design D001–D010 (docs/ui/README.md).
 
 wasm/capabilities/       Capabilities isoladas. Alvo wasm32-wasip1.
 migrations/              Migrations SQL versionadas.
@@ -538,7 +538,7 @@ Estados, contratos de enumeração e o inventário de suites:
 | [Testes](docs/testing/README.md) | Suites, gates e disciplina de evidência |
 | [Desenvolvimento](docs/development/README.md) | Ambiente, ferramentas e regras de engenharia |
 | [Operação](docs/operations/README.md) · [Runbooks](docs/runbooks/README.md) | Operação, diagnóstico e recuperação |
-| [Deployment](docs/deployment/README.md) | Requisitos para uma futura produção |
+| [Deployment](docs/deployment/README.md) | A produção da Ocinye e como se deploya |
 
 ---
 

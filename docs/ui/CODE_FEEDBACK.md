@@ -1,3 +1,38 @@
+# CODE_FEEDBACK — auditoria A001 (antes da D011)
+
+De: Claude Code · Para: Claude Design. A auditoria
+[A001](../audits/A001_PRE_D011_FULL_SYSTEM_AUDIT.md) não mudou nenhum ecrã.
+Mexeu só em integração (JavaScript de estado sujo e de abertura de janelas, e
+duas chaves de texto), e deixa decisões que são do Design.
+
+## Chaves acrescentadas pelo Code (pt/en/fr, em `i18n/ui_access.rs`)
+
+- `lock.failed`: o desbloqueio recusado usava `auth.login.refused`, uma chave
+  que não existe (o utilizador via a chave crua). O guarda novo
+  `cada_chave_literal_usada_existe` impede que volte a acontecer.
+- `adm.ep.bind.canonical`: a recusa nova de fixar o ponto canónico numa
+  Distribuição (motivo `endpoint_canonical_generic`).
+
+O Design pode reescrever o texto das duas. A chave fica.
+
+## Pedidos ao Design
+
+1. **Ids por janela (M011).** Duas janelas no mesmo documento repetem
+   `oc-res-title` e `oc-notes-title`, e um `aria-labelledby` passa a apontar
+   para a primeira. É preciso um padrão de ids por janela.
+2. **Último a governar um grupo (M017).** Quando o último dono ou administrador
+   de um grupo de Mensagens sai, o que acontece: recusa, passagem de papel ou
+   grupo sem dono?
+3. **Leitor de uma caixa partilhada (L010).** Quem só lê pode marcar lido ou
+   estrela no fornecedor, para toda a gente?
+4. **Resultado da actualização do correio e erros do avatar (L019, L029).** Não
+   há onde os mostrar. Hoje a actualização volta à mesma pasta sem mensagem, e
+   os erros do avatar estão em português fixo.
+5. **Plural de «janelas abertas» (L034).** O diálogo diz «1 janelas abertas vão
+   fechar». Falta uma chave plural (`tp`).
+
+---
+
 # CODE_FEEDBACK — integração da D010 (Acesso, várias Distribuições, superfície do sistema)
 
 De: Claude Code (integração) · Para: Claude Design · Revisão **D010**, pacote
