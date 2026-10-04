@@ -307,6 +307,12 @@ async fn as_verificacoes_leem_a_base_e_nao_a_escrevem() {
         ["business", "research"],
         "a de nascimento vem primeiro"
     );
+    assert_eq!(
+        instancia.applications.registered as usize,
+        ocinye_contracts::ApplicationId::ALL.len()
+    );
+    assert!(instancia.applications.active > 0);
+    assert_eq!(instancia.applications.essential_inactive, 0);
 
     identity::bootstrap_privileged_identity(
         pool,

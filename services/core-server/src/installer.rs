@@ -166,6 +166,75 @@ mod tests {
         assert_eq!(get(&ok, "--host"), Some("a.b"));
     }
 
+    /// O que o Core escreve é o que o executor da instalação lê: cada tipo do
+    /// Core, serializado, lê-se no tipo do contrato (`deny_unknown_fields`).
+    #[test]
+    fn a_saida_do_core_le_se_no_contrato_do_installer() {
+        use ocinye_core::modules::organisation::installation as i;
+        use ocinye_installer_contracts::core_output as c;
+        let seeded = i::Seeded {
+            result: "created",
+            endpoint_id: uuid::Uuid::nil(),
+            host: "r.instalacao.test".into(),
+            distribution: "research",
+            state: "active",
+        };
+        let back: c::EndpointSeedOutput =
+            serde_json::from_str(&serde_json::to_string(&seeded).unwrap()).unwrap();
+        assert!(matches!(back, c::EndpointSeedOutput::Seeded { .. }));
+        for r in [
+            i::SeedRefusal::NotANewInstance,
+            i::SeedRefusal::SessionsExist,
+            i::SeedRefusal::HostInvalid,
+            i::SeedRefusal::HostIsCanonical,
+            i::SeedRefusal::HostTaken,
+            i::SeedRefusal::DistributionNotEnabled,
+            i::SeedRefusal::DistributionUnknown,
+        ] {
+            let line = serde_json::json!({ "refused": r.code() }).to_string();
+            assert!(
+                matches!(
+                    serde_json::from_str::<c::EndpointSeedOutput>(&line).unwrap(),
+                    c::EndpointSeedOutput::Refused { .. }
+                ),
+                "{line}"
+            );
+        }
+        let schema = i::SchemaState {
+            latest: "0064".into(),
+            count: 64,
+            pending: 0,
+        };
+        let _: c::VerifySchema =
+            serde_json::from_value(serde_json::to_value(&schema).unwrap()).unwrap();
+        let inst = i::InstanceState {
+            name: "N".into(),
+            slug: "n".into(),
+            distributions: vec!["business".into()],
+            applications: i::ApplicationsState {
+                registered: 28,
+                active: 20,
+                essential_inactive: 0,
+            },
+        };
+        let _: c::VerifyInstance =
+            serde_json::from_value(serde_json::to_value(&inst).unwrap()).unwrap();
+        let ep = i::EndpointState {
+            host: "os.instalacao.test".into(),
+            canonical: true,
+            distribution: None,
+            state: "active".into(),
+        };
+        let _: Vec<c::VerifyEndpoint> =
+            serde_json::from_value(serde_json::to_value(vec![ep]).unwrap()).unwrap();
+        let adm = i::AdminBootstrapState {
+            privileged_identity_exists: true,
+            temporary_credential_pending: true,
+        };
+        let _: c::VerifyAdminBootstrap =
+            serde_json::from_value(serde_json::to_value(adm).unwrap()).unwrap();
+    }
+
     #[test]
     fn a_verificacao_so_fala_json() {
         assert!(require_json(&argv(&["--json"])).is_ok());

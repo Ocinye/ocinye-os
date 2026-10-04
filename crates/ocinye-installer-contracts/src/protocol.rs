@@ -300,6 +300,12 @@ pub enum Event {
         /// The server items.
         report: VerificationReport,
     },
+    /// P07 installed the certificate the proxy will serve (its SHA-256, for
+    /// the operator-side check V11; never the key).
+    TlsInstalled {
+        /// SHA-256 of the leaf certificate (DER).
+        cert_sha256: String,
+    },
     /// The credential exists and waits for `ClaimSecret` (never in an event).
     CredentialIssued {
         /// The privileged identity's e-mail.

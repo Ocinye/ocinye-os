@@ -33,6 +33,7 @@
 #![deny(missing_docs)]
 
 pub mod canonical;
+pub mod core_output;
 pub mod hardware;
 pub mod ident;
 pub mod journal;

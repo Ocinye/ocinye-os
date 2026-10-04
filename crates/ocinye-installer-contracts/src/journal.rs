@@ -101,6 +101,8 @@ pub struct JournalSummary {
     pub failed_code: Option<String>,
     /// An Instance exists.
     pub instance_created: bool,
+    /// The self-signed certificate's SHA-256 (V11), when one was generated.
+    pub self_signed_cert_sha256: Option<String>,
     /// Last write.
     pub updated_at: String,
 }
@@ -251,6 +253,7 @@ impl InstallationJournal {
             current: current.map(|r| r.id),
             failed_code: current.and_then(|r| r.failed_code.clone()),
             instance_created: self.instance_created,
+            self_signed_cert_sha256: self.self_signed_cert_sha256.clone(),
             updated_at: self.updated_at.clone(),
         }
     }

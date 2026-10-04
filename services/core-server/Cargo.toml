@@ -33,6 +33,9 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 
 [dev-dependencies]
+# D011: os tipos que o executor da instalação lê. Só nos testes, para provar que
+# o que estes subcomandos escrevem é o que o contrato espera.
+ocinye-installer-contracts = { workspace = true }
 # `ocinye-core` outra vez, e só aqui com `test-fixtures`.
 #
 # O crate já está em `[dependencies]` sem a feature. Repeti-lo em

@@ -335,6 +335,20 @@ pub struct InstanceState {
     pub slug: String,
     /// Activadas: primeiro a de nascimento, depois por ordem de activação.
     pub distributions: Vec<String>,
+    /// O registo de aplicações, tal como esta Instância o vê (V07).
+    pub applications: ApplicationsState,
+}
+
+/// O registo de aplicações numa Instância: quantas existem, quantas estão
+/// activas, e se alguma essencial ficou inactiva (o que não pode acontecer).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ApplicationsState {
+    /// Registadas no código deste release.
+    pub registered: u32,
+    /// Activas nesta Instância.
+    pub active: u32,
+    /// Essenciais inactivas (sempre 0 numa Instância sã).
+    pub essential_inactive: u32,
 }
 
 /// # Errors
@@ -353,10 +367,21 @@ pub async fn verify_instance(pool: &PgPool) -> CoreResult<Option<InstanceState>>
     .bind(organisation.id)
     .fetch_all(pool)
     .await?;
+    let apps = super::application_states(pool, organisation.id).await?;
+    let count = |f: &dyn Fn(&super::ApplicationState) -> bool| {
+        u32::try_from(apps.applications.iter().filter(|a| f(a)).count()).unwrap_or(u32::MAX)
+    };
     Ok(Some(InstanceState {
         name: organisation.name,
         slug: organisation.slug,
         distributions,
+        applications: ApplicationsState {
+            registered: count(&|_| true),
+            active: count(&|a| a.active),
+            essential_inactive: count(&|a| {
+                a.class == ocinye_contracts::ApplicationClass::Essential && !a.active
+            }),
+        },
     }))
 }
 

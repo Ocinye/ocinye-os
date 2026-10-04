@@ -7,10 +7,13 @@ members = [
     "crates/ocinye-core",
     "crates/ocinye-capabilities",
     "crates/ocinye-installer-contracts",
+    "crates/ocinye-installer-controller",
     "services/core-server",
     "services/worker",
     "services/node-agent",
     "services/conversion-runner",
+    "services/installer-bootstrap",
+    "services/release-tool",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them
