@@ -390,6 +390,8 @@ pub async fn assign_task(
 /// comment is empty.
 pub async fn add_comment(
     tx: &mut Tx<'_>,
+    // O pool, para resolver o assunto pelo serviço que detém a sua leitura.
+    pool: &PgPool,
     principal: &Principal,
     workspace_id: Uuid,
     subject_type: &str,
@@ -400,6 +402,7 @@ pub async fn add_comment(
     let ctx = workspace_context(&workspace, ResourceKind::Comment);
     authorize(principal, Action::Create, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+    let subject = resolve_subject(pool, principal, &workspace, subject_type, subject_id).await?;
 
     let body = body.trim();
     if body.is_empty() {
@@ -408,7 +411,12 @@ pub async fn add_comment(
         ));
     }
 
-    let classification = workspace.classification();
+    // Um comentário sobre um artefacto é tão restrito como o artefacto: num
+    // ambiente INTERNAL, o que se diz de uma tarefa CONFIDENTIAL não fica
+    // INTERNAL (A001-M006).
+    let classification = workspace
+        .classification()
+        .most_restrictive(subject.classification);
     let comment = repo::insert_comment(
         &mut **tx,
         principal.organisation_id,
@@ -440,6 +448,35 @@ pub async fn add_comment(
     Ok(comment)
 }
 
+/// O assunto de um comentário: um recurso deste ambiente que esta pessoa
+/// alcança. Um tipo que o domínio não conhece, um recurso que não existe, um de
+/// outro ambiente ou um que esta pessoa não lê respondem o mesmo (A001-M006,
+/// o mesmo critério das pontas de uma relação).
+async fn resolve_subject(
+    pool: &PgPool,
+    principal: &Principal,
+    workspace: &ResearchWorkspace,
+    subject_type: &str,
+    subject_id: Uuid,
+) -> CoreResult<crate::resources::ResolvedResource> {
+    let not_found =
+        || CoreError::NotFound("O assunto do comentário não foi encontrado.".to_owned());
+    let kind =
+        ocinye_contracts::agentic::ResourceKind::parse(subject_type).ok_or_else(not_found)?;
+    let reference = ocinye_contracts::agentic::ResourceRef {
+        kind,
+        id: subject_id,
+        label: None,
+    };
+    let resolved = crate::resources::resolve(pool, principal, &reference)
+        .await
+        .map_err(|_| not_found())?;
+    if resolved.workspace_id != Some(workspace.id) {
+        return Err(not_found());
+    }
+    Ok(resolved)
+}
+
 /// List comments on a subject.
 ///
 /// # Errors
@@ -453,6 +490,7 @@ pub async fn list_comments(
     subject_id: Uuid,
 ) -> CoreResult<Vec<Comment>> {
     let workspace: ResearchWorkspace = get_workspace(pool, principal, workspace_id).await?;
+    resolve_subject(pool, principal, &workspace, subject_type, subject_id).await?;
     let filter = VisibilityFilter::for_principal(principal);
     repo::list_comments(
         pool,

@@ -387,6 +387,10 @@ async fn o_ultimo_administrador_da_plataforma_nao_se_suspende() {
     let (_, c) = admin_org(&s).await;
     let (pa, _, _) = s.pessoa(&[TechnicalRole::PlatformAdmin]).await;
     let base = format!("/admin/members/{pa}");
+    // Um OrganisationAdmin não age sobre quem administra a plataforma
+    // (A001-H004): a recusa vem antes da guarda de continuidade, que só quem
+    // detém `platform.administer` alcança (provada no Core,
+    // `nao_se_suspende_o_ultimo_administrador`).
     for destino in ["suspended", "disabled"] {
         let r = form(
             &s,
@@ -395,11 +399,7 @@ async fn o_ultimo_administrador_da_plataforma_nao_se_suspende() {
             &[("status", destino), ("reason", "reorganização")],
         )
         .await;
-        assert!(
-            location(&r).contains("refused=last_platform_admin"),
-            "{destino}: {}",
-            location(&r)
-        );
+        assert_eq!(r.status().as_u16(), 403, "{destino}: {}", location(&r));
         assert_eq!(estado(&s, pa).await, "active");
     }
     let r = form(&s, &c, &format!("{base}/delete"), &[]).await;

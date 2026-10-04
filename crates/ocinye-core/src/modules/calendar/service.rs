@@ -492,6 +492,28 @@ pub async fn create_reminder(
     if let Some(event_id) = request.event_id {
         get_event(&mut **tx, principal, event_id).await?;
     }
+    // O mesmo para uma tarefa: lida pelo serviço que a detém, com a sua
+    // classificação; uma que não se alcança e uma que não existe respondem o
+    // mesmo (A001-L009).
+    if let Some(task_id) = request.task_id {
+        let not_found = || CoreError::NotFound("Tarefa não encontrada.".to_owned());
+        let task = crate::modules::collaboration::repository::find_task(
+            &mut **tx,
+            task_id,
+            principal.organisation_id,
+        )
+        .await?
+        .ok_or_else(not_found)?;
+        crate::modules::research::readable_artefact_workspace(
+            &mut **tx,
+            principal,
+            task.workspace_id,
+            ResourceKind::Task,
+            task.classification(),
+        )
+        .await
+        .map_err(|_| not_found())?;
+    }
 
     let lembrete = repo::insert_reminder(
         &mut **tx,

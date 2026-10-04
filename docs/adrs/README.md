@@ -293,6 +293,8 @@ preencher.
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |
 | [0103](0103-core-owned-authentication.md) | Autenticação no Ocinye Core (username + password) | Identity | `HIGH` | Accepted |
 | [0104](0104-password-policy-and-hashing.md) | Política de palavras-passe e armazenamento de verificadores | Identity | `MEDIUM` | Accepted |
+| [0105](0105-dependency-advisory-coverage.md) | Nenhuma base de advisories é tratada como exaustiva | Security | `HIGH` | Accepted |
+| [0106](0106-email-as-the-single-credential.md) | O endereço institucional é a credencial única | Identity | `HIGH` | Accepted |
 | [0107](0107-mandatory-mfa-sessions-and-recovery.md) | MFA obrigatório para identidades privilegiadas, sessões e recuperação | Identity | `FOUNDATIONAL` | Accepted |
 | [0108](0108-resource-governance-and-compute-control-plane.md) | Governança de recursos e o control-plane de computação | Identity | `FOUNDATIONAL` | Accepted |
 | [0109](0109-ai-request-admission-and-immutable-usage-ledger.md) | Admissão de pedidos de IA e o ledger de uso imutável | Identity | `HIGH` | Accepted |
@@ -305,6 +307,7 @@ preencher.
 | [0204](0204-institutional-files-and-folders.md) | O ficheiro institucional é a autoridade sobre os bytes | Data | `FOUNDATIONAL` | Accepted |
 | [0205](0205-content-extraction-and-lexical-body-search.md) | Extracção de conteúdo e pesquisa lexical do corpo | Knowledge | `FOUNDATIONAL` | Accepted |
 | [0206](0206-embeddings-and-hybrid-retrieval.md) | Embeddings versionados e recuperação híbrida | Knowledge | `FOUNDATIONAL` | Accepted |
+| [0207](0207-personal-files-and-storage.md) | Ficheiros pessoais: todo o membro tem um espaço próprio | Knowledge | `HIGH` | Accepted |
 | [0208](0208-maintained-object-store.md) | Um armazenamento de objectos mantido: Garage | Data | `HIGH` | Accepted |
 | [0300](0300-ai-gateway.md) | AI Gateway orientado a capacidades | AI | `HIGH` | Accepted |
 | [0301](0301-agentic-control-plane.md) | O Agentic Control Plane: Main Agent, Runtime, Registry | Agentic | `HIGH` | Accepted |
@@ -314,6 +317,11 @@ preencher.
 | [0305](0305-provider-conformance.md) | Conformidade de fornecedor como fronteira obrigatória | AI | `HIGH` | Accepted |
 | [0306](0306-resource-resolution-as-authorization-boundary.md) | Resolução de recursos como fronteira de autorização | Agentic | `HIGH` | Accepted |
 | [0307](0307-dual-entry-single-authority.md) | Dual Entry, Single Authority: operabilidade agentic universal por capabilities tipadas | Agentic | `HIGH` | Accepted |
+| [0308](0308-typed-ai-interaction-envelope.md) | O envelope tipado de interacção de IA | AI | `HIGH` | Accepted |
+| [0309](0309-ai-conversation-persistence-and-provenance.md) | Persistência e proveniência de conversas de IA | AI | `MEDIUM` | Accepted |
+| [0310](0310-ai-fabric-provider-registry.md) | O tecido de IA: fornecedores registados pela Instância | AI | `HIGH` | Accepted |
+| [0311](0311-ai-policy-and-multi-provider-routing.md) | Política e roteamento de IA entre vários fornecedores | AI | `HIGH` | Accepted |
+| [0312](0312-ocsh-governed-command-shell.md) | ocsh: uma shell de comandos governada sobre as capabilities do Core | Agentic | `HIGH` | Proposed |
 | [0400](0400-mail-as-institutional-surface.md) | Ocinye Mail como superfície institucional, não como cliente de email | Mail | `HIGH` | Accepted |
 | [0401](0401-mail-provider-abstraction.md) | Abstracção de fornecedor de correio | Mail | `MEDIUM` | Accepted |
 | [0402](0402-mail-html-sanitisation.md) | Higienização do HTML recebido por correio | Mail | `MEDIUM` | Accepted |

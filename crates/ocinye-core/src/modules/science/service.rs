@@ -133,7 +133,20 @@ pub async fn list_hypotheses(
     workspace_id: Uuid,
 ) -> CoreResult<Vec<Hypothesis>> {
     let workspace = get_workspace(pool, principal, workspace_id).await?;
-    repo::list_hypotheses(pool, workspace.id).await
+    // Ler o ambiente não é ler cada artefacto: a classificação de cada um
+    // decide, como na leitura de um só (A001-M005, o mesmo que RES-07).
+    Ok(repo::list_hypotheses(pool, workspace.id)
+        .await?
+        .into_iter()
+        .filter(|item| {
+            authorize(
+                principal,
+                Action::Read,
+                &artefact_context(&workspace, ResourceKind::Hypothesis, item.classification()),
+            )
+            .is_ok()
+        })
+        .collect())
 }
 
 // ── Metodologias ────────────────────────────────────────────────────────
@@ -149,7 +162,20 @@ pub async fn list_methodologies(
     workspace_id: Uuid,
 ) -> CoreResult<Vec<Methodology>> {
     let workspace = get_workspace(pool, principal, workspace_id).await?;
-    repo::list_methodologies(pool, workspace.id).await
+    // Ler o ambiente não é ler cada artefacto: a classificação de cada um
+    // decide, como na leitura de um só (A001-M005, o mesmo que RES-07).
+    Ok(repo::list_methodologies(pool, workspace.id)
+        .await?
+        .into_iter()
+        .filter(|item| {
+            authorize(
+                principal,
+                Action::Read,
+                &artefact_context(&workspace, ResourceKind::Methodology, item.classification()),
+            )
+            .is_ok()
+        })
+        .collect())
 }
 
 /// Load one methodology, with the workspace that governs it.
@@ -553,7 +579,20 @@ pub async fn list_studies(
     workspace_id: Uuid,
 ) -> CoreResult<Vec<Study>> {
     let workspace = get_workspace(pool, principal, workspace_id).await?;
-    repo::list_studies(pool, workspace.id).await
+    // Ler o ambiente não é ler cada artefacto: a classificação de cada um
+    // decide, como na leitura de um só (A001-M005, o mesmo que RES-07).
+    Ok(repo::list_studies(pool, workspace.id)
+        .await?
+        .into_iter()
+        .filter(|item| {
+            authorize(
+                principal,
+                Action::Read,
+                &artefact_context(&workspace, ResourceKind::Study, item.classification()),
+            )
+            .is_ok()
+        })
+        .collect())
 }
 
 // ── Execuções ───────────────────────────────────────────────────────────

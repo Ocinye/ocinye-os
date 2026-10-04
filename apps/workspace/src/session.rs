@@ -152,18 +152,13 @@ impl SessionStore {
     }
 
     /// End a session.
-    /// Muda uma sessão viva (D010: bloquear, desbloquear, falhas).
-    pub fn update(&self, id: &str, f: impl FnOnce(&mut Session)) -> bool {
-        let Ok(mut inner) = self.inner.lock() else {
-            return false;
-        };
-        match inner.sessions.get_mut(id) {
-            Some(session) => {
-                f(session);
-                true
-            }
-            None => false,
-        }
+    /// Muda uma sessão viva (D010: bloquear, desbloquear, falhas), e devolve o
+    /// que a mudança disse — lido e escrito sob a mesma tranca, para que um
+    /// contador não se perca entre pedidos em paralelo (A001-M015). Tolera o
+    /// envenenamento como os outros métodos do registo.
+    pub fn update<R>(&self, id: &str, f: impl FnOnce(&mut Session) -> R) -> Option<R> {
+        let mut inner = self.registo();
+        inner.sessions.get_mut(id).map(f)
     }
 
     pub fn remove(&self, id: &str) {

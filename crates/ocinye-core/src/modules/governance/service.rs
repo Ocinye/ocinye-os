@@ -39,14 +39,18 @@ pub async fn audit_resource_types(pool: &PgPool, principal: &Principal) -> CoreR
     authorize(principal, Action::ReadAudit, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
     Ok(sqlx::query_scalar(
+        // Só os desta organização: a lista de tipos é um facto do trilho dela,
+        // e não do de outra organização da mesma base (A001-L021).
         "WITH RECURSIVE t AS (
-             SELECT min(resource_type) AS r FROM audit_events
+             SELECT min(resource_type) AS r FROM audit_events WHERE organisation_id = $1
              UNION ALL
-             SELECT (SELECT min(resource_type) FROM audit_events WHERE resource_type > t.r)
+             SELECT (SELECT min(resource_type) FROM audit_events
+                      WHERE organisation_id = $1 AND resource_type > t.r)
                FROM t WHERE t.r IS NOT NULL
          )
          SELECT r FROM t WHERE r IS NOT NULL LIMIT 200",
     )
+    .bind(principal.organisation_id)
     .fetch_all(pool)
     .await?)
 }

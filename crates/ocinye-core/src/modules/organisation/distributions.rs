@@ -403,18 +403,66 @@ fn managing_roles() -> Vec<&'static str> {
         .collect()
 }
 
-/// Pelo menos um membro capaz de entrar, com `organisation.manage`, tem acesso
-/// a uma Distribuição activada — senão ninguém administra a Instância.
-async fn ensure_an_administrator_can_enter(
-    tx: &mut crate::Tx<'_>,
-    organisation_id: Uuid,
-) -> CoreResult<()> {
+/// A guarda da última via de administração e a do último administrador da
+/// plataforma tomam a **mesma** tranca: uma operação de cada lado, ao mesmo
+/// tempo, não passam as duas cada uma pela sua guarda (A001-H007).
+async fn lock_administration(tx: &mut crate::Tx<'_>, organisation_id: Uuid) -> CoreResult<()> {
     sqlx::query(
-        "SELECT pg_advisory_xact_lock(hashtextextended('ocinye.distribution_admin.' || $1::text, 0))",
+        "SELECT pg_advisory_xact_lock(hashtextextended('ocinye.platform_admin.' || $1::text, 0))",
     )
     .bind(organisation_id)
     .execute(&mut **tx)
     .await?;
+    Ok(())
+}
+
+/// Esta pessoa é, agora, um administrador capaz de entrar numa Distribuição
+/// activada? Lido antes de uma mudança de conta ou de papel, para saber se essa
+/// mudança tira uma via de administração (A001-H007).
+///
+/// # Errors
+///
+/// Database errors.
+pub(crate) async fn is_entry_administrator(
+    tx: &mut crate::Tx<'_>,
+    organisation_id: Uuid,
+    person_id: Uuid,
+) -> CoreResult<bool> {
+    lock_administration(tx, organisation_id).await?;
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1
+               FROM person_roles pr
+               JOIN people p ON p.id = pr.person_id
+               JOIN member_distribution_access a
+                 ON a.person_id = p.id AND a.organisation_id = p.organisation_id
+               JOIN instance_distributions d
+                 ON d.organisation_id = a.organisation_id AND d.distribution = a.distribution
+              WHERE p.organisation_id = $1
+                AND p.id = $2
+                AND pr.revoked_at IS NULL
+                AND pr.role = ANY($3)
+                AND p.status IN ('invited', 'active')
+                AND d.state = 'enabled')",
+    )
+    .bind(organisation_id)
+    .bind(person_id)
+    .bind(managing_roles())
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
+/// Pelo menos um membro capaz de entrar, com `organisation.manage`, tem acesso
+/// a uma Distribuição activada — senão ninguém administra a Instância.
+///
+/// # Errors
+///
+/// [`CoreError::Invariant`] `last_administrator_access`; database errors.
+pub(crate) async fn ensure_an_administrator_can_enter(
+    tx: &mut crate::Tx<'_>,
+    organisation_id: Uuid,
+) -> CoreResult<()> {
+    lock_administration(tx, organisation_id).await?;
     let ok: bool = sqlx::query_scalar(
         "SELECT EXISTS (
              SELECT 1
@@ -670,10 +718,17 @@ pub async fn grant(
     require(principal, Permission::OrganisationManage)?;
     let mut tx = pool.begin().await?;
     person_in(&mut tx, principal.organisation_id, person_id).await?;
-    if !enabled(&mut *tx, principal.organisation_id)
-        .await?
-        .contains(distribution)
-    {
+    // FOR SHARE: uma desactivação em simultâneo espera (A001-L012).
+    let is_enabled: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM instance_distributions
+                         WHERE organisation_id = $1 AND distribution = $2
+                           AND state = 'enabled' FOR SHARE)",
+    )
+    .bind(principal.organisation_id)
+    .bind(distribution.as_str())
+    .fetch_one(&mut *tx)
+    .await?;
+    if !is_enabled {
         return Err(CoreError::Invariant {
             code: ErrorCode::Conflict,
             reason: refusal::DISTRIBUTION_NOT_ENABLED,

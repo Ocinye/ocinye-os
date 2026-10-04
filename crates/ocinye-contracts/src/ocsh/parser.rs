@@ -146,6 +146,18 @@ pub fn parse(line: &str) -> Result<Parsed, ParseError> {
     // `? pergunta` é o atalho explícito para `nye ask`.
     let trimmed = line.trim_start();
     if let Some(rest) = trimmed.strip_prefix('?') {
+        // A pergunta é texto para a Nye, não um comando — `;` ou `$(` nela não
+        // se executam. Mas o tecto da linha e a recusa de caracteres de
+        // controlo valem para ela como para qualquer outra (A001-L015).
+        if line.len() > super::lexer::MAX_LINE_BYTES {
+            return Err(ParseError::Lex(LexError::TooLong));
+        }
+        if line
+            .chars()
+            .any(|c| c.is_control() && c != ' ' && c != '\t')
+        {
+            return Err(ParseError::Lex(LexError::ControlCharacter));
+        }
         let question = rest.trim();
         if question.is_empty() {
             return Err(ParseError::MissingArgument("question"));

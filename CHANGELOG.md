@@ -7,6 +7,41 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Auditoria A001 — sistema inteiro antes da D011 — 2026-10-04 (ramo `audit/pre-d011-full-system`)
+
+Auditoria de D001–D010 sobre `main @ 32ba19a`, com correcção dos defeitos
+verificados; o registo completo, por identificador estável, está em
+[`docs/audits/A001_PRE_D011_FULL_SYSTEM_AUDIT.md`](docs/audits/A001_PRE_D011_FULL_SYSTEM_AUDIT.md).
+Nenhuma funcionalidade nova, nenhuma implementação da D011, nenhum deploy.
+
+- **Segurança (Core):** os anexos de um rascunho só se alcançam pelo dono do
+  rascunho (H003); quem não administra a plataforma não repõe a palavra-passe,
+  não suspende, não revoga sessões nem apaga um `PlatformAdmin` (H004); suspender,
+  apagar ou retirar o papel ao único administrador que entra é recusado (H007);
+  uma capability de uma aplicação inactiva não corre pelo plano agentic (H008);
+  grants de permissões exclusivas da plataforma também exigem MFA (M004); o
+  ponto de acesso canónico não se fixa numa Distribuição (M016); um duplicado
+  recusado pela base é `409`, sem nomear a tabela (M018); comentários, ligações
+  de conhecimento e listas científicas passam pela política do recurso
+  (M005, M006, M019); a última liderança de um ambiente não se despromove (M007);
+  o ocsh esconde segredos também entre aspas e em qualquer grafia (M014).
+- **Segurança (Workspace):** o ecrã bloqueado bloqueia todas as rotas (H005);
+  a versão do avatar é um segmento e nada mais (H006); um regresso com
+  caracteres de controlo não abre um redireccionamento (M001); o desbloqueio
+  conta a tentativa antes de perguntar ao Core (M015); o markdown das notas
+  lê-se em tempo linear (M008).
+- **Correcção:** fechar uma janela com trabalho por guardar volta a funcionar
+  (H001); as janelas não se perdem quando o Core falha (H002); perder a
+  Distribuição activa com duas ou mais restantes deixa escolher (M002); escolher
+  outra Distribuição passa pelo diálogo de mudança (M003).
+- **Dependências:** `wasmtime`/`wasmtime-wasi` 48.0.3 → 48.0.5, pelos avisos
+  RUSTSEC-2026-0321 a 0327 (M020).
+- **Migração 0064:** `ck_sessions_context_id` deixava um identificador de
+  contexto sem tipo (L006).
+- **Guardas novas:** cada chave i18n literal usada no código existe
+  (`cada_chave_literal_usada_existe`); a actualização 0001–0059 → actual
+  preserva os dados (`d010_upgrade.rs`).
+
 ### Interface D010 (pacote D010B) — Acesso, várias Distribuições e superfície do sistema — 2026-10-01 (ramo `feat/design-d010`)
 
 - **Uma Instância, uma ou mais Distribuições** (ADR-0019): activadas por

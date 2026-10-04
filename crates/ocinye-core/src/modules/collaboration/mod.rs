@@ -13,7 +13,7 @@
 
 pub mod activity;
 mod model;
-mod repository;
+pub(crate) mod repository;
 mod service;
 
 pub use activity::{

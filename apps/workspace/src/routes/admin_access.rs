@@ -43,6 +43,7 @@ fn refusal_text(f: &ApiFailure) -> String {
             "last_enabled_distribution" => t("adm.dist.last").to_owned(),
             "last_administrator_access" => t("adm.access.last").to_owned(),
             "endpoint_last_or_canonical" => t("adm.ep.disable.last").to_owned(),
+            "endpoint_canonical_generic" => t("adm.ep.bind.canonical").to_owned(),
             "endpoint_conflict" => t("adm.ep.err.conflict").to_owned(),
             "endpoint_invalid" => t("adm.ep.err.invalid").to_owned(),
             _ => message.clone(),
@@ -235,7 +236,10 @@ pub(super) async fn distribution_enable(
     .await
     {
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        _ => Redirect::to("/admin/distributions").into_response(),
+        _ => {
+            state.hosts.clear();
+            Redirect::to("/admin/distributions").into_response()
+        }
     }
 }
 
@@ -257,7 +261,12 @@ pub(super) async fn distribution_disable(
     )
     .await
     {
-        Ok(_) => Redirect::to("/admin/distributions").into_response(),
+        Ok(_) => {
+            // Um ponto fixo nela deixou de servir: este Workspace sabe-o já,
+            // sem esperar pela cache (A001-L020).
+            state.hosts.clear();
+            Redirect::to("/admin/distributions").into_response()
+        }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(f) => {
             let q = DistQuery {
@@ -663,7 +672,10 @@ pub(super) async fn endpoint_create(
     )
     .await;
     match result {
-        Ok(e) => Redirect::to(&format!("/admin/endpoints?open={}", text(&e, "id"))).into_response(),
+        Ok(e) => {
+            state.hosts.clear();
+            Redirect::to(&format!("/admin/endpoints?open={}", text(&e, "id"))).into_response()
+        }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(f) => {
             let error = match &f {
@@ -746,7 +758,12 @@ pub(super) async fn endpoint_action(
     )
     .await
     {
-        Ok(_) => Redirect::to(&format!("/admin/endpoints?open={id}")).into_response(),
+        Ok(_) => {
+            // A mudança vê-se já neste Workspace; os outros processos, ao fim
+            // da cache curta (A001-L020).
+            state.hosts.clear();
+            Redirect::to(&format!("/admin/endpoints?open={id}")).into_response()
+        }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(f) if matches!(action.as_str(), "binding" | "disable") => {
             let to = body

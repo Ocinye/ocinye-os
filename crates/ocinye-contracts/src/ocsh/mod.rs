@@ -88,7 +88,10 @@ pub fn redact(line: &str) -> String {
                     hide_next = false;
                     continue;
                 }
-                if !quoted {
+                // Também entre aspas: `--password="x"` é um só *word*, marcado
+                // como citado, e passava inteiro para o eco e o histórico
+                // (A001-M014). Esconder a mais é o lado certo do erro.
+                {
                     if let Some(body) = text.strip_prefix("--") {
                         let (name, inline) = match body.split_once('=') {
                             Some((n, _)) => (n, true),
@@ -130,11 +133,18 @@ pub fn redact(line: &str) -> String {
 }
 
 fn is_sensitive_option(name: &str) -> bool {
-    SENSITIVE_OPTION_NAMES.contains(&name)
+    // Sem diferença de caixa nem de `_`/`-`, e pelas partes do nome:
+    // `--PASSWORD`, `--api_key`, `--access-token`, `--passwd` são o mesmo
+    // segredo com outra grafia (A001-M014).
+    let normal = name.to_ascii_lowercase().replace('_', "-");
+    SENSITIVE_OPTION_NAMES.contains(&normal.as_str())
+        || ["pass", "token", "secret", "key"]
+            .iter()
+            .any(|part| normal.contains(part))
         || registry::COMMANDS
             .iter()
             .flat_map(|c| c.options.iter())
-            .any(|o| o.name == name && o.sensitive)
+            .any(|o| o.name.eq_ignore_ascii_case(&normal) && o.sensitive)
 }
 
 fn quote(text: &str) -> String {
@@ -144,6 +154,27 @@ fn quote(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A001-M014: aspas, maiúsculas e grafias compostas não escapam.
+    #[test]
+    fn o_segredo_nao_escapa_por_aspas_nem_por_grafia() {
+        for line in [
+            r#"x --password="hunter2""#,
+            "x --key='sk-live-1'",
+            "x --PASSWORD hunter2",
+            "x --Token=hunter2",
+            "x --api_key hunter2",
+            "x --access-token=hunter2",
+            "x --passwd hunter2",
+            "x --secret-key hunter2",
+        ] {
+            let red = redact(line);
+            assert!(
+                !red.contains("hunter2") && !red.contains("sk-live-1"),
+                "{line} → {red}"
+            );
+        }
+    }
 
     #[test]
     fn codigos_de_saida_estaveis() {

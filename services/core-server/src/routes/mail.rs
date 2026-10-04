@@ -507,9 +507,11 @@ async fn send(
     // storage and each is INTERNAL (a personal object), which is what the send
     // policy sees (briefing §35).
     let attachments = match (request.draft_id, state.store.as_deref()) {
-        (Some(draft_id), Some(store)) => mail::attachments_for_send(&state.pool, store, draft_id)
-            .await
-            .map_err(|error| ApiError::new(error, &ids))?,
+        (Some(draft_id), Some(store)) => {
+            mail::attachments_for_send(&state.pool, store, &principal, request.mailbox_id, draft_id)
+                .await
+                .map_err(|error| ApiError::new(error, &ids))?
+        }
         _ => Vec::new(),
     };
     let classifications: Vec<Classification> = vec![Classification::Internal; attachments.len()];

@@ -777,6 +777,13 @@ pub fn router(state: WorkspaceState) -> Router {
             state.clone(),
             error_pages,
         ))
+        // D010 · S22: uma sessão bloqueada não chega a nenhuma rota além do
+        // ecrã de bloqueio — imposto aqui, uma vez, e não em cada handler
+        // (A001-H005).
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            lock_gate,
+        ))
         // O portão de arranque corre **antes** de qualquer página ser
         // construída. Uma pessoa que abra o Ocinye OS vê o arranque, e não o
         // Workspace a ser escondido depois.
@@ -816,6 +823,44 @@ fn interface_pending() -> Response {
         "interface_pending",
     )
         .into_response()
+}
+
+/// S22 · enquanto a sessão está bloqueada, só o ecrã de bloqueio, o
+/// desbloqueio, a saída, a entrada e os ficheiros estáticos respondem. Um `GET`
+/// vai para `/lock`; o resto (JSON, formulários, terminal, janelas) recebe
+/// `423 Locked` — o bloqueio não depende de cada handler se lembrar dele
+/// (A001-H005).
+async fn lock_gate(
+    State(state): State<WorkspaceState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let path = request.uri().path();
+    let livre = matches!(path, "/lock" | "/unlock" | "/logout" | "/health" | "/boot")
+        || path.starts_with("/login")
+        || path.starts_with("/static/");
+    if livre {
+        return next.run(request).await;
+    }
+    let locked = session::session_id_from_cookies(
+        request
+            .headers()
+            .get(header::COOKIE)
+            .and_then(|v| v.to_str().ok()),
+    )
+    .and_then(|id| state.sessions.get(&id))
+    .is_some_and(|s| s.locked);
+    if !locked {
+        return next.run(request).await;
+    }
+    if matches!(
+        *request.method(),
+        axum::http::Method::GET | axum::http::Method::HEAD
+    ) {
+        Redirect::to("/lock").into_response()
+    } else {
+        (StatusCode::LOCKED, "locked").into_response()
+    }
 }
 
 /// Resolve o idioma do pedido e corre o resto dentro do seu escopo.
@@ -1156,6 +1201,29 @@ fn destino_de_entrada(headers: &HeaderMap) -> &'static str {
     }
 }
 
+/// Termina no Core a sessão que o Workspace acabou de largar (A001-L023).
+///
+/// Largar só a sessão local deixava a do Core viva até expirar — contada nas
+/// sessões activas da Administração, e válida para quem tivesse o token. Corre
+/// em segundo plano: quem pediu não espera pela resposta.
+pub(crate) fn end_core_session(state: &WorkspaceState, access_token: &str) {
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
+    let state = state.clone();
+    let token = access_token.to_owned();
+    runtime.spawn(async move {
+        let _ = api::post(
+            &state,
+            &token,
+            &Uuid::new_v4().to_string(),
+            "/api/v1/auth/logout",
+            &serde_json::json!({}),
+        )
+        .await;
+    });
+}
+
 fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member> {
     let cookie = headers
         .get(header::COOKIE)
@@ -1169,6 +1237,7 @@ fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member>
     let here = crate::access::current().map(|e| (e.endpoint_id, e.revision));
     if session.endpoint != here {
         state.sessions.remove(&id);
+        end_core_session(state, &session.access_token);
         return None;
     }
     Some(Member {
@@ -2044,7 +2113,7 @@ async fn mail_sync(
     let body = serde_json::json!({ "folder": folder });
     let path = format!("/api/v1/mail/mailboxes/{mailbox_id}/sync");
 
-    let outcome = match api::post(
+    if let Err(ApiFailure::Unauthorised) = api::post(
         &state,
         &member.session.access_token,
         &member.correlation_id,
@@ -2053,19 +2122,16 @@ async fn mail_sync(
     )
     .await
     {
-        Ok(result) => {
-            let indexed = result.get("indexed").and_then(Value::as_u64).unwrap_or(0);
-            format!("{indexed} mensagem(ns) actualizada(s).")
-        }
-        Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
-        // A falha volta com a caixa, não num ecrã de erro: a lista continua
-        // utilizável, apenas desactualizada, e o membro precisa de saber isso.
-        Err(failure) => failure.to_string(),
-    };
+        return Redirect::to("/login").into_response();
+    }
 
+    // Directo à caixa, com a pasta codificada — e não por `/mail/{id}`, que
+    // reencaminhava outra vez e perdia a pasta (A001-L019). O resultado da
+    // actualização não tem lugar desenhado no Correio (D004): pedido ao Design
+    // em CODE_FEEDBACK; até lá não se inventa um.
     Redirect::to(&format!(
-        "/mail/{mailbox_id}?folder={folder}&sync={}",
-        urlencoding_minimal(&outcome)
+        "/mail?box={mailbox_id}&folder={}",
+        urlencoding_minimal(&folder)
     ))
     .into_response()
 }
@@ -2304,7 +2370,7 @@ async fn draft_create(
 async fn draft_update(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path(draft_id): Path<String>,
+    Path(draft_id): Path<Uuid>,
     Json(body): Json<Value>,
 ) -> Response {
     let Some(member) = current_member(&state, &headers) else {
@@ -2329,7 +2395,7 @@ async fn draft_update(
 async fn draft_discard(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path(draft_id): Path<String>,
+    Path(draft_id): Path<Uuid>,
 ) -> Response {
     let Some(member) = current_member(&state, &headers) else {
         return (
@@ -2352,7 +2418,7 @@ async fn draft_discard(
 async fn draft_attach(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path(draft_id): Path<String>,
+    Path(draft_id): Path<Uuid>,
     multipart: Multipart,
 ) -> Response {
     let Some(member) = current_member(&state, &headers) else {
@@ -2387,7 +2453,7 @@ async fn draft_attach(
 async fn draft_attachment_remove(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path((draft_id, attachment_id)): Path<(String, String)>,
+    Path((draft_id, attachment_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
     let Some(member) = current_member(&state, &headers) else {
         return (
@@ -2583,7 +2649,7 @@ async fn messaging_assist(
 async fn messaging_typing(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path(conversation): Path<String>,
+    Path(conversation): Path<Uuid>,
 ) -> Response {
     let member = member_or_login!(state, headers);
 
@@ -2606,7 +2672,7 @@ struct ReadForm {
 async fn messaging_read(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path(conversation): Path<String>,
+    Path(conversation): Path<Uuid>,
     Form(form): Form<ReadForm>,
 ) -> Response {
     let member = member_or_login!(state, headers);
@@ -2634,7 +2700,7 @@ struct MemberForm {
 async fn messaging_add_member(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path(conversation): Path<String>,
+    Path(conversation): Path<Uuid>,
     Form(form): Form<MemberForm>,
 ) -> Response {
     let member = member_or_login!(state, headers);
@@ -2743,7 +2809,7 @@ struct LigacaoDeCaixa {
 async fn mail_connect(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path(mailbox_id): Path<String>,
+    Path(mailbox_id): Path<Uuid>,
     Form(form): Form<LigacaoDeCaixa>,
 ) -> Response {
     let member = member_or_login!(state, headers);
@@ -2803,7 +2869,7 @@ async fn mail_connect_own(
 async fn mail_disconnect(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
-    Path(mailbox_id): Path<String>,
+    Path(mailbox_id): Path<Uuid>,
 ) -> Response {
     let member = member_or_login!(state, headers);
 
@@ -4130,6 +4196,16 @@ async fn own_avatar(
     headers: HeaderMap,
     Path(version): Path<String>,
 ) -> Response {
+    // A versão entra no caminho de um pedido ao Core: só um segmento simples,
+    // nunca `..`, `/` ou `%2F` descodificado (A001-H006).
+    if version.is_empty()
+        || version.len() > 64
+        || !version
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let Some(member) = current_member(&state, &headers) else {
         // Sem sessão não há avatar, e não há como saber de quem seria. `404` e
         // não um reencaminhamento: quem pediu isto foi um `<img>`, e devolver-lhe
@@ -4945,6 +5021,7 @@ struct LoginForm {
 /// Recebe o formulário e pede ao Core que autentique.
 async fn login_submit(
     State(state): State<WorkspaceState>,
+    headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> Response {
     let correlation_id = Uuid::new_v4().to_string();
@@ -4991,6 +5068,17 @@ async fn login_submit(
     } else {
         state.config.session_ttl
     };
+
+    // Uma entrada nova substitui a sessão que este browser trazia: a antiga
+    // termina aqui e no Core, em vez de ficar viva até expirar (A001-L016).
+    if let Some(old) =
+        session::session_id_from_cookies(headers.get(header::COOKIE).and_then(|v| v.to_str().ok()))
+    {
+        if let Some(previous) = state.sessions.get(&old) {
+            end_core_session(&state, &previous.access_token);
+        }
+        state.sessions.remove(&old);
+    }
 
     let session_id = state.sessions.create(Session {
         access_token: session.token,
@@ -5930,11 +6018,21 @@ async fn notifications_read_all(
 /// A página de onde o formulário veio, só se for deste Workspace; senão, o
 /// Desktop. Nunca um endereço de fora (o `Referer` é do browser).
 fn voltar_a(state: &WorkspaceState, headers: &HeaderMap) -> String {
-    let origem = state.config.public_url.trim_end_matches('/');
+    // A origem deste ponto de acesso (D010) ou a do endereço público — as duas
+    // são desta Instância; antes só a segunda contava, e noutro ponto o
+    // «voltar» caía sempre no Desktop (A001-L017).
+    let publica = state.config.public_url.trim_end_matches('/').to_owned();
+    let deste_ponto = crate::access::current()
+        .map(|e| crate::access::expected_origin(&state.config.public_url, &e.host));
     headers
         .get(header::REFERER)
         .and_then(|v| v.to_str().ok())
-        .and_then(|r| r.strip_prefix(origem))
+        .and_then(|r| {
+            deste_ponto
+                .as_deref()
+                .and_then(|o| r.strip_prefix(o))
+                .or_else(|| r.strip_prefix(publica.as_str()))
+        })
         .filter(|p| p.starts_with('/') && !p.starts_with("//"))
         .and_then(|p| crate::boot::safe_return_target(p, ROUTES))
         .unwrap_or_else(|| "/".to_owned())

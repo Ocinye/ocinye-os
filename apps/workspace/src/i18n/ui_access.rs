@@ -137,4 +137,8 @@ pub const UI_ACCESS: &[Entry] = crate::catalogo! {
     "adm.ep.dns.elsewhere": { pt: "Aponta para outro servidor", en: "Points to another server", fr: "Pointe vers un autre serveur" },
     "adm.ep.observe": { pt: "Observar de novo", en: "Observe again", fr: "Observer à nouveau" },
     "adm.ep.activate": { pt: "Activar", en: "Activate", fr: "Activer" },
+    // Code (A001-M012): o desbloqueio falhado (S22) não tem texto desenhado.
+    // Code (A001-M016): o canónico é genérico (ADR-0020 §10).
+    "adm.ep.bind.canonical": { pt: "O endereço canónico é genérico: não se fixa numa Distribuição.", en: "The canonical address is generic: it is not bound to a Distribution.", fr: "L’adresse canonique est générique : elle n’est pas liée à une distribution." },
+    "lock.failed": { pt: "A palavra-passe não confere.", en: "The password does not match.", fr: "Le mot de passe ne correspond pas." },
 };

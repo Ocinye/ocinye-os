@@ -140,7 +140,13 @@ pub async fn set_photograph(
 ) -> CoreResult<AvatarChoice> {
     // A normalização primeiro, e fora de qualquer transacção: é a parte que
     // recusa, e recusar não deve deixar nada para trás.
-    let normalizado = normalise(data)?;
+    // Descodificar e redimensionar é trabalho de CPU de segundos numa imagem
+    // grande: corre no pool de bloqueio, e não num trabalhador do runtime que
+    // serve os outros pedidos (A001-M010).
+    let bytes = data.to_vec();
+    let normalizado = tokio::task::spawn_blocking(move || normalise(&bytes))
+        .await
+        .map_err(|error| CoreError::Internal(format!("avatar normalisation task: {error}")))??;
 
     let object_id = Uuid::new_v4();
     let key = object_key(organisation_slug, principal.person_id, object_id);

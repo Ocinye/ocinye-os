@@ -820,8 +820,11 @@ pub async fn find_file<'e>(
     organisation_id: Uuid,
 ) -> CoreResult<Option<FileRecord>> {
     let linha = sqlx::query_as::<_, FileRecord>(
+        // Só ficheiros institucionais (com ambiente): um pessoal não tem
+        // `workspace_id`, e por aqui responde «não existe» como um inventado,
+        // em vez de rebentar a descodificar (A001-L022).
         "SELECT id, unit_id, workspace_id, name, classification
-           FROM files WHERE id = $1 AND organisation_id = $2",
+           FROM files WHERE id = $1 AND organisation_id = $2 AND workspace_id IS NOT NULL",
     )
     .bind(file_id)
     .bind(organisation_id)

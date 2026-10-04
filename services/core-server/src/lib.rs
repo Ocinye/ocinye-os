@@ -12,6 +12,8 @@
 //! [`routes::router`], with the real middleware and the real extractors, rather
 //! than a reconstruction of it that would be free to drift.
 
+#![forbid(unsafe_code)]
+
 pub mod bootstrap;
 pub mod continuity;
 pub mod error;

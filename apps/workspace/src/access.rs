@@ -187,8 +187,14 @@ impl HostCache {
 
     fn put(&self, host: &str, r: &Resolution) {
         if let Ok(mut map) = self.0.lock() {
-            if map.len() > 256 {
-                map.clear();
+            // Cheio: saem os expirados. Se continuar cheio, o novo não entra —
+            // e nunca se esvazia tudo, que deixava uma enxurrada de `Host`
+            // inventados expulsar os nomes verdadeiros (A001-L008).
+            if map.len() >= 256 {
+                map.retain(|_, (at, _)| at.elapsed() < TTL);
+            }
+            if map.len() >= 256 && !map.contains_key(host) {
+                return;
             }
             map.insert(host.to_owned(), (Instant::now(), r.clone()));
         }
@@ -296,6 +302,9 @@ pub async fn layer(
                 .and_then(|sid| state.sessions.get(sid));
             if let Some(sid) = &session_id {
                 state.sessions.remove(sid);
+            }
+            if let Some(session) = &live {
+                crate::routes::end_core_session(&state, &session.access_token);
             }
             if live.is_some() {
                 let mut response =

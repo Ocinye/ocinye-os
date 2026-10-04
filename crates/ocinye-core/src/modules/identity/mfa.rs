@@ -71,7 +71,28 @@ const RECOVERY_ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 /// factor. Uma palavra-passe sozinha não basta para nenhuma.
 #[must_use]
 pub fn mfa_required(principal: &Principal) -> bool {
-    principal.identity_kind.is_privileged() || principal.has_role(&[TechnicalRole::PlatformAdmin])
+    principal.identity_kind.is_privileged()
+        || principal.has_role(&[TechnicalRole::PlatformAdmin])
+        || principal
+            .grants
+            .iter()
+            .any(|grant| is_platform_privileged(grant.permission))
+}
+
+/// Uma permissão que **só** o papel `PlatformAdmin` confere (A001-M004).
+///
+/// Conceder uma delas por grant explícito é dar a autoridade da plataforma por
+/// outra porta; a regra do segundo factor tem de a ver, e retirá-la a uma
+/// sessão sem MFA, tal como retira o papel. O conjunto deriva da política de
+/// papéis — não é uma lista à mão.
+#[must_use]
+pub fn is_platform_privileged(permission: ocinye_contracts::Permission) -> bool {
+    use ocinye_domain::policy::permissions::role_permissions;
+    role_permissions(TechnicalRole::PlatformAdmin).contains(&permission)
+        && !TechnicalRole::ALL
+            .into_iter()
+            .filter(|role| *role != TechnicalRole::PlatformAdmin)
+            .any(|role| role_permissions(role).contains(&permission))
 }
 
 // ── TOTP puro (RFC 6238) ──────────────────────────────────────────────────

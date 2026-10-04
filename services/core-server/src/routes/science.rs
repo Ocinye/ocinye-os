@@ -787,9 +787,11 @@ async fn lineage(
 async fn person_name(state: &AppState, id: Option<Uuid>) -> Result<Option<String>, ApiError> {
     let Some(id) = id else { return Ok(None) };
     Ok(sqlx::query_scalar::<_, String>(
-        "SELECT COALESCE(NULLIF(display_name, ''), full_name) FROM people WHERE id = $1",
+        "SELECT COALESCE(NULLIF(display_name, ''), full_name) FROM people
+          WHERE id = $1 AND organisation_id = $2",
     )
     .bind(id)
+    .bind(state.organisation_id)
     .fetch_optional(&state.pool)
     .await
     .map_err(CoreError::from)?)

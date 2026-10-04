@@ -928,6 +928,20 @@ async fn nao_se_suspende_o_ultimo_administrador() {
     // e o que se exerça seja o de continuidade.
     let actor_id = pessoa_activa(&pool, org).await;
     da_papel(&pool, actor_id, "organisation_admin").await;
+    // Desde A001-H004, só quem detém `platform.administer` age sobre um
+    // PlatformAdmin. Um grant explícito dá-lho sem o tornar PlatformAdmin — e
+    // é aí que a guarda de continuidade é a que decide.
+    sqlx::query(
+        "INSERT INTO explicit_access_grants
+             (organisation_id, subject_id, permission, scope, reason, granted_by_id)
+         VALUES ($1, $2, 'platform.administer', 'institution',
+                 'Administração da plataforma para a prova de continuidade', $2)",
+    )
+    .bind(org)
+    .bind(actor_id)
+    .execute(&pool)
+    .await
+    .expect("grant");
     let actor_pessoa = identity::person_by_id(&pool, actor_id)
         .await
         .expect("leitura")

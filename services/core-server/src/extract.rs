@@ -237,6 +237,11 @@ impl FromRequestParts<AppState> for CurrentPrincipal {
             principal
                 .roles
                 .remove(&ocinye_contracts::TechnicalRole::PlatformAdmin);
+            // A mesma autoridade, concedida por grant explícito, também espera
+            // pelo segundo factor (A001-M004).
+            principal
+                .grants
+                .retain(|grant| !identity::is_platform_privileged(grant.permission));
             tracing::debug!(
                 person_id = %principal.person_id,
                 "privileged authority suppressed: session has not satisfied MFA"
@@ -261,7 +266,12 @@ impl FromRequestParts<AppState> for CurrentPrincipal {
                 .extensions
                 .get::<axum::extract::OriginalUri>()
                 .map_or_else(|| parts.uri.path().to_owned(), |uri| uri.path().to_owned());
-            let entry = path.ends_with("/me/distributions") || path.ends_with("/me/distribution");
+            // Os dois caminhos exactos, e não um sufixo: uma rota futura que
+            // acabe da mesma maneira não salta a revalidação (A001-L014).
+            let api = format!("/api/{}", ocinye_contracts::API_VERSION);
+            let entry = path
+                .strip_prefix(api.as_str())
+                .is_some_and(|rest| rest == "/me/distributions" || rest == "/me/distribution");
             if !entry {
                 let refused = match stored.parse::<ocinye_contracts::Distribution>() {
                     Ok(active) => organisation::distributions::revalidate(

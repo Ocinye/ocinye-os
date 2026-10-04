@@ -278,6 +278,30 @@ fn validate_against_schema(
 }
 
 /// A result that says nothing happened, and why.
+/// A aplicação a que uma capacidade pertence, pelo mesmo mapa que a porta
+/// HTTP usa: o prefixo da API do módulo que a capacidade chama. `None` para as
+/// que vivem no Core comum (identidade, conhecimento partilhado, tarefas).
+fn application_of_capability(id: &str) -> Option<ocinye_contracts::ApplicationId> {
+    const PATHS: &[(&str, &str)] = &[
+        ("mail.", "/mail"),
+        ("messaging.", "/messaging"),
+        ("calendar.", "/calendar"),
+        ("compute.node.", "/compute/nodes"),
+        ("data.dataset.", "/datasets"),
+        ("research.idea.", "/ideas"),
+        ("research.project.", "/projects"),
+        ("knowledge.source.", "/sources"),
+        ("knowledge.bibliography.", "/sources"),
+        ("knowledge.document.", "/documents"),
+        ("knowledge.note.", "/notes"),
+        ("organisation.unit.", "/units"),
+    ];
+    PATHS
+        .iter()
+        .find(|(prefix, _)| id.starts_with(prefix))
+        .and_then(|(_, path)| crate::modules::organisation::application_of_api_path(path))
+}
+
 fn refused(
     descriptor: &CapabilityDescriptor,
     status: ExecutionStatus,
@@ -358,6 +382,32 @@ pub async fn execute(
     };
 
     let descriptor = handler.descriptor();
+
+    // ── 1b. A aplicação está activa nesta Instância? ─────────────────────
+    //
+    // A recusa de uma aplicação inactiva vive no Core para que nenhum cliente a
+    // contorne — e um agente é um cliente (ADR-0014, A001-H008). A porta HTTP
+    // guarda as rotas; esta guarda a outra entrada no mesmo módulo, pelo mesmo
+    // mapa (os prefixos da API do manifesto).
+    if let Some(application) = application_of_capability(descriptor.id.as_str()) {
+        match crate::modules::organisation::require_active(
+            pool,
+            principal.organisation_id,
+            application,
+        )
+        .await
+        {
+            Ok(()) => {}
+            Err(CoreError::ApplicationInactive(_)) => {
+                return Ok(refused(
+                    &descriptor,
+                    ExecutionStatus::CapabilityUnavailable,
+                    "A aplicação desta operação está desactivada nesta Instância.",
+                ))
+            }
+            Err(error) => return Err(error),
+        }
+    }
 
     // ── 2. Resolve the resources it names ───────────────────────────────
     //

@@ -184,8 +184,14 @@
       const u = new URL(d.href, location.origin);
       if (u.origin !== location.origin) return;
       e.preventDefault();
-      const fields = { app_id: d.app, href: u.pathname };
-      if (u.searchParams.get('window') === 'new') fields.window = 'new';
+      // O endereço inteiro, com a pergunta (a pasta, o filtro), menos o
+      // pedido de janela nova, que vai à parte (A001-L018).
+      const q = new URLSearchParams(u.search);
+      const nova = q.get('window') === 'new';
+      q.delete('window');
+      const qs = q.toString();
+      const fields = { app_id: d.app, href: u.pathname + (qs ? '?' + qs : '') };
+      if (nova) fields.window = 'new';
       send('/wm', fields).then((r) => {
         if (r.status !== 200 || !r.data) { location.assign(d.href); return; }
         if (r.data.existing) { try { sessionStorage.setItem('oc-wm-pulse', r.data.id); } catch (_) { /* sem armazenamento: sem pulso */ } }
@@ -242,6 +248,11 @@
     const b = e.submitter;
     const decision = b && b.name === 'decision' ? b.value : null;
     if (!['save', 'discard', 'cancel'].includes(decision)) return;
+    // Dentro de uma mudança de Distribuição (`after=switch:…`) o formulário
+    // segue sem interceptar: é o servidor que diz para onde se vai — abortar ou
+    // continuar a mudança (A001-H001).
+    const after = d.querySelector('input[name="after"]');
+    if (after && after.value) return;
     e.preventDefault();
     send('/wm/' + encodeURIComponent(d.dataset.win) + '/close', { decision }).then((r) => {
       if (r.status !== 200 || !r.data) { location.reload(); return; }

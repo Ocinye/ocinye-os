@@ -147,7 +147,14 @@ fn state_vm(s: State) -> WindowState {
 #[must_use]
 pub fn view(sessions: &SessionStore, session_id: &str, ctx: &ShellContext) -> Option<WmVm> {
     let desk = sessions.with_desk(session_id, |d| {
-        d.retain_apps(|a| visible(ctx, a));
+        // Fechar de vez só o que deixou de ser do membro — e isso só se sabe
+        // com o Core a responder. Uma sonda perdida tornava invisível tudo o
+        // que depende de um módulo, e esta linha apagava essas janelas, com o
+        // trabalho por gravar (A001-H002). Sem Core, escondem-se (abaixo) e
+        // voltam quando ele volta.
+        if ctx.core.operational() {
+            d.retain_apps(|a| visible(ctx, a));
+        }
         d.clone()
     })?;
     wm_vm(&desk, |a| visible(ctx, a))

@@ -190,7 +190,7 @@ pub fn disabled_live(door: &DoorVm, d: Distribution) -> impl IntoView {
 pub fn lock(door: &DoorVm, name: &str, failed: bool) -> impl IntoView {
     let error = failed.then(|| {
         view! {
-            <p class="oc-auth__error" role="alert">{icon("warning")}<span>{t("auth.login.refused")}</span></p>
+            <p class="oc-auth__error" role="alert">{icon("warning")}<span>{t("lock.failed")}</span></p>
         }
     });
     let card = view! {

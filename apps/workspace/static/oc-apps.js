@@ -45,6 +45,21 @@
         if (form.dataset.state === 'dirty') return;
         form.dataset.state = 'dirty';
         if (win) win.setAttribute('data-dirty', '');
+        // O servidor tem de saber que esta janela tem trabalho por gravar:
+        // fechá-la, mudar de Distribuição ou fechar tudo passam pelo diálogo
+        // do D002 só se ele souber (A001-H001). Uma vez por estado sujo.
+        const id = win && win.dataset.win;
+        if (id && /^w[0-9]+$/.test(id)) {
+          fetch('/wm/' + encodeURIComponent(id) + '/state', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+            // `can_save=false`: guardar a partir do diálogo não chega à aplicação
+            // (nada lho pede); o diálogo oferece Não guardar ou Cancelar, e a
+            // pessoa grava na janela, onde o botão funciona.
+            body: 'dirty=true&can_save=false',
+          }).catch(() => {});
+        }
       };
       if (form.dataset.state === 'dirty' && win) win.setAttribute('data-dirty', '');
       form.addEventListener('input', mark);

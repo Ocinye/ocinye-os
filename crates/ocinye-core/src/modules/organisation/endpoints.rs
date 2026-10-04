@@ -111,10 +111,18 @@ async fn require_enabled(
     binding: Option<Distribution>,
 ) -> CoreResult<()> {
     if let Some(d) = binding {
-        if !super::distributions::enabled(&mut **tx, organisation_id)
-            .await?
-            .contains(d)
-        {
+        // FOR SHARE: uma desactivação em simultâneo espera por esta escrita, e
+        // não deixa um ponto fixo numa Distribuição desactivada (A001-L012).
+        let enabled: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM instance_distributions
+                             WHERE organisation_id = $1 AND distribution = $2
+                               AND state = 'enabled' FOR SHARE)",
+        )
+        .bind(organisation_id)
+        .bind(d.as_str())
+        .fetch_one(&mut **tx)
+        .await?;
+        if !enabled {
             return Err(CoreError::Invariant {
                 code: ErrorCode::Conflict,
                 reason: refusal::DISTRIBUTION_NOT_ENABLED,
@@ -249,7 +257,24 @@ pub async fn bind(
 ) -> CoreResult<Endpoint> {
     require(principal, Permission::OrganisationManage)?;
     let mut tx = pool.begin().await?;
-    one(&mut tx, principal.organisation_id, id).await?;
+    let current = one(&mut tx, principal.organisation_id, id).await?;
+    // O canónico é o ponto genérico da Instância (ADR-0020 §10): fixá-lo numa
+    // Distribuição — e depois desactivá-la — deixava quem administra sem
+    // entrada nenhuma pelo Workspace (A001-M016).
+    if current.canonical && binding.is_some() {
+        return Err(CoreError::Invariant {
+            code: ErrorCode::Conflict,
+            reason: refusal::ENDPOINT_CANONICAL_GENERIC,
+            message: "O ponto de acesso canónico é genérico e não se fixa numa Distribuição."
+                .to_owned(),
+        });
+    }
+    // O mesmo destino outra vez não muda nada: nem auditoria, nem revisão (a
+    // revisão nova terminaria as sessões do ponto) (A001-L011).
+    if current.binding_distribution.as_deref() == binding.map(Distribution::as_str) {
+        tx.commit().await?;
+        return Ok(current);
+    }
     require_enabled(&mut tx, principal.organisation_id, binding).await?;
     let endpoint: Endpoint = sqlx::query_as(&format!(
         "UPDATE access_endpoints
@@ -286,6 +311,10 @@ pub async fn disable(
         .execute(&mut *tx)
         .await?;
     let current = one(&mut tx, principal.organisation_id, id).await?;
+    if current.state == "disabled" {
+        tx.commit().await?;
+        return Ok(current);
+    }
     let other_active: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM access_endpoints
                          WHERE organisation_id = $1 AND id <> $2 AND state = 'active')",
