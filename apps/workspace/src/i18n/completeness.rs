@@ -92,3 +92,81 @@ fn o_catalogo_nao_esta_vazio() {
     let total: usize = GROUPS.iter().map(|g| g.len()).sum();
     assert!(total > 0, "o catálogo de produção não pode estar vazio");
 }
+
+/// Cada chave **literal** que o código pede existe no catálogo (A001-M012).
+///
+/// O ecrã de desbloqueio pedia `auth.login.refused`, que nunca existiu, e a
+/// pessoa via a chave crua: os portões acima olham para o catálogo e não para
+/// quem o usa. Este lê o código de `src/` — `t("…")`, `tf("…"`, `t_in(…, "…")`
+/// e `tp("…"` (pelas formas `.one`/`.other`) — e exige cada chave.
+#[test]
+fn cada_chave_literal_usada_existe() {
+    fn ficheiros(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entrada in std::fs::read_dir(dir).expect("src legível").flatten() {
+            let caminho = entrada.path();
+            if caminho.is_dir() {
+                ficheiros(&caminho, out);
+            } else if caminho.extension().is_some_and(|e| e == "rs") {
+                out.push(caminho);
+            }
+        }
+    }
+    let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut todos = Vec::new();
+    ficheiros(&raiz, &mut todos);
+    let valida = |k: &str| {
+        !k.is_empty()
+            && k.contains('.')
+            && k.bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'_')
+            && !k.ends_with('.')
+    };
+    let mut faltam = BTreeSet::new();
+    let mut vistas = 0usize;
+    for ficheiro in &todos {
+        // Sem comentários: um exemplo numa doc (`t("greeting.evening")`) não é
+        // um pedido ao catálogo.
+        let texto: String = std::fs::read_to_string(ficheiro)
+            .expect("ficheiro legível")
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for (abre, plural) in [("t(\"", false), ("tf(\"", false), ("tp(\"", true)] {
+            let mut resto = texto.as_str();
+            while let Some(i) = resto.find(abre) {
+                // `t(` dentro de outra palavra (`list(`, `at(`) não conta.
+                let antes = resto[..i].chars().last();
+                resto = &resto[i + abre.len()..];
+                if antes.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                    continue;
+                }
+                let Some(fim) = resto.find('"') else { break };
+                let chave = &resto[..fim];
+                if !valida(chave) {
+                    continue;
+                }
+                vistas += 1;
+                let existe = if plural {
+                    super::has(&format!("{chave}.one")) && super::has(&format!("{chave}.other"))
+                } else {
+                    super::has(chave)
+                };
+                if !existe {
+                    faltam.insert(format!(
+                        "{chave} ({})",
+                        ficheiro.strip_prefix(&raiz).unwrap_or(ficheiro).display()
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        vistas > 500,
+        "o portão leu só {vistas} chaves — não está a ver o código"
+    );
+    assert!(
+        faltam.is_empty(),
+        "chaves pedidas que não existem: {faltam:#?}"
+    );
+}

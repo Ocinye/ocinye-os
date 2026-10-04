@@ -150,20 +150,48 @@ pub(crate) async fn choose_submit(
             return Redirect::to("/").into_response();
         }
     }
+    // A verdade é a do Core, lida directamente: o seleccionador também a lê
+    // assim. Passar por `ensure_entry` aqui prendia quem perdeu a Distribuição
+    // activa e ainda tem duas ou mais — ele devolvia a página de recusa, nunca
+    // a escolha (A001-M002).
+    let mine = match quem.get(&state, "/api/v1/me/distributions").await {
+        Ok(v) => v,
+        Err(ApiFailure::Unauthorised) => return session_ended(&state, &headers),
+        Err(other) => {
+            return identity_indeterminate(&state, controllers::reference(&format!("{other}")), "/")
+                .await
+        }
+    };
+    let parse = |v: Option<&serde_json::Value>| {
+        v.and_then(serde_json::Value::as_str)
+            .and_then(|d| d.parse().ok())
+    };
+    let accessible: Vec<ocinye_contracts::Distribution> = mine
+        .get("accessible")
+        .and_then(serde_json::Value::as_array)
+        .map(|a| a.iter().filter_map(|v| v.as_str()?.parse().ok()).collect())
+        .unwrap_or_default();
     // Só se escolhe entre as que o seleccionador mostrou; outra volta a ele.
-    match controllers::ensure_entry(&state, &quem).await {
-        Ok(dists) if !dists.accessible.contains(&d) => {
-            return Redirect::to("/distribution").into_response()
+    if !accessible.contains(&d) {
+        return Redirect::to("/distribution").into_response();
+    }
+    let active: Option<ocinye_contracts::Distribution> = parse(mine.get("active"));
+    let refused = mine.get("stored_refusal").is_some_and(|v| !v.is_null());
+    match active {
+        // A mesma outra vez: nada muda, e nenhuma janela fecha (A001-M003).
+        Some(a) if a == d => return Redirect::to("/").into_response(),
+        // Com uma Distribuição viva, escolher outra é mudar: o caminho da
+        // mudança (S16), que passa pelo diálogo das janelas por gravar — e não
+        // um atalho que as fechava sem perguntar (A001-M003).
+        Some(_) if !refused => {
+            return Redirect::to(&format!("/?switch={}", d.as_str())).into_response()
         }
-        Err(controllers::Shell::Entry(controllers::Entry::Choose(list))) if !list.contains(&d) => {
-            return Redirect::to("/distribution").into_response()
-        }
-        Ok(_) | Err(controllers::Shell::Entry(controllers::Entry::Choose(_))) => {}
-        Err(controllers::Shell::Entry(e)) => return entry_response(&state, &headers, e).await,
-        Err(_) => return session_ended(&state, &headers),
+        _ => {}
     }
     match controllers::enter(&state, &quem, d).await {
         Ok(()) => {
+            // Primeira entrada (não há janelas) ou depois de perder a activa
+            // (as janelas dela já não são do membro).
             close_all_windows(&state, &member.session_id);
             Redirect::to("/").into_response()
         }
@@ -232,6 +260,27 @@ pub(crate) async fn unlock_submit(
     let Some(member) = current_member(&state, &headers) else {
         return Redirect::to("/login").into_response();
     };
+    // A tentativa conta-se **antes** de perguntar ao Core, sob a tranca do
+    // registo: pedidos em paralelo não partilham o mesmo contador velho
+    // (A001-M015).
+    let attempt = state
+        .sessions
+        .update(&member.session_id, |s| {
+            s.unlock_failures = s.unlock_failures.saturating_add(1);
+            s.unlock_failures
+        })
+        .unwrap_or(UNLOCK_ATTEMPTS);
+    if attempt > UNLOCK_ATTEMPTS {
+        let _ = api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/auth/logout",
+            &serde_json::json!({}),
+        )
+        .await;
+        return session_ended(&state, &headers);
+    }
     let answer = api::post(
         &state,
         &member.session.access_token,
@@ -248,12 +297,7 @@ pub(crate) async fn unlock_submit(
             });
             Redirect::to("/").into_response()
         }
-        Err(ApiFailure::Forbidden | ApiFailure::Denied)
-            if member.session.unlock_failures + 1 < UNLOCK_ATTEMPTS =>
-        {
-            state
-                .sessions
-                .update(&member.session_id, |s| s.unlock_failures += 1);
+        Err(ApiFailure::Forbidden | ApiFailure::Denied) if attempt < UNLOCK_ATTEMPTS => {
             Redirect::to("/lock?failed=1").into_response()
         }
         // À quinta falha, ou com o limite do Core atingido, a sessão termina.
@@ -276,8 +320,14 @@ pub(crate) async fn unlock_submit(
 #[must_use]
 pub(crate) fn local_path(raw: &str) -> Option<String> {
     let p = raw.trim();
-    (p.starts_with('/') && !p.starts_with("//") && !p.contains('\\') && !p.contains("://"))
-        .then(|| p.to_owned())
+    // Sem caracteres de controlo: um browser apaga TAB/CR/LF ao ler um URL, e
+    // `/\t/mal` passava a `//mal` (A001-M001).
+    (p.starts_with('/')
+        && !p.starts_with("//")
+        && !p.contains('\\')
+        && !p.contains("://")
+        && !p.chars().any(char::is_control))
+    .then(|| p.to_owned())
 }
 
 #[derive(Deserialize)]

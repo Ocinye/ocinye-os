@@ -380,9 +380,25 @@ fn parse_into(text: &str, marks: &[&str], out: &mut Vec<Value>) {
     let chars: Vec<char> = text.chars().collect();
     let mut buf = String::new();
     let mut i = 0;
+    // Linear, e não quadrático (A001-M008): uma linha de um milhão de
+    // caracteres não pode prender um trabalhador. A partir de onde já se sabe
+    // que um delimitador não fecha, não se volta a procurar; um `[` cuja
+    // ligação falhou num `]` diz o mesmo de todos os `[` antes dele.
+    let mut no_close: [usize; 3] = [usize::MAX; 3]; // `**`, `*`, `_`
+    let mut closing = |chars: &[char], from: usize, delim: &str, slot: usize| {
+        if from >= no_close[slot] {
+            return None;
+        }
+        let found = find_closing(chars, from, delim);
+        if found.is_none() {
+            no_close[slot] = no_close[slot].min(from);
+        }
+        found
+    };
+    let mut no_link = false;
+    let mut link_skip_until = 0usize;
     while i < chars.len() {
         let c = chars[i];
-        let rest: String = chars[i..].iter().collect();
         if c == '\\' && i + 1 < chars.len() {
             buf.push(chars[i + 1]);
             i += 2;
@@ -401,8 +417,8 @@ fn parse_into(text: &str, marks: &[&str], out: &mut Vec<Value>) {
                 }
             }
         }
-        if rest.starts_with("**") {
-            if let Some(end) = find_closing(&chars, i + 2, "**") {
+        if c == '*' && chars.get(i + 1) == Some(&'*') {
+            if let Some(end) = closing(&chars, i + 2, "**", 0) {
                 push_text(out, std::mem::take(&mut buf), marks);
                 let inner: String = chars[i + 2..end].iter().collect();
                 let mut m = marks.to_vec();
@@ -414,7 +430,8 @@ fn parse_into(text: &str, marks: &[&str], out: &mut Vec<Value>) {
         }
         if c == '_' || c == '*' {
             let delim = c.to_string();
-            if let Some(end) = find_closing(&chars, i + 1, &delim) {
+            let slot = if c == '*' { 1 } else { 2 };
+            if let Some(end) = closing(&chars, i + 1, &delim, slot) {
                 if end > i + 1 {
                     push_text(out, std::mem::take(&mut buf), marks);
                     let inner: String = chars[i + 1..end].iter().collect();
@@ -426,8 +443,14 @@ fn parse_into(text: &str, marks: &[&str], out: &mut Vec<Value>) {
                 }
             }
         }
-        if c == '[' {
-            if let Some((label, href, used)) = link_at(&chars[i..]) {
+        if c == '[' && !no_link && i >= link_skip_until {
+            let attempt = link_at(&chars[i..]);
+            match attempt {
+                Err(None) => no_link = true,
+                Err(Some(close)) => link_skip_until = i + close,
+                Ok(_) => {}
+            }
+            if let Ok((label, href, used)) = attempt {
                 push_text(out, std::mem::take(&mut buf), marks);
                 let mut inner = Vec::new();
                 parse_into(&label, marks, &mut inner);
@@ -476,23 +499,44 @@ fn find_closing(chars: &[char], from: usize, delim: &str) -> Option<usize> {
     None
 }
 
-/// `[texto](destino)` com um esquema aceite.
-fn link_at(chars: &[char]) -> Option<(String, String, usize)> {
-    let s: String = chars.iter().collect();
-    let close = find_unescaped(&s[1..], ']')? + 1;
-    let after = &s[close + 1..];
-    let target = after.strip_prefix('(')?;
-    let end = target.find(')')?;
-    let href = &target[..end];
+/// `[texto](destino)` com um esquema aceite. Lê os caracteres onde estão,
+/// sem copiar o resto da linha. A recusa diz onde estava o `]`
+/// (`Err(Some(posição))`) ou que nenhuma ligação desta linha pode fechar a partir
+/// daqui — sem `]`, ou sem `)` depois dele (`Err(None)`), para quem chama
+/// não repetir a mesma procura a partir de cada `[` seguinte.
+fn link_at(chars: &[char]) -> Result<(String, String, usize), Option<usize>> {
+    let mut escaped = false;
+    let mut close = None;
+    for (j, &c) in chars.iter().enumerate().skip(1) {
+        if escaped {
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else if c == ']' {
+            close = Some(j);
+            break;
+        }
+    }
+    let close = close.ok_or(None)?;
+    if chars.get(close + 1) != Some(&'(') {
+        return Err(Some(close));
+    }
+    // Sem nenhum `)` depois daqui, nenhuma ligação seguinte nesta linha fecha:
+    // `Err(None)` diz isso a quem chama.
+    let end = chars[close + 2..]
+        .iter()
+        .position(|&c| c == ')')
+        .map(|p| close + 2 + p)
+        .ok_or(None)?;
+    let href: String = chars[close + 2..end].iter().collect();
     if href.is_empty()
         || href.contains(char::is_whitespace)
         || !LINK_SCHEMES.iter().any(|p| href.starts_with(p))
     {
-        return None;
+        return Err(Some(close));
     }
-    let label = s[1..close].to_owned();
-    let used = s[..close + 2 + end + 1].chars().count();
-    Some((label, href.to_owned(), used))
+    let label: String = chars[1..close].iter().collect();
+    Ok((label, href, end + 1))
 }
 
 /// Junta trechos seguidos com as mesmas marcas.
@@ -524,6 +568,42 @@ pub fn words(text: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Uma linha hostil não prende o trabalhador (A001-M008): marcas e `[`
+    /// sem fecho, aos cem mil, lêem-se em tempo linear e ficam texto.
+    #[test]
+    fn uma_linha_hostil_le_se_em_tempo_linear() {
+        for hostile in [
+            "*a".repeat(100_000),
+            "_".repeat(200_000),
+            "**x".repeat(60_000),
+            "[".repeat(200_000),
+            "[a](x".repeat(40_000),
+            format!("{}]", "[".repeat(100_000)),
+        ] {
+            let started = std::time::Instant::now();
+            let doc = from_markdown(&hostile);
+            assert!(
+                started.elapsed() < std::time::Duration::from_secs(3),
+                "{} caracteres demoraram {:?}",
+                hostile.len(),
+                started.elapsed()
+            );
+            assert!(doc.is_object());
+        }
+    }
+
+    /// E o que era formatação continua a ser.
+    #[test]
+    fn as_marcas_e_as_ligacoes_continuam_iguais() {
+        let doc = from_markdown(
+            "**negrito** _itálico_ `código` [sítio](https://exemplo.test) [x](javascript:alert(1))",
+        );
+        let s = doc.to_string();
+        assert!(s.contains("\"bold\"") && s.contains("\"italic\"") && s.contains("\"code\""));
+        assert!(s.contains("https://exemplo.test"));
+        assert!(!s.contains("\"href\":\"javascript:"), "{s}");
+    }
 
     fn roundtrip(doc: &Value) {
         let md = to_markdown(doc).expect("representável");
