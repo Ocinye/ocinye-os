@@ -34,6 +34,7 @@ o serviço recusa correr contra um schema que não compreende.
 | 0061 | Disposição do Desktop e fixações por membro **e** Distribuição, migradas sem perda nem cópia |
 | 0062 | Pontos de acesso (`access_endpoints`): anfitrião, destino, estado, observações de DNS/TLS; um canónico por Instância |
 | 0063 | A Distribuição activa e o contexto activo de cada sessão |
+| 0064 | `ck_sessions_context_id` sem buraco: um identificador de contexto exige um tipo que o use (A001-L006) |
 
 ## Regras
 
