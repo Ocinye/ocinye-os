@@ -8,7 +8,8 @@
 
 use chrono::{DateTime, Duration, Utc};
 use ocinye_contracts::{
-    AccountStatus, CredentialKind, ErrorCode, InstitutionalPosition, SessionState, TechnicalRole,
+    AccountStatus, CredentialKind, ErrorCode, InstitutionalPosition, Permission, SessionState,
+    TechnicalRole,
 };
 use ocinye_observability::CorrelationIds;
 use sqlx::PgPool;
@@ -538,6 +539,45 @@ pub async fn set_permanent_password(
     })
 }
 
+/// Refuse an administrator acting on someone who holds more authority than
+/// they do (A001-H004).
+///
+/// Creating a `PlatformAdmin` already requires `platform.administer`; resetting
+/// one's password, suspending them or ending their sessions is the same
+/// escalation by another door — a reset hands the actor a credential for the
+/// target. So it requires the same authority, decided here, in the Core, for
+/// every client.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] when `person` holds `PlatformAdmin` and the
+/// actor does not hold `platform.administer`; database errors.
+async fn ensure_actor_may_govern<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    actor: &Principal,
+    person: &Person,
+) -> CoreResult<()> {
+    let target_is_platform_admin = repo::live_roles(executor, person.id)
+        .await?
+        .contains(&TechnicalRole::PlatformAdmin);
+    let actor_administers = ocinye_domain::can(
+        actor,
+        Permission::PlatformAdminister,
+        &ocinye_domain::ResourceContext::organisation(
+            ocinye_domain::ResourceKind::Organisation,
+            actor.organisation_id,
+        ),
+        None,
+    )
+    .allowed;
+    if target_is_platform_admin && !actor_administers {
+        return Err(CoreError::PermissionDenied(
+            "Agir sobre um administrador da plataforma exige o mesmo papel.".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// Reset a member's password, as an administrator.
 ///
 /// Issues a new temporary credential, invalidates the permanent one and revokes
@@ -555,6 +595,7 @@ pub async fn reset_password(
     person: &Person,
     ids: &CorrelationIds,
 ) -> CoreResult<TemporaryCredential> {
+    ensure_actor_may_govern(pool, actor, person).await?;
     let secret = generate::temporary_credential();
     let verifier = authenticator.hasher.hash(&secret)?;
     let expires_at = Utc::now() + Duration::hours(authenticator.temporary_credential_hours);
@@ -697,14 +738,33 @@ pub async fn set_account_status(
     }
 
     let mut tx = pool.begin().await?;
+    ensure_actor_may_govern(&mut *tx, actor, person).await?;
 
     // Barring someone else is exactly how you can still empty the institution
     // of administrators — the self-lockout guard above does not see it.
-    if !status.may_authenticate() {
+    let was_entry_admin = if status.may_authenticate() {
+        false
+    } else {
         ensure_not_sole_platform_admin(&mut tx, person).await?;
-    }
+        crate::modules::organisation::distributions::is_entry_administrator(
+            &mut tx,
+            person.organisation_id,
+            person.id,
+        )
+        .await?
+    };
 
     repo::set_status(&mut *tx, person.id, status).await?;
+
+    // Barrar o único administrador que entra numa Distribuição deixa a
+    // Instância sem ninguém que a administre pelo Workspace (A001-H007).
+    if was_entry_admin {
+        crate::modules::organisation::distributions::ensure_an_administrator_can_enter(
+            &mut tx,
+            person.organisation_id,
+        )
+        .await?;
+    }
 
     let revoked = if status.may_authenticate() {
         0
@@ -846,6 +906,13 @@ pub async fn delete_member(
     // query and buys certainty: deleting the last admin who can sign in locks the
     // institution out just as surely as suspending them would.
     ensure_not_sole_platform_admin(&mut tx, person).await?;
+    ensure_actor_may_govern(&mut *tx, actor, person).await?;
+    let was_entry_admin = crate::modules::organisation::distributions::is_entry_administrator(
+        &mut tx,
+        person.organisation_id,
+        person.id,
+    )
+    .await?;
 
     // Recorded before the row is gone, and it outlives the row: the actor is the
     // administrator (a valid person), and `resource_id` carries no foreign key,
@@ -871,6 +938,13 @@ pub async fn delete_member(
              antes de a apagar."
                 .to_owned(),
         ));
+    }
+    if was_entry_admin {
+        crate::modules::organisation::distributions::ensure_an_administrator_can_enter(
+            &mut tx,
+            person.organisation_id,
+        )
+        .await?;
     }
 
     tx.commit().await?;
@@ -908,6 +982,7 @@ pub async fn revoke_member_session(
     if owner != Some(person.id) {
         return Err(CoreError::NotFound("Sessão não encontrada.".to_owned()));
     }
+    ensure_actor_may_govern(pool, actor, person).await?;
 
     let mut tx = pool.begin().await?;
     creds::revoke_session(&mut *tx, session_id, "administrative_revocation").await?;

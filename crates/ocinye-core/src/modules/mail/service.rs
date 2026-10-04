@@ -1034,15 +1034,28 @@ pub async fn remove_attachment(
 
 /// Load a draft's attachments as message parts, reading their bytes.
 ///
+/// The draft must be one this person may reach — the same rule as every other
+/// draft operation, and decided in SQL (A001-H003): a draft id named in a send
+/// request never reaches another member's attachments. It must also belong to
+/// the mailbox the message is sent from.
+///
 /// # Errors
 ///
-/// Returns an error when a query fails or the object store cannot be read.
+/// [`CoreError::NotFound`] for a draft this person cannot reach, or one of
+/// another mailbox; otherwise when a query fails or the object store cannot be
+/// read.
 pub async fn attachments_for_send(
     pool: &PgPool,
     store: &ObjectStore,
+    principal: &Principal,
+    mailbox_id: Uuid,
     draft_id: Uuid,
 ) -> CoreResult<Vec<OutgoingAttachment>> {
-    let objects = repo::draft_attachment_objects(pool, draft_id).await?;
+    let draft = repo::accessible_draft(pool, principal.person_id, draft_id)
+        .await?
+        .filter(|draft| draft.mailbox_id == mailbox_id)
+        .ok_or_else(|| CoreError::NotFound("Rascunho não encontrado.".to_owned()))?;
+    let objects = repo::draft_attachment_objects(pool, draft.id).await?;
     let mut parts = Vec::with_capacity(objects.len());
     for object in objects {
         let bytes = store.get(&object.object_key).await?;

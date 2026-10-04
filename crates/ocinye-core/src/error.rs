@@ -107,6 +107,10 @@ impl CoreError {
             Self::CapabilityUnavailable(_) => ErrorCode::CapabilityUnavailable,
             Self::StorageUnavailable(_) => ErrorCode::StorageUnavailable,
             Self::RateLimited(_) => ErrorCode::RateLimited,
+            // Uma corrida perdida contra uma restrição de unicidade é um
+            // conflito, não uma avaria: a base recusou o duplicado, e quem
+            // pediu deve ouvir 409 (A001-M018).
+            Self::Database(error) if is_unique_violation(error) => ErrorCode::Conflict,
             Self::Configuration(_) | Self::Database(_) | Self::Internal(_) => {
                 ErrorCode::InternalError
             }
@@ -120,6 +124,10 @@ impl CoreError {
     #[must_use]
     pub fn public_message(&self) -> String {
         match self {
+            // Sem nomear a restrição nem a tabela: só que já existe.
+            Self::Database(error) if is_unique_violation(error) => {
+                "Isto já existe. Actualize e tente de novo.".to_owned()
+            }
             // A configuration message names environment variables. That is
             // operator-facing detail, and it stays in the log.
             Self::Database(_) | Self::Internal(_) | Self::Configuration(_) => {
@@ -189,8 +197,19 @@ pub mod refusal {
     pub const ENDPOINT_INVALID: &str = "endpoint_invalid";
     /// D010 · It is the canonical endpoint, or the last active one.
     pub const ENDPOINT_LAST_OR_CANONICAL: &str = "endpoint_last_or_canonical";
+    /// O ponto canónico é genérico: não se fixa numa Distribuição (ADR-0020
+    /// §10). É a entrada que resta sempre a quem administra (A001-M016).
+    pub const ENDPOINT_CANONICAL_GENERIC: &str = "endpoint_canonical_generic";
     /// D010 · The context is not one the member may use.
     pub const CONTEXT_UNAVAILABLE: &str = "context_unavailable";
+}
+
+/// SQLSTATE 23505: a escrita perdeu uma corrida contra uma restrição única.
+fn is_unique_violation(error: &sqlx::Error) -> bool {
+    error
+        .as_database_error()
+        .and_then(sqlx::error::DatabaseError::code)
+        .is_some_and(|code| code == "23505")
 }
 
 #[cfg(test)]

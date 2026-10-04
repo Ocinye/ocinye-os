@@ -1638,3 +1638,44 @@ fn capacidades() -> &'static ocinye_core::capabilities::Capabilities {
         .expect("motor de capacidades")
     })
 }
+
+/// A001-H008 · Uma capacidade de uma aplicação desactivada na Instância não
+/// corre pelo plano agentic, mesmo confirmada: a porta HTTP recusa a rota, e o
+/// executor recusa a outra entrada no mesmo módulo.
+#[tokio::test]
+async fn a_capability_of_an_inactive_application_does_not_run() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let actor = person(&pool, org, &["research_member"]).await;
+    sqlx::query(
+        "INSERT INTO instance_applications (organisation_id, application_id, active)
+         VALUES ($1, 'mail', false)",
+    )
+    .bind(org)
+    .execute(&pool)
+    .await
+    .expect("desactivar o Correio");
+
+    let result = agentic::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &runtime::main_agent_boundary(),
+        None,
+        &request("mail.send", serde_json::json!({"draft_id": Uuid::new_v4()})),
+        &institution(org),
+        // Confirmado: só a aplicação inactiva pode recusar.
+        true,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("resultado");
+
+    assert_eq!(
+        result.status,
+        ExecutionStatus::CapabilityUnavailable,
+        "o Correio desactivado enviou pelo plano agentic: {}",
+        result.detail
+    );
+}

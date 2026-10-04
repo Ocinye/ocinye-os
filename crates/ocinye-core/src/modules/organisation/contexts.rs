@@ -187,28 +187,66 @@ pub async fn choose(
         message: "Este contexto não está disponível.".to_owned(),
     };
     let Some(kind) = kind else {
-        clear(pool, session_id).await?;
+        // Repor também fica no registo, quando havia um contexto (A001-L007).
+        let mut tx = pool.begin().await?;
+        let had: Option<Option<String>> = sqlx::query_scalar(
+            "UPDATE sessions s SET active_context_kind = NULL, active_context_id = NULL
+               FROM sessions old
+              WHERE s.id = $1 AND old.id = s.id AND s.person_id = $2
+          RETURNING old.active_context_kind",
+        )
+        .bind(session_id)
+        .bind(principal.person_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if had.flatten().is_some() {
+            audit::record(
+                &mut tx,
+                Some(principal),
+                ids,
+                AuditEntry::new(action::CONTEXT_CHANGED, "session_context")
+                    .resource(principal.person_id)
+                    .detail("kind", ""),
+            )
+            .await?;
+        }
+        tx.commit().await?;
         return Ok(None);
     };
-    if active_distribution.is_none() {
+    let Some(distribution) = active_distribution else {
         return Err(unavailable());
-    }
+    };
     let chosen = available(pool, principal)
         .await?
         .into_iter()
         .find(|c| c.kind == kind && c.id == id)
         .ok_or_else(unavailable)?;
     let mut tx = pool.begin().await?;
-    sqlx::query(
-        "UPDATE sessions SET active_context_kind = $2, active_context_id = $3
-          WHERE id = $1 AND person_id = $4",
+    // Só na Distribuição em que a escolha foi feita: uma mudança de
+    // Distribuição em simultâneo repõe o contexto, e esta escrita não o desfaz
+    // (A001-L007, ADR-0625 §7).
+    let before: Option<(Option<String>, Option<Uuid>)> = sqlx::query_as(
+        "UPDATE sessions s SET active_context_kind = $2, active_context_id = $3
+           FROM sessions old
+          WHERE s.id = $1 AND old.id = s.id AND s.person_id = $4
+            AND s.active_distribution = $5
+      RETURNING old.active_context_kind, old.active_context_id",
     )
     .bind(session_id)
     .bind(chosen.kind)
     .bind(chosen.id)
     .bind(principal.person_id)
-    .execute(&mut *tx)
+    .bind(distribution.as_str())
+    .fetch_optional(&mut *tx)
     .await?;
+    let Some((old_kind, old_id)) = before else {
+        return Err(unavailable());
+    };
+    // Escolher o mesmo contexto outra vez não é uma mudança (A001-L011).
+    if old_kind.as_deref() == Some(chosen.kind) && old_id == chosen.id {
+        tx.commit().await?;
+        return Ok(Some(chosen));
+    }
     let mut entry = AuditEntry::new(action::CONTEXT_CHANGED, "session_context")
         .resource(principal.person_id)
         .detail("kind", chosen.kind);

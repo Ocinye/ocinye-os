@@ -393,9 +393,25 @@ pub async fn revoke_role(
     if role == TechnicalRole::PlatformAdmin {
         super::accounts::ensure_not_sole_platform_admin(tx, &person).await?;
     }
+    let was_entry_admin = crate::modules::organisation::distributions::is_entry_administrator(
+        tx,
+        person.organisation_id,
+        person.id,
+    )
+    .await?;
 
     if !repo::revoke_role(&mut **tx, person.id, role).await? {
         return Err(CoreError::NotFound("This role is not granted.".to_owned()));
+    }
+
+    // Tirar o papel ao único administrador que entra numa Distribuição é o
+    // mesmo fecho da Instância por outra porta (A001-H007).
+    if was_entry_admin {
+        crate::modules::organisation::distributions::ensure_an_administrator_can_enter(
+            tx,
+            person.organisation_id,
+        )
+        .await?;
     }
 
     audit::record(
