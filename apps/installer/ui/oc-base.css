@@ -1,0 +1,67 @@
+/* Ocinye OS · base (Claude Design) — DESIGN_LOCKED
+   Fontes same-origin, tokens, reposição, foco, movimento reduzido e as peças
+   partilhadas (ícone, cápsulas, estados). Cada área tem o seu oc-<área>.css. */
+
+@font-face { font-family: "IBM Plex Sans"; src: url("/static/fonts/IBMPlexSans-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/static/fonts/IBMPlexSans-Italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/static/fonts/IBMPlexSans-Medium.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/static/fonts/IBMPlexSans-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/static/fonts/IBMPlexSans-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/static/fonts/IBMPlexMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/static/fonts/IBMPlexMono-Medium.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/static/fonts/IBMPlexMono-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+
+:root {
+  /* marca */
+  --oc-navy-950: #071E33; --oc-navy-900: #0B2D4A; --oc-navy-800: #123C60; --oc-navy-700: #16446E; --oc-blue-600: #1D5A94; --oc-blue-500: #2468AB;
+  --oc-gold-500: #E0A731; --oc-gold-400: #E8B445; --oc-gold-300: #F0C35A;
+  /* texto e superfícies (claro) */
+  --oc-ink: #0F1A24; --oc-ink-2: #42546A; --oc-ink-3: #5F7183; --oc-ink-4: #7C8B9A;
+  --oc-bg: #F6F8FA; --oc-surface: #FFFFFF; --oc-muted: #F1F4F8; --oc-line: #E4E9F0; --oc-line-2: #EEF2F6;
+  /* estados (nunca só cor: acompanham ícone e texto) */
+  --oc-ok: #3E8F66; --oc-warn: #C87A22; --oc-err: #B3261E; --oc-info: #1D5A94;
+  /* tipo */
+  --oc-sans: "IBM Plex Sans", system-ui, sans-serif; --oc-mono: "IBM Plex Mono", ui-monospace, monospace;
+  /* forma: controlos em cápsula, cartões 20px, cartão de autenticação 24px */
+  --oc-radius-control: 999px; --oc-radius-card: 20px; --oc-radius-auth: 24px; --oc-radius-tile: 12px;
+  /* movimento */
+  --oc-fast: .15s; --oc-base: .2s; --oc-ease: cubic-bezier(.2, .8, .2, 1);
+}
+[data-theme="dark"] {
+  --oc-ink: #EAF0F6; --oc-ink-2: #B9C6D3; --oc-ink-3: #93A3B4; --oc-ink-4: #7A8B9C;
+  --oc-bg: #0B1520; --oc-surface: #111D2A; --oc-muted: #172536; --oc-line: #22324A; --oc-line-2: #1B2A3C;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font: 400 14px/1.5 var(--oc-sans); color: var(--oc-ink); background: var(--oc-bg); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+button, input, textarea, select { font: inherit; color: inherit; }
+a { color: var(--oc-navy-900); text-decoration: none; }
+a:hover { color: var(--oc-navy-800); text-decoration: underline; }
+img, svg { display: block; }
+:focus-visible { outline: 2px solid var(--oc-gold-500); outline-offset: 2px; }
+::selection { background: rgba(29, 90, 148, .22); }
+[hidden] { display: none !important; }
+
+.oc-skip { position: absolute; left: 12px; top: -60px; z-index: 10000; height: 36px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: var(--oc-radius-control); background: var(--oc-navy-900); color: #FFFFFF; font-weight: 500; }
+.oc-skip:focus { top: 12px; text-decoration: none; color: #FFFFFF; }
+.oc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
+.oc-icon { width: 16px; height: 16px; flex: none; }
+.oc-icon--sm { width: 14px; height: 14px; }
+.oc-icon--lg { width: 20px; height: 20px; }
+
+/* estados comuns */
+.oc-state { margin: 0; display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: 14px; font-size: 13px; }
+.oc-state .oc-icon { margin-top: 2px; }
+.oc-state--error { background: #FCF0EF; color: #8C2019; }
+[data-theme="dark"] .oc-state--error { background: rgba(179, 38, 30, .16); color: #F7C4BF; }
+.oc-pending { margin: 0; display: flex; align-items: flex-start; justify-content: center; gap: 7px; font-size: 12px; line-height: 1.5; }
+.oc-pending .oc-icon { width: 13px; height: 13px; margin-top: 2px; color: var(--oc-gold-500); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+}
+@media (forced-colors: active) {
+  .oc-state, .oc-pending { border: 1px solid CanvasText; }
+}

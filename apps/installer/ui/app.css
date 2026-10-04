@@ -1,0 +1,6 @@
+/* Ocinye OS Installer · a janela inteira é a aplicação (D011). */
+html, body { height: 100%; margin: 0; overflow: hidden; background: var(--oc-navy-950); }
+#root { height: 100%; }
+.oi-rail__foot [role="group"] { display: flex; gap: 4px; margin-top: 6px; }
+.oi-rail__foot [role="group"] .oi-btn { color: rgba(255, 255, 255, .8); }
+.oi-rail__foot [role="group"] .oi-btn[aria-pressed="true"] { color: #FFFFFF; background: rgba(255, 255, 255, .12); }

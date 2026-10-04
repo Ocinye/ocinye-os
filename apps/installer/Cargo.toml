@@ -1,0 +1,38 @@
+# The Ocinye OS Installer — the graphical application (D011, ADR-0022).
+#
+# Outside the main Cargo workspace on purpose: it links the system webview
+# (WKWebView on macOS, WebKitGTK on Linux), and the host workspace builds on
+# CI machines that have no desktop libraries. Everything that decides something
+# lives in `ocinye-installer-controller` (in the workspace, tested there); this
+# crate is the window, the native dialogs and a narrow set of IPC commands.
+[workspace]
+
+[package]
+name = "ocinye-installer"
+description = "Ocinye OS Installer"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+license = "UNLICENSED"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+ocinye-installer-controller = { path = "../../crates/ocinye-installer-controller" }
+ocinye-installer-contracts = { path = "../../crates/ocinye-installer-contracts" }
+tauri = { version = "2.12", features = [] }
+# Native pickers and the save dialog, called from Rust only: the webview has
+# no permission to open dialogs or read files itself.
+tauri-plugin-dialog = "2.8"
+# «Abrir Ocinye OS» opens the verified URL in the operator's browser, from
+# Rust only.
+tauri-plugin-opener = "2.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

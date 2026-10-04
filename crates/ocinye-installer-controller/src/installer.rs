@@ -443,6 +443,12 @@ impl Installer {
         }
     }
 
+    /// A sudo password was validated in this session.
+    #[must_use]
+    pub fn sudo_ready(&self) -> bool {
+        self.sudo.is_some()
+    }
+
     /// Upload the verified bootstrap, check its sum remotely, start it, `Hello`.
     ///
     /// # Errors

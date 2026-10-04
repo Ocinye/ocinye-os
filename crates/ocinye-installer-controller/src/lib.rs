@@ -12,6 +12,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod app;
 pub mod bundle;
 pub mod hostkeys;
 pub mod installer;
@@ -19,3 +20,4 @@ pub mod opverify;
 pub mod planner;
 pub mod ssh;
 pub mod tls;
+pub mod ui;
