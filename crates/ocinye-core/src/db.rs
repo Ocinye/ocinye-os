@@ -40,6 +40,19 @@ pub async fn migrate(pool: &PgPool) -> CoreResult<()> {
     Ok(())
 }
 
+/// The migration versions this binary carries, in order.
+///
+/// Read without touching the database: `verify-schema` compares them with
+/// what the database applied, and verifying never migrates (D011).
+#[must_use]
+pub fn embedded_migration_versions() -> Vec<i64> {
+    sqlx::migrate!("../../migrations")
+        .iter()
+        .filter(|m| !m.migration_type.is_down_migration())
+        .map(|m| m.version)
+        .collect()
+}
+
 /// Result of a database health probe.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DatabaseHealth {

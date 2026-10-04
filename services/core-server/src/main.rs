@@ -7,7 +7,7 @@
 
 #![forbid(unsafe_code)]
 
-use ocinye_core_server::{bootstrap, continuity, mail_check, provision, routes};
+use ocinye_core_server::{bootstrap, continuity, installer, mail_check, provision, routes};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -34,6 +34,18 @@ async fn main() -> anyhow::Result<()> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.first().map(String::as_str) == Some("bootstrap-admin") {
         return bootstrap::run(&argv[1..]).await;
+    }
+    // D011: o que o executor da instalação pergunta e semeia no servidor —
+    // uma linha JSON cada, e nada que a rede alcance (ADR-0022).
+    match argv.first().map(String::as_str) {
+        Some("endpoint-seed") => return installer::endpoint_seed(&argv[1..]).await,
+        Some("verify-schema") => return installer::verify_schema(&argv[1..]).await,
+        Some("verify-instance") => return installer::verify_instance(&argv[1..]).await,
+        Some("verify-endpoints") => return installer::verify_endpoints(&argv[1..]).await,
+        Some("verify-admin-bootstrap") => {
+            return installer::verify_admin_bootstrap(&argv[1..]).await;
+        }
+        _ => {}
     }
     // Answers "do these credentials work?" without starting the Core, and
     // without printing anything that would be unsafe to paste into a ticket.

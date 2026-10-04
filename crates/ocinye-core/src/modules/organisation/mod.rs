@@ -20,6 +20,7 @@ pub mod applications;
 pub mod contexts;
 pub mod distributions;
 pub mod endpoints;
+pub mod installation;
 pub mod settings;
 
 pub use applications::{
