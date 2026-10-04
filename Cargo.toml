@@ -6,6 +6,7 @@ members = [
     "crates/ocinye-observability",
     "crates/ocinye-core",
     "crates/ocinye-capabilities",
+    "crates/ocinye-installer-contracts",
     "services/core-server",
     "services/worker",
     "services/node-agent",
@@ -31,6 +32,7 @@ ocinye-observability = { path = "crates/ocinye-observability" }
 ocinye-core = { path = "crates/ocinye-core" }
 ocinye-core-server = { path = "services/core-server" }
 ocinye-capabilities = { path = "crates/ocinye-capabilities" }
+ocinye-installer-contracts = { path = "crates/ocinye-installer-contracts" }
 
 # --- runtime ----------------------------------------------------------------
 tokio = { version = "1.53", features = ["full"] }

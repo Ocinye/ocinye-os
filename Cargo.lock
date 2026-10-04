@@ -3467,6 +3467,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocinye-installer-contracts"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "chrono",
+ "hex",
+ "ocinye-contracts",
+ "serde",
+ "serde_json",
+ "sha1 0.10.7",
+ "sha2 0.10.9",
+ "zeroize",
+]
+
+[[package]]
 name = "ocinye-node-agent"
 version = "0.1.0"
 dependencies = [
