@@ -82,6 +82,7 @@ administração.
 | A001-M017 | Mensagens: voltar a um grupo devolvia o papel antigo; um administrador retirava o dono; o registo não dizia quem | FIXED; o último que governa poder sair → DESIGN_DECISION_REQUIRED |
 | A001-M018 | Uma corrida perdida contra uma restrição única respondia 500 | FIXED — 409, sem nomear a restrição · `m018_…` |
 | A001-M019 | A lista de relações de um ambiente mostrava ligações cujas pontas o leitor não alcança | FIXED — as duas pontas resolvem-se por quem lê |
+| A001-M020 | `wasmtime`/`wasmtime-wasi` 48.0.3 com sete avisos publicados a 2026-10-02 (RUSTSEC-2026-0321 a 0327, um crítico); o portão de dependências do `verify.sh` falhou na corrida desta auditoria | FIXED — 48.0.5, só no `Cargo.lock`, mesma versão maior. Severidade MEDIUM e não CRITICAL: o crítico (callbacks async de componentes), o wasip3 e o GC não são usados pelo runtime `wasm32-wasip1`, e o convidado é uma capacidade verificada por soma |
 
 ### LOW
 
@@ -137,11 +138,11 @@ administração.
 |---|---|---|---|
 | CRITICAL | 0 | 0 | — |
 | HIGH | 8 | 8 | — |
-| MEDIUM | 19 | 17 | 1 DEFERRED · 1 DESIGN |
+| MEDIUM | 20 | 18 | 1 DEFERRED · 1 DESIGN |
 | LOW | 37 | 18 | 9 ACCEPTED · 6 DEFERRED · 4 DESIGN |
 | NOT_A_BUG | 1 | — | — |
 
-**Total: 65.** Corrigidos 43 · ACCEPTED_CURRENT_BEHAVIOR 9 · DEFERRED_WITH_REASON 7 ·
+**Total: 66.** Corrigidos 44 · ACCEPTED_CURRENT_BEHAVIOR 9 · DEFERRED_WITH_REASON 7 ·
 DESIGN_DECISION_REQUIRED 5 · NOT_A_BUG 1.
 
 ## 5. Provas

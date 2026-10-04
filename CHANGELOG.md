@@ -34,6 +34,8 @@ Nenhuma funcionalidade nova, nenhuma implementação da D011, nenhum deploy.
   (H001); as janelas não se perdem quando o Core falha (H002); perder a
   Distribuição activa com duas ou mais restantes deixa escolher (M002); escolher
   outra Distribuição passa pelo diálogo de mudança (M003).
+- **Dependências:** `wasmtime`/`wasmtime-wasi` 48.0.3 → 48.0.5, pelos avisos
+  RUSTSEC-2026-0321 a 0327 (M020).
 - **Migração 0064:** `ck_sessions_context_id` deixava um identificador de
   contexto sem tipo (L006).
 - **Guardas novas:** cada chave i18n literal usada no código existe
