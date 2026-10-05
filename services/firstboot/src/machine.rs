@@ -178,21 +178,30 @@ pub fn integrity(root: &Root) -> Result<(ImageContentManifest, ImageFacts), Firs
             _ => return Err(tampered(&f.path)),
         }
     }
-    // Preloaded images: the id must be listed in Docker's repository index
-    // under the compose name, and the image config must hash to that id.
-    let docker = root.sys_path("/var/lib/docker/image/overlay2");
-    let repos: serde_json::Value = store::read_json(&docker.join("repositories.json"))
+    // Preloaded images. Docker keeps them in one of two stores: the classic
+    // overlay2 image store (a JSON name index and an image database), or the
+    // containerd content store that Docker 29 uses on a fresh install. In both
+    // the image config is content-addressed: it must be present and hash to
+    // the image id. The overlay2 index also lets the compose name be checked;
+    // the containerd name index is a bolt database first boot does not read
+    // (layers are not re-hashed here: D013_SECURITY_MATRIX, F3 scope).
+    let overlay = root.sys_path("/var/lib/docker/image/overlay2");
+    let content =
+        root.sys_path("/var/lib/containerd/io.containerd.content.v1.content/blobs/sha256");
+    let repos: Option<serde_json::Value> = store::read_json(&overlay.join("repositories.json"))
         .ok()
-        .flatten()
-        .ok_or_else(|| tampered("repositories.json"))?;
+        .flatten();
     for img in &m.oci_images {
         let id = &img.image_id.0;
-        let listed = repos["Repositories"][&img.name]
-            .as_object()
-            .is_some_and(|tags| tags.values().any(|v| v.as_str() == Some(id.as_str())));
         let hex = id.strip_prefix("sha256:").unwrap_or_default();
-        let cfg = sha256_file(&docker.join("imagedb/content/sha256").join(hex)).map(|(h, _)| h);
-        if !listed || cfg.as_deref().ok() != Some(hex) {
+        let hashes = |p: &Path| sha256_file(p).ok().is_some_and(|(h, _)| h == hex);
+        let in_overlay = repos.as_ref().is_some_and(|r| {
+            r["Repositories"][&img.name]
+                .as_object()
+                .is_some_and(|tags| tags.values().any(|v| v.as_str() == Some(id.as_str())))
+        }) && hashes(&overlay.join("imagedb/content/sha256").join(hex));
+        let in_containerd = hashes(&content.join(hex));
+        if !(in_overlay || in_containerd) {
             return Err(tampered(&img.name));
         }
     }
@@ -776,6 +785,62 @@ pub mod tests {
                 error: FirstBootError::ImageContentManifestInvalid { .. }
             }
         ));
+    }
+
+    #[test]
+    fn imagens_pre_carregadas_conferem_nos_dois_armazens() {
+        use ocinye_image_contracts::manifest::{OciDigest, OciImageRef, OciRole};
+        for store_kind in ["overlay2", "containerd"] {
+            let r = machine(&format!("oci-{store_kind}"));
+            let cfg = br#"{"architecture":"amd64"}"#;
+            let p = r.sys.join("cfg");
+            fs::write(&p, cfg).unwrap();
+            let (hex, _) = sha256_file(&p).unwrap();
+            let id = format!("sha256:{hex}");
+            let blob = if store_kind == "overlay2" {
+                let d = r.sys_path("/var/lib/docker/image/overlay2");
+                fs::write(
+                    d.join("repositories.json"),
+                    format!(r#"{{"Repositories":{{"nginx":{{"nginx:x":"{id}"}}}}}}"#),
+                )
+                .unwrap();
+                d.join("imagedb/content/sha256").join(&hex)
+            } else {
+                let d =
+                    r.sys_path("/var/lib/containerd/io.containerd.content.v1.content/blobs/sha256");
+                fs::create_dir_all(&d).unwrap();
+                d.join(&hex)
+            };
+            fs::write(&blob, cfg).unwrap();
+            // Put the image in the embedded manifest and the facts.
+            let mp = r.sys_path(ocinye_image_contracts::paths::IMAGE_CONTENT);
+            let mut m = ImageContentManifest::parse(&fs::read(&mp).unwrap()).unwrap();
+            m.oci_images = vec![OciImageRef {
+                name: "nginx".into(),
+                role: OciRole::ThirdParty,
+                reference: format!("nginx:1.30.5-alpine@sha256:{}", "a".repeat(64)),
+                digest: OciDigest(format!("sha256:{}", "a".repeat(64))),
+                image_id: OciDigest(id.clone()),
+            }];
+            fs::write(&mp, m.to_canonical()).unwrap();
+            let fp = r.sys_path(ocinye_image_contracts::paths::IMAGE_FACTS);
+            let mut f: ImageFacts = store::read_json(&fp).unwrap().unwrap();
+            f.content_sha256 = m.sha256();
+            store::write_json(&fp, &f, 0o644).unwrap();
+            assert!(integrity(&r).is_ok(), "{store_kind}");
+            // A rewritten config no longer hashes to its id.
+            fs::write(&blob, br#"{"architecture":"evil"}"#).unwrap();
+            assert_eq!(
+                integrity(&r).unwrap_err(),
+                FirstBootError::ReleasePayloadTampered {
+                    path: "nginx".into()
+                },
+                "{store_kind}"
+            );
+            // And a missing one is missing.
+            fs::remove_file(&blob).unwrap();
+            assert!(integrity(&r).is_err());
+        }
     }
 
     #[test]
