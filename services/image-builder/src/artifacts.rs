@@ -152,6 +152,34 @@ fn efi_files(root: &Path, arch: Arch) -> Result<EfiFiles, ImageBuildError> {
     })
 }
 
+/// The newest kernel in `boot` that has its initrd (the `vmlinuz` and
+/// `initrd.img` links are not always both there, and they are absolute or
+/// relative depending on the package that wrote them).
+pub fn kernel_pair(boot: &Path) -> Option<(PathBuf, PathBuf)> {
+    let mut versions: Vec<String> = fs::read_dir(boot)
+        .ok()?
+        .flatten()
+        .filter_map(|e| {
+            e.file_name()
+                .to_str()?
+                .strip_prefix("vmlinuz-")
+                .map(str::to_owned)
+        })
+        .filter(|v| boot.join(format!("initrd.img-{v}")).is_file())
+        .collect();
+    // Numeric order: 6.8.0-146 is newer than 6.8.0-99.
+    versions.sort_by_key(|v| {
+        v.split(|c: char| !c.is_ascii_digit())
+            .filter_map(|n| n.parse::<u64>().ok())
+            .collect::<Vec<_>>()
+    });
+    let v = versions.pop()?;
+    Some((
+        boot.join(format!("vmlinuz-{v}")),
+        boot.join(format!("initrd.img-{v}")),
+    ))
+}
+
 /// GRUB menu: the installer, and the firmware settings. Serial and screen.
 pub fn grub_cfg(image: &OcinyeImageVersion, arch: Arch) -> String {
     let serial = match arch {
@@ -214,8 +242,7 @@ pub fn iso(
         &tree.join("casper/filesystem.squashfs"),
         &[("usr/lib/ocinye/oie/payload.json", &facts_path)],
     )?;
-    let kernel = fs::canonicalize(oie.mnt.join("boot/vmlinuz")).map_err(|_| f())?;
-    let initrd = fs::canonicalize(oie.mnt.join("boot/initrd.img")).map_err(|_| f())?;
+    let (kernel, initrd) = kernel_pair(&oie.mnt.join("boot")).ok_or_else(&f)?;
     fs::copy(&kernel, tree.join("casper/vmlinuz")).map_err(|_| f())?;
     fs::copy(&initrd, tree.join("casper/initrd")).map_err(|_| f())?;
     fs::write(
@@ -311,6 +338,26 @@ pub fn iso(
 mod tests {
     use super::*;
     use ocinye_image_contracts::manifest::fixtures::version;
+
+    #[test]
+    fn o_nucleo_mais_recente_com_initrd() {
+        let d = std::env::temp_dir().join(format!("ocinye-boot-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        for f in [
+            "vmlinuz-6.8.0-100-generic",
+            "initrd.img-6.8.0-100-generic",
+            "vmlinuz-6.8.0-146-generic",
+            "initrd.img-6.8.0-146-generic",
+            "vmlinuz-6.8.0-150-generic",
+        ] {
+            fs::write(d.join(f), "").unwrap();
+        }
+        let (k, i) = kernel_pair(&d).unwrap();
+        assert!(
+            k.ends_with("vmlinuz-6.8.0-146-generic") && i.ends_with("initrd.img-6.8.0-146-generic")
+        );
+    }
 
     #[test]
     fn menu_tem_consola_serie_e_marca_desenvolvimento() {
