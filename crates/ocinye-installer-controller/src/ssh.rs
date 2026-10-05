@@ -632,6 +632,16 @@ mod tests {
             serve(d, Elevation::SudoPassword),
             "exec sudo -S -p '' '/tmp/ocinye-bootstrap-abcdefgh01234567/ocinye-bootstrap' serve"
         );
+        // Passwordless sudo is non-interactive (`-n`): if the rule does not
+        // hold, sudo fails instead of waiting for a password nobody sends.
+        assert_eq!(
+            serve(d, Elevation::SudoNoPassword),
+            "exec sudo -n '/tmp/ocinye-bootstrap-abcdefgh01234567/ocinye-bootstrap' serve"
+        );
+        assert_eq!(
+            serve(d, Elevation::Root),
+            "exec '/tmp/ocinye-bootstrap-abcdefgh01234567/ocinye-bootstrap' serve"
+        );
         for bad in [
             "bundle/../../etc/passwd",
             "bundle/a b",

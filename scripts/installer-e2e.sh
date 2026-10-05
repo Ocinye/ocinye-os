@@ -38,6 +38,10 @@ case "${1:-}" in
         else
             tls_json='"self-signed"'
         fi
+        # Sudo sem palavra-passe: não há ficheiro, e a configuração não o nomeia.
+        sudo_linha=""
+        [ -f "$d/sudo-password" ] && sudo_linha="  \"sudo_password_file\": \"$d/sudo-password\",
+"
         cat > "$d/installer.json" <<EOF
 {
   "bundle": "$pacote",
@@ -45,8 +49,7 @@ case "${1:-}" in
   "host": "$ip",
   "user": "operador",
   "key": "$d/id_ed25519",
-  "sudo_password_file": "$d/sudo-password",
-  "instance_name": "Instância de Prova D011",
+$sudo_linha  "instance_name": "Instância de Prova D011",
   "distributions": ["business", "research"],
   "canonical": "os.d011.test",
   "bound": [
@@ -111,7 +114,7 @@ PY
         t="$(mktemp -d)"; mkdir -p "$t/secrets"
         tar -C "$d" -cf "$t/operator.tar" --exclude id_ed25519 --exclude sudo-password \
             --exclude first-admin-credential --exclude 'state/first-admin-credential' .
-        cp "$d/sudo-password" "$t/secrets/sudo-password"
+        [ -f "$d/sudo-password" ] && cp "$d/sudo-password" "$t/secrets/sudo-password"
         [ -f "$d/state/first-admin-credential" ] && cp "$d/state/first-admin-credential" "$t/secrets/first-admin-credential"
         cp "$RAIZ/infra/installer-test/secret-audit.py" "$t/"
         w="/tmp/ocinye-audit-$RANDOM$RANDOM"

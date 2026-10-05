@@ -2,7 +2,10 @@
 # VMs descartáveis para provar o Ocinye OS Installer (D011) — localmente, com
 # o Lima, uma de cada vez.
 #
-#   scripts/installer-vm.sh create  NOME   cria e arranca (Ubuntu 24.04 minimal)
+#   scripts/installer-vm.sh create  NOME [--sudo-nopasswd]
+#                                          cria e arranca (Ubuntu 24.04 minimal); com
+#                                          --sudo-nopasswd, o `operador` tem sudo sem
+#                                          palavra-passe e a palavra-passe bloqueada
 #   scripts/installer-vm.sh ip      NOME   o endereço que o Installer usa
 #   scripts/installer-vm.sh baseline NOME  prova que a VM está limpa
 #   scripts/installer-vm.sh measure NOME   disco, memória e serviços, agora
@@ -66,8 +69,21 @@ case "${1:-}" in
             vm "$nome" sudo timeout 10 loginctl list-sessions >/dev/null 2>&1 \
                 || fatal "o systemd-logind da VM continua sem responder"
         fi
+        if [ "${3:-}" = "--sudo-nopasswd" ]; then
+            # Um operador sintético com sudo sem palavra-passe, controlado: só ele,
+            # num drop-in próprio validado pelo visudo, e a palavra-passe da conta
+            # bloqueada — não há segredo de sudo nenhum para recolher, nem aqui.
+            vm "$nome" sudo sh -c 'printf "operador ALL=(ALL) NOPASSWD:ALL\n" > /etc/sudoers.d/90-ocinye-operador \
+                && chmod 440 /etc/sudoers.d/90-ocinye-operador \
+                && visudo -cf /etc/sudoers.d/90-ocinye-operador >/dev/null \
+                && passwd -l operador >/dev/null'
+            rm -f "$d/sudo-password"
+            echo nopasswd > "$d/sudo-mode"
+        else
+            echo password > "$d/sudo-mode"
+        fi
         ip_de "$nome" > "$d/ip"
-        printf '  %s · %s · operador · chave %s\n' "$nome" "$(cat "$d/ip")" "$d/id_ed25519"
+        printf '  %s · %s · operador (sudo %s) · chave %s\n' "$nome" "$(cat "$d/ip")" "$(cat "$d/sudo-mode")" "$d/id_ed25519"
         ;;
     ip)
         nome="${2:?nome}"; nome_valido "$nome"; dono "$nome"
