@@ -1,0 +1,58 @@
+# O construtor de imagens do Ocinye OS (D013): uma VM Linux descartável onde o
+# ocinye-image-builder corre como root — anexa discos com qemu-nbd e arranca
+# VMs de construção com QEMU. Nada disto corre no Mac do operador, e nada
+# escreve num disco amovível.
+#
+# Mesma base Ubuntu 24.04 Minimal fixada que as provas da D011. Virtualização
+# encaixada (M3+, macOS 15+): imagens arm64 arrancam com KVM; amd64 com TCG.
+#
+# Criada e destruída só por `scripts/image-build.sh`.
+vmType: vz
+arch: aarch64
+cpus: 4
+memory: 5GiB
+disk: 120GiB
+nestedVirtualization: true
+images:
+  - location: "https://cloud-images.ubuntu.com/minimal/releases/noble/release-20261001/ubuntu-24.04-minimal-cloudimg-arm64.img"
+    arch: aarch64
+    digest: "sha256:fbf6b15c50c474dc6dee5b3c74da212bb687a2625e877227828e6492d88dc151"
+mounts:
+  # O repositório, só de leitura (o builder lê infra/image e os binários).
+  # scripts/image-build.sh põe aqui o caminho da árvore (--set).
+  - location: "/nonexistent-ocinye-repo"
+    writable: false
+  # Pacotes de release D011 (entrada), só de leitura.
+  - location: "~/.cache/ocinye-installer-test/bundles"
+    writable: false
+  # Cache da base Ubuntu, chave de desenvolvimento e artefactos (saída).
+  - location: "~/.cache/ocinye-image-builder"
+    writable: true
+portForwards:
+  - guestPortRange: [1, 65535]
+    ignore: true
+containerd:
+  system: false
+  user: false
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euxo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y --no-install-recommends \
+        qemu-system-x86 qemu-system-arm qemu-efi-aarch64 ovmf qemu-utils \
+        cloud-image-utils gpgv xorriso squashfs-tools mtools dosfstools \
+        zstd minisign parted openssh-client curl ca-certificates
+      modprobe nbd max_part=16 || true
+      echo nbd > /etc/modules-load.d/nbd.conf
+      echo "options nbd max_part=16" > /etc/modprobe.d/nbd.conf
+      # syft, fixado por versão e soma (infra/image/builder/syft.sha256).
+      SYFT=1.54.0
+      SUM=ee6d4566373a05b344bc6b5f1706f14419bf9338ba39ff686e247deefe9b8818
+      cd /tmp
+      curl -fsSLo syft.tgz "https://github.com/anchore/syft/releases/download/v${SYFT}/syft_${SYFT}_linux_arm64.tar.gz"
+      echo "${SUM}  syft.tgz" | sha256sum -c -
+      tar -xzf syft.tgz syft && install -m 0755 syft /usr/local/bin/syft && rm -f syft syft.tgz
+      install -d -m 0755 /var/lib/ocinye-image-build
