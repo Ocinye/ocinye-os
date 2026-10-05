@@ -31,6 +31,12 @@ pontos de acesso que falham fechado, mudança de Distribuição com o diálogo d
 D002, contexto da sessão, bloqueio do ecrã e as secções novas da
 Administração; a instalação fica para a D011
 ([`d011-installer-boundary.md`](../architecture/d011-installer-boundary.md)).
+**A D011 — o Ocinye OS Installer — está em `feat/design-d011`, não mergeada**
+([ADR-0022](../adrs/0022-graphical-remote-installer.md) a
+[ADR-0025](../adrs/0025-hardware-discovery-and-compute-boundary.md),
+[installer](../install/installer.md)): uma janela própria (`apps/installer`),
+fora do Workspace, com os ecrãs do Design e textos do Code para o alvo único
+Ubuntu Server 24.04; certificada localmente em `arm64`, à espera da VM `amd64`.
 A secção está no topo do [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md), e a cobertura em
 [`application-design-coverage.md`](application-design-coverage.md). Equipas não
 existem: sem domínio, sem desenho, sem aplicação.

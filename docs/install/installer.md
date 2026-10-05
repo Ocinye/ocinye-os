@@ -62,5 +62,49 @@ sistemas além do Ubuntu 24.04; desinstalar.
 
 Em VMs descartáveis, nunca em servidores reais: `scripts/installer-vm.sh`
 (Lima, Ubuntu 24.04 Minimal) e `scripts/installer-e2e.sh` (o controlador real
-contra o bootstrap real e um pacote real). Os resultados ficam no relatório da
-D011.
+contra o bootstrap real e um pacote real), com
+`infra/installer-test/secret-audit.py` a procurar cada segredo em tudo o que fica
+ou se imprime.
+
+### Local `arm64` — 2026-10-05
+
+VM Lima (`vz`, Ubuntu Server 24.04.5 LTS Minimal `arm64`, imagem
+`release-20261001`), **alocação de teste** 2 vCPU · 4 GiB · 40 GiB, sem swap —
+isto não é o mínimo do produto ([hardware](hardware-results.md)). Pacote de prova
+`848a9249ac50`; o lado do servidor é igual ao do commit final.
+
+- **Ciclo DEV** (quatro VMs): Docker em falta → instalado com a chave conferida;
+  Docker compatível já presente → não reinstalado; `docker.io` → recusado sem
+  mutação; resto de um `docker.io` removido → instalado; `ufw` activo → só
+  80/443 `comment "ocinye"`, idempotente; `firewalld` e uma política `nftables`
+  própria → acção externa, intocados; TLS do operador (válido, nomes em falta,
+  SHA-1, curva EC por extenso) → os inválidos recusados localmente; interromper
+  (`--kill-after-phase`) → reatar; parar → retomar; Ocinye já instalado →
+  bloqueado; chave de anfitrião mudada → paragem antes de autenticar.
+- **Viagem CLEAN** pela janela real (o `ui_bridge` sobre o mesmo dispatcher), de
+  I01 a I18: 2 Distribuições, 3 pontos de acesso, auto-assinado; instalação em
+  83 s; `ACTIVATION_PENDING [DNS]` → DNS controlado → «Verificar novamente» →
+  `INSTALLED_TEST_MODE`; V01–V13, V12b, V16 e V-FW a passar; a credencial
+  temporária entra uma vez, obriga a mudar a palavra-passe e o segundo factor, e
+  depois é recusada; o serviço volta depois de um reboot.
+- **Segredos**: 10 segredos, 1078 alvos (incluindo 3950 amostras dos argumentos
+  de todos os processos durante a instalação), 0 ocorrências.
+
+| Medida (VM CLEAN) | Antes | Depois | Diferença |
+|---|---|---|---|
+| Disco usado | 0,93 GB | 3,70 GB | **+2,77 GB** (imagens 2,32 GB) |
+| RAM usada em repouso | 288 MB | 631 MB | **+344 MB** |
+| RAM dos contentores Ocinye | — | ≈ 156 MB | Core 84 MB, PostgreSQL 50 MB, o resto ≤ 4 MB cada |
+| Swap | 0 | 0 | — |
+| Serviços a correr | 13 | 15 | `docker`, `containerd` |
+| Pacotes | 276 | 289 | `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-compose-plugin` e as dependências `iptables`/`nftables` |
+
+Serviços persistentes que o Installer acrescenta: `docker.service` e
+`containerd.service` (o runtime), `ocinye.service` (`oneshot`, levanta o Compose
+no arranque) e oito contentores (proxy, workspace, core, worker,
+conversion-runner, redis, postgres, object-store). Nada mais fica a correr: o
+bootstrap e a sua pasta temporária desaparecem no fim.
+
+### Cloud `amd64`
+
+Por fazer: é o portão final da certificação D011.
