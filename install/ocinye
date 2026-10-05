@@ -34,6 +34,17 @@ set -euo pipefail
 CONFIG="${OCINYE_CONFIG_DIR:-/etc/ocinye}"
 RAIZ="${OCINYE_ROOT:-/srv/ocinye}"
 COMPOSE="infra/compose/docker-compose.production.yml"
+
+# A imagem do proxy é a que o Compose do release fixa por digest: o
+# certificado de teste gera-se e lê-se com os mesmos bytes que o servem, e não
+# há uma segunda referência para envelhecer à parte.
+imagem_nginx() {
+    local ref
+    ref="$(sed -n 's/^[[:space:]]*image:[[:space:]]*\(nginx:[^[:space:]]*@sha256:[0-9a-f]\{64\}\)[[:space:]]*$/\1/p' \
+        "$RAIZ/current/$COMPOSE" | head -1)"
+    [ -n "$ref" ] || fatal "o Compose do release não fixa a imagem do proxy por digest"
+    printf '%s' "$ref"
+}
 MIN_RAM_MB=3500
 MIN_DISK_GB=15
 
@@ -324,7 +335,7 @@ fase_proxy() {  # tls cert chave dominio [host…]
         # Repetir a fase não troca o certificado que já foi registado.
         nota "TLS: certificado auto-assinado já gerado"
     else
-        docker run --rm -v "$CONFIG/tls:/tls" --entrypoint /bin/sh nginx:1.27-alpine -c \
+        docker run --rm -v "$CONFIG/tls:/tls" --entrypoint /bin/sh "$(imagem_nginx)" -c \
             "apk add --no-cache openssl >/dev/null 2>&1 && \
              openssl req -x509 -newkey rsa:3072 -nodes -days 825 \
                -subj '/CN=$canonico' -addext 'subjectAltName=$sans' \
@@ -592,7 +603,7 @@ phase_() {
             case "$tls" in self-signed|provided) ;; *) fatal "--tls é self-signed ou provided" ;; esac
             fase_proxy "$tls" "$cert" "$chave" "$dominio" "${hosts[@]+"${hosts[@]}"}" >&2
             # O certificado que o proxy vai servir, para a verificação de fora (V11).
-            fp="$(docker run --rm -v "$CONFIG/tls:/tls:ro" --entrypoint /bin/sh nginx:1.27-alpine -c \
+            fp="$(docker run --rm -v "$CONFIG/tls:/tls:ro" --entrypoint /bin/sh "$(imagem_nginx)" -c \
                 'apk add --no-cache openssl >/dev/null 2>&1 && openssl x509 -in /tls/instance.pem -outform DER | sha256sum' \
                 | awk '{print $1}')"
             [[ "$fp" =~ ^[0-9a-f]{64}$ ]] || fatal "não foi possível ler o certificado instalado"

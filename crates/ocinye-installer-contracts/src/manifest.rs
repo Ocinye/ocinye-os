@@ -142,13 +142,85 @@ pub struct Image {
 }
 
 /// An image Compose pulls (not inside the bundle).
+///
+/// Its identity is the **digest**: a tag is a name someone can move, and a
+/// release that says `redis:7-alpine` names whatever that tag points at on
+/// the day of the install. The tag stays only so a person can read it. The
+/// `reference` is exactly what Compose pulls, and it is
+/// `repository[:tag]@sha256:<64 hex>` — never a tag alone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ThirdPartyImage {
-    /// The reference as Compose names it.
+    /// The reference as Compose names it: `repository[:tag]@digest`.
     pub reference: String,
+    /// The repository (`nginx`, `pgvector/pgvector`, `ghcr.io/…`).
+    pub repository: String,
+    /// The readable tag, when the reference has one (never `latest`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    /// `sha256:<64 hex>`: the identity.
+    pub digest: String,
     /// Which compose file names it.
     pub from_compose: String,
+}
+
+impl ThirdPartyImage {
+    /// Splits a Compose reference into its parts. Refuses a reference without
+    /// an immutable digest, a `latest` tag, and anything that is not a plain
+    /// `repository[:tag]@sha256:<64 hex>`.
+    ///
+    /// # Errors
+    ///
+    /// The reason, as a stable code.
+    pub fn from_reference(reference: &str, from_compose: &str) -> Result<Self, &'static str> {
+        if reference.is_empty()
+            || reference
+                .chars()
+                .any(|c| c.is_whitespace() || c.is_control())
+        {
+            return Err("IMAGE_REFERENCE_INVALID");
+        }
+        let Some((name, digest)) = reference.split_once('@') else {
+            return Err("IMAGE_NOT_PINNED_BY_DIGEST");
+        };
+        if !digest
+            .strip_prefix("sha256:")
+            .is_some_and(|h| is_hex(h, 64, false))
+        {
+            return Err("IMAGE_DIGEST_INVALID");
+        }
+        // A tag is the part after the last `:` that comes after the last `/`
+        // (a registry port is before it: `host:5000/repo`).
+        let slash = name.rfind('/').map_or(0, |i| i + 1);
+        let (repository, tag) = match name[slash..].rfind(':') {
+            Some(i) => (&name[..slash + i], Some(&name[slash + i + 1..])),
+            None => (name, None),
+        };
+        let repo_ok = !repository.is_empty()
+            && repository
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._-/:".contains(&b));
+        if !repo_ok {
+            return Err("IMAGE_REPOSITORY_INVALID");
+        }
+        if let Some(t) = tag {
+            if t.is_empty()
+                || t == "latest"
+                || !t
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+            {
+                return Err("IMAGE_TAG_INVALID");
+            }
+        }
+        Ok(Self {
+            reference: reference.to_owned(),
+            repository: repository.to_owned(),
+            tag: tag.map(str::to_owned),
+            digest: digest.to_owned(),
+            from_compose: from_compose.to_owned(),
+        })
+    }
 }
 
 /// `migrations`.
@@ -412,12 +484,12 @@ impl ReleaseManifest {
             }
         }
         for t in &self.third_party_images {
-            if t.reference.is_empty()
-                || t.reference.ends_with(":latest")
-                || !t.reference.contains(':')
-                || t.reference.chars().any(char::is_whitespace)
-            {
-                return Err(bad("third_party_images.reference"));
+            // The parts must be exactly what the reference says: a digest
+            // field that disagrees with the reference Compose pulls would
+            // certify bytes nobody installs.
+            match ThirdPartyImage::from_reference(&t.reference, &t.from_compose) {
+                Ok(parsed) if parsed == *t => {}
+                _ => return Err(bad("third_party_images.reference")),
             }
             if !is_safe_bundle_path(&t.from_compose) {
                 return Err(bad("third_party_images.from_compose"));
@@ -562,10 +634,11 @@ pub(crate) mod tests {
             },
             artifacts,
             images,
-            third_party_images: vec![ThirdPartyImage {
-                reference: "nginx:1.27-alpine".into(),
-                from_compose: "infra/compose/docker-compose.production.yml".into(),
-            }],
+            third_party_images: vec![ThirdPartyImage::from_reference(
+                &format!("nginx:1.30.5-alpine@sha256:{}", h('0')),
+                "infra/compose/docker-compose.production.yml",
+            )
+            .unwrap()],
             migrations: Migrations {
                 count: 64,
                 latest: "0064".into(),
@@ -728,5 +801,92 @@ pub(crate) mod tests {
         assert_eq!(parse_sums_line(&format!("{h} x")), None);
         assert!(version_at_least("27.3.1", "24.0"));
         assert!(!version_at_least("20.10.24", "24.0"));
+    }
+
+    #[test]
+    fn uma_imagem_de_terceiros_so_se_identifica_por_digest() {
+        let d = format!("sha256:{}", "a".repeat(64));
+        let c = "infra/compose/docker-compose.production.yml";
+        // Floating, latest, and malformed references are refused.
+        for (r, code) in [
+            ("redis:7-alpine", "IMAGE_NOT_PINNED_BY_DIGEST"),
+            ("nginx", "IMAGE_NOT_PINNED_BY_DIGEST"),
+            (&*format!("nginx:latest@{d}"), "IMAGE_TAG_INVALID"),
+            ("nginx:1.30.5-alpine@sha256:abc", "IMAGE_DIGEST_INVALID"),
+            (
+                &*format!("nginx:1.30.5-alpine@sha512:{}", "a".repeat(128)),
+                "IMAGE_DIGEST_INVALID",
+            ),
+            (&*format!("NGINX:1@{d}"), "IMAGE_REPOSITORY_INVALID"),
+            (&*format!("nginx:1 @{d}"), "IMAGE_REFERENCE_INVALID"),
+        ] {
+            assert_eq!(ThirdPartyImage::from_reference(r, c), Err(code), "{r}");
+        }
+        // Tag, registry port, and digest-only references parse into parts.
+        let t = ThirdPartyImage::from_reference(
+            &format!("pgvector/pgvector:0.8.7-pg17-bookworm@{d}"),
+            c,
+        )
+        .unwrap();
+        assert_eq!(
+            (t.repository.as_str(), t.tag.as_deref(), t.digest.as_str()),
+            ("pgvector/pgvector", Some("0.8.7-pg17-bookworm"), d.as_str())
+        );
+        let p =
+            ThirdPartyImage::from_reference(&format!("registry.test:5000/x/y:1.2@{d}"), c).unwrap();
+        assert_eq!(
+            (p.repository.as_str(), p.tag.as_deref()),
+            ("registry.test:5000/x/y", Some("1.2"))
+        );
+        let o = ThirdPartyImage::from_reference(
+            &format!("ghcr.io/ocinye/third-party/minio-server@{d}"),
+            c,
+        )
+        .unwrap();
+        assert_eq!(
+            (o.repository.as_str(), o.tag),
+            ("ghcr.io/ocinye/third-party/minio-server", None)
+        );
+    }
+
+    #[test]
+    fn um_manifesto_cujas_partes_desmentem_a_referencia_e_recusado() {
+        let other = format!("sha256:{}", "b".repeat(64));
+        assert_eq!(
+            refused(|m| m.third_party_images[0].digest = other.clone()),
+            "third_party_images.reference"
+        );
+        assert_eq!(
+            refused(|m| m.third_party_images[0].tag = Some("1.31.6-alpine".into())),
+            "third_party_images.reference"
+        );
+        assert_eq!(
+            refused(|m| m.third_party_images[0].repository = "nginx-fork".into()),
+            "third_party_images.reference"
+        );
+        assert_eq!(
+            refused(|m| m.third_party_images[0].reference = "nginx:1.30.5-alpine".into()),
+            "third_party_images.reference"
+        );
+    }
+
+    #[test]
+    fn a_forma_canonica_de_uma_imagem_de_terceiros_e_deterministica() {
+        let d = format!("sha256:{}", "c".repeat(64));
+        let c = "infra/compose/docker-compose.production.yml";
+        let with_tag =
+            ThirdPartyImage::from_reference(&format!("redis:7.4.11-alpine@{d}"), c).unwrap();
+        let no_tag = ThirdPartyImage::from_reference(&format!("ghcr.io/x/y@{d}"), c).unwrap();
+        let a = crate::canonical::to_canonical(&with_tag).unwrap();
+        let b = crate::canonical::to_canonical(&with_tag).unwrap();
+        assert_eq!(a, b);
+        assert_eq!(
+            a,
+            format!("{{\"digest\":\"{d}\",\"from_compose\":\"{c}\",\"reference\":\"redis:7.4.11-alpine@{d}\",\"repository\":\"redis\",\"tag\":\"7.4.11-alpine\"}}")
+        );
+        // No tag: the field is absent, not null.
+        assert!(!crate::canonical::to_canonical(&no_tag)
+            .unwrap()
+            .contains("tag"));
     }
 }

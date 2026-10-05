@@ -47,7 +47,9 @@ services:
   # ── A única porta para a Internet ─────────────────────────────────────
   proxy:
     <<: *comum
-    image: nginx:1.27-alpine
+    # Por digest (docs/deployment/third-party-artifacts.md): o ramo estável do
+    # nginx; o digest é a identidade, a etiqueta só se lê.
+    image: nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
     ports:
       - "80:80"
       - "443:443"
@@ -271,7 +273,7 @@ services:
     # Duas versões de PostgreSQL entre desenvolvimento e produção seriam, por si
     # só, um sítio onde a instituição se pode comportar de maneira diferente sem
     # que nada o diga.
-    image: pgvector/pgvector:pg17
+    image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
     env_file:
       - /etc/ocinye/postgres.env
     volumes:
@@ -284,7 +286,9 @@ services:
 
   redis:
     <<: *comum
-    image: redis:7-alpine
+    # Congelado no que `redis:7-alpine` já servia; a escolha de versão e de
+    # licença está por rever (docs/architecture/redis-runtime-dependency.md).
+    image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     # `--save` mantém uma imagem periódica para o arranque não começar frio.
     # Não é memória institucional: o que o Redis perder reconstrói-se do
     # PostgreSQL, e é por isso que ele não entra no conjunto de continuidade.
@@ -308,7 +312,7 @@ services:
   object-store:
     <<: *comum
     # Por digest, da origem (docs/deployment/third-party-artifacts.md).
-    image: dxflrs/garage@sha256:4c9b34c113e61358466e83fd6e7d66e6d18657ede14b776eb78a93ee8da7cf6a
+    image: dxflrs/garage:v2.1.0@sha256:4c9b34c113e61358466e83fd6e7d66e6d18657ede14b776eb78a93ee8da7cf6a
     env_file:
       - /etc/ocinye/object-store.env
     volumes:

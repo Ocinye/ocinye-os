@@ -106,6 +106,20 @@ fn migrations(tree: &Path) -> Migrations {
 fn third_party(tree: &Path) -> Vec<ThirdPartyImage> {
     let text = fs::read_to_string(tree.join(COMPOSE))
         .unwrap_or_else(|_| fail("falta o Compose de produção"));
+    // A production image without a digest would make the release name bytes
+    // that are chosen on the day of the install. The manifest is not written.
+    compose_third_party(&text)
+        .into_iter()
+        .map(|reference| {
+            ThirdPartyImage::from_reference(&reference, COMPOSE)
+                .unwrap_or_else(|code| fail(&format!("{code}: {reference}")))
+        })
+        .collect()
+}
+
+/// The distinct `image:` references of a Compose file that are not release
+/// images, in order.
+fn compose_third_party(text: &str) -> Vec<String> {
     let mut seen = Vec::new();
     for line in text.lines() {
         let Some(image) = line.trim().strip_prefix("image:") else {
@@ -117,12 +131,7 @@ fn third_party(tree: &Path) -> Vec<ThirdPartyImage> {
         }
         seen.push(image);
     }
-    seen.into_iter()
-        .map(|reference| ThirdPartyImage {
-            reference,
-            from_compose: COMPOSE.to_owned(),
-        })
-        .collect()
+    seen
 }
 
 fn main() {
@@ -268,4 +277,49 @@ fn main() {
     let bytes = manifest.canonical_bytes();
     fs::write(bundle.join("MANIFEST.json"), bytes.as_bytes()).unwrap_or_else(|_| fail("escrita"));
     println!("{}", manifest.sha256());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn repo() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    #[test]
+    fn toda_a_imagem_de_terceiros_da_producao_esta_fixada_por_digest() {
+        let text = fs::read_to_string(repo().join(COMPOSE)).unwrap();
+        let refs = compose_third_party(&text);
+        assert!(refs.len() >= 4, "{refs:?}");
+        for r in &refs {
+            let t = ThirdPartyImage::from_reference(r, COMPOSE);
+            assert!(t.is_ok(), "{r}: {t:?}");
+        }
+    }
+
+    #[test]
+    fn o_instalador_nao_nomeia_imagens_por_etiqueta() {
+        // install/ocinye runs the proxy image for the test certificate: it must
+        // read it from the release's Compose, not name a tag of its own.
+        let script = fs::read_to_string(repo().join("install/ocinye")).unwrap();
+        for line in script.lines().filter(|l| l.contains("docker run")) {
+            assert!(
+                !line.contains("nginx:") && !line.contains("redis:") && !line.contains("postgres:"),
+                "{line}"
+            );
+        }
+        assert!(script.contains("imagem_nginx"));
+    }
+
+    #[test]
+    fn uma_referencia_flutuante_no_compose_e_apanhada() {
+        let text = "services:\n  a:\n    image: redis:7-alpine\n  b:\n    image: ocinye/ocinye-core-server:${X}\n";
+        let refs = compose_third_party(text);
+        assert_eq!(refs, vec!["redis:7-alpine".to_owned()]);
+        assert_eq!(
+            ThirdPartyImage::from_reference(&refs[0], COMPOSE),
+            Err("IMAGE_NOT_PINNED_BY_DIGEST")
+        );
+    }
 }

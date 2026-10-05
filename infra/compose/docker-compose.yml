@@ -13,7 +13,7 @@ name: ocinye
 services:
   postgres:
     # pgvector image: the extension is required by migration 0006.
-    image: pgvector/pgvector:pg17
+    image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-ocinye}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ocinye_dev_only}
@@ -35,7 +35,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
     ports:
       # Loopback, pela mesma razão do PostgreSQL — e o Redis nem password tem.
@@ -52,7 +52,7 @@ services:
   # (ADR-0208). A API S3 no porto 9000 do host, em loopback — o mesmo endereço
   # que o MinIO tinha, para que o ambiente de testes não mude.
   garage:
-    image: dxflrs/garage@sha256:4c9b34c113e61358466e83fd6e7d66e6d18657ede14b776eb78a93ee8da7cf6a
+    image: dxflrs/garage:v2.1.0@sha256:4c9b34c113e61358466e83fd6e7d66e6d18657ede14b776eb78a93ee8da7cf6a
     environment:
       # Só para desenvolvimento. Nunca valores de uma Instância.
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-6f63696e79652d6465762d6f6e6c792d7270632d7365637265742d302d302d30}
