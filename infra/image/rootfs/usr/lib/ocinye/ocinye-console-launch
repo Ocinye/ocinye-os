@@ -1,0 +1,6 @@
+#!/bin/sh
+# Ocinye OS console launcher: serial lines get the 7-bit rendering.
+case "$1" in
+  ttyS*|ttyAMA*) exec /usr/lib/ocinye/ocinye-firstboot console --serial ;;
+  *) exec /usr/lib/ocinye/ocinye-firstboot console --vt ;;
+esac

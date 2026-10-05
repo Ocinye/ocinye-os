@@ -247,6 +247,59 @@ pub fn confirm(disk: &InstallationTargetDisk, typed: &str) -> Result<(), OieErro
     }
 }
 
+/// What the OIE was built to install, embedded in its own live root
+/// (`/usr/lib/ocinye/oie/payload.json`) so a corrupted or altered medium is
+/// caught before anything is written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OiePayload {
+    /// Image identity.
+    pub image: crate::manifest::OcinyeImageVersion,
+    /// Path of the root filesystem image on the medium (curtin `fsimage`).
+    pub rootfs: String,
+    /// Its SHA-256.
+    pub rootfs_sha256: crate::manifest::Sha256Hex,
+    /// Its size.
+    pub rootfs_bytes: u64,
+    /// SHA-256 of `IMAGE_CONTENT.json` on the medium (= the one in the rootfs).
+    pub content_sha256: crate::manifest::Sha256Hex,
+    /// ISO volume label (protects the medium even when it is not mounted).
+    pub media_label: String,
+}
+
+/// One step of an installation as the journal records it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OieStep {
+    /// `media_check` · `install` · `verify` · `first_boot`.
+    pub step: String,
+    /// Seconds.
+    pub seconds: u64,
+    /// `OK` or the error code.
+    pub result: String,
+}
+
+/// `/var/log/ocinye/oie-install.json` on the installed disk. No secret: the
+/// operator key appears by fingerprint only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OieInstallJournal {
+    /// Image identity.
+    pub image: crate::manifest::OcinyeImageVersion,
+    /// Disk chosen.
+    pub disk: InstallationTargetDisk,
+    /// SHA-256 of the payload written.
+    pub payload_sha256: crate::manifest::Sha256Hex,
+    /// Operator key placed on `ocinye`, if any.
+    pub operator_key: Option<crate::firstboot::KeyFingerprint>,
+    /// Steps in order.
+    pub steps: Vec<OieStep>,
+    /// RFC 3339.
+    pub started_at: String,
+    /// RFC 3339.
+    pub finished_at: String,
+}
+
 /// The fixed layout the OIE writes (D013 §B: GPT · ESP 1 GiB · ext4 · no swap).
 pub mod layout {
     /// EFI system partition size.

@@ -1,0 +1,18 @@
+[Unit]
+Description=Ocinye OS first boot (identity, integrity, claim state)
+Documentation=file:///usr/share/doc/ocinye/images.md
+After=local-fs.target systemd-random-seed.service systemd-machine-id-commit.service cloud-init.service
+Before=ssh.socket ssh.service ocinye-console@tty1.service ocinye-console@ttyS0.service
+Wants=systemd-random-seed.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/ocinye/ocinye-firstboot init
+# Never on the journal: the pairing code is not printed by `init`.
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

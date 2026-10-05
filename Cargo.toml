@@ -16,6 +16,7 @@ members = [
     "services/installer-bootstrap",
     "services/release-tool",
     "services/firstboot",
+    "services/oie",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them

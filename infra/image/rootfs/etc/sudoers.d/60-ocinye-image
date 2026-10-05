@@ -1,0 +1,13 @@
+# Ocinye OS image (D013). Mode 0440, checked with `visudo -c` at build time.
+#
+# `ocinye` is the operator account: key-only login, no password, sudo without
+# one — D011's Privilege::SudoNoPassword [P]. Its keys come from the platform
+# (cloud-init), the OIE USB step, or a claim enrolment; never from the image.
+ocinye ALL=(ALL) NOPASSWD: ALL
+
+# `ocinye-claim` runs exactly one program as root: the claim protocol, with
+# the fingerprint the AuthorizedKeysCommand put in its forced command. The
+# account has no shell access (forced command, no tty) and is expired once
+# the machine is claimed.
+Defaults:ocinye-claim env_keep += "SSH_CONNECTION"
+ocinye-claim ALL=(root) NOPASSWD: /usr/lib/ocinye/ocinye-firstboot claim-serve --offered *
