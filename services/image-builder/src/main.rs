@@ -253,7 +253,7 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
     let (oci_json, runtime_txt) = steps.time("B05-B09 common", || {
         let r = bvm.boot(&common, "common")?;
         r.upload("B05", &stage)?;
-        r.ssh("B06", "sudo /root/ocinye-build/provision.sh common")?;
+        r.ssh("B06", "sudo /root/ocinye-build/provision.sh common >&2")?;
         let oci = r.ssh("B08", "sudo cat /root/ocinye-build/out/oci.json")?;
         let rt = r.ssh("B07", "sudo cat /root/ocinye-build/out/dpkg-runtime.txt")?;
         r.poweroff(false)?;
@@ -303,7 +303,7 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         bvm.overlay(&common, &disk, "24G")?;
         let tsv = steps.time(&format!("B06-B10 {prof}"), || {
             let r = bvm.boot(&disk, prof)?;
-            r.ssh("B06", &format!("sudo /root/ocinye-build/provision.sh {prof}"))?;
+            r.ssh("B06", &format!("sudo /root/ocinye-build/provision.sh {prof} >&2"))?;
             // finalize removes the build user's SSH access: read the inventory
             // and schedule the power-off in the same session.
             let tsv = r.ssh("B10", &format!("sudo /root/ocinye-build/provision.sh finalize {prof} >&2 && sudo cat /root/ocinye-build/out/packages.tsv && sudo systemd-run --on-active=3 systemctl poweroff >&2"))?;

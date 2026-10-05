@@ -37,10 +37,23 @@ mkdir -p "$B/out"
 policy_on() { printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d; chmod 755 /usr/sbin/policy-rc.d; }
 policy_off() { rm -f /usr/sbin/policy-rc.d; }
 
+apt_update() {
+  # A fetch that fails is an error, never a warning over an empty index.
+  local i
+  for i in 1 2 3; do
+    "${APT[@]}" update --error-on=any && return 0
+    sleep 10
+  done
+  echo "PACKAGE_INSTALL_FAILED apt-update" >&2
+  return 22
+}
+
 stage_common() {
+  log "waiting for cloud-init and the network"
+  cloud-init status --wait >/dev/null 2>&1 || true
   log "apt snapshot $APT_SNAPSHOT"
   policy_on
-  "${APT[@]}" update
+  apt_update
   "${APT[@]}" dist-upgrade
   "${APT[@]}" install --no-install-recommends ufw sudo ca-certificates curl gnupg openssh-server cloud-init
   "${APT[@]}" purge snapd || true
@@ -58,7 +71,7 @@ Components: stable
 Architectures: $ARCH
 Signed-By: /etc/apt/keyrings/docker.asc
 SRC
-  apt-get update
+  apt-get update --error-on=any
   pins=()
   for p in docker-ce docker-ce-cli containerd.io docker-compose-plugin; do
     v="$(apt-cache policy "$p" | awk '/Candidate:/{print $2}')"
@@ -119,6 +132,7 @@ purge_kvm_kernel() {
 
 stage_virt() {
   policy_on
+  apt_update
   "${APT[@]}" install --no-install-recommends linux-virtual
   purge_kvm_kernel
   policy_off
@@ -127,6 +141,7 @@ stage_virt() {
 
 stage_metal() {
   policy_on
+  apt_update
   boot_pkgs=(efibootmgr)
   case "$ARCH" in
     amd64) boot_pkgs+=(grub-efi-amd64-signed shim-signed) ;;
@@ -141,6 +156,7 @@ stage_metal() {
 
 stage_oie() {
   policy_on
+  apt_update
   "${APT[@]}" install --no-install-recommends linux-generic casper curtin dosfstools e2fsprogs gdisk parted efibootmgr rsync eject
   purge_kvm_kernel
   policy_off

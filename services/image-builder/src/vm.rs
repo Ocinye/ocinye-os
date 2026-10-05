@@ -268,6 +268,15 @@ pub struct Running<'a> {
     vm: &'a BuildVm,
 }
 
+/// A failed step never leaves its build VM running.
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        if self.child.try_wait().ok().flatten().is_none() {
+            self.kill();
+        }
+    }
+}
+
 impl Running<'_> {
     fn ssh_status(&self, remote: &[&str]) -> std::io::Result<bool> {
         Command::new("ssh")
