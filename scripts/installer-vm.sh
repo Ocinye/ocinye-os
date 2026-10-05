@@ -56,6 +56,16 @@ case "${1:-}" in
             --set ".param.OPERATOR_PASSWORD=\"$(cat "$d/sudo-password")\"" \
             "$TEMPLATE"
         limactl start --tty=false "$nome"
+        # O Lima pede `loginctl enable-linger` no arranque, e nesta imagem o
+        # systemd-logind fica por vezes sem responder no D-Bus: cada sessão SSH
+        # espera 25 s pelo pam_systemd e cai. É uma avaria do ambiente de
+        # teste, não do produto: diz-se, reinicia-se o logind e confirma-se.
+        if ! vm "$nome" sudo timeout 10 loginctl list-sessions >/dev/null 2>&1; then
+            echo "  logind não respondia (ambiente de teste): reiniciado"
+            vm "$nome" sudo systemctl restart systemd-logind
+            vm "$nome" sudo timeout 10 loginctl list-sessions >/dev/null 2>&1 \
+                || fatal "o systemd-logind da VM continua sem responder"
+        fi
         ip_de "$nome" > "$d/ip"
         printf '  %s · %s · operador · chave %s\n' "$nome" "$(cat "$d/ip")" "$d/id_ed25519"
         ;;

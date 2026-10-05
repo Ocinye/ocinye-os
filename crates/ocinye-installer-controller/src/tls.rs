@@ -36,8 +36,10 @@ pub enum TlsCheck {
     /// The chain parses and links to the certificate.
     Chain,
     /// No certificate the server would present is signed with SHA-1 or MD5,
-    /// and an RSA key has at least 2048 bits: what OpenSSL 3 in the proxy
-    /// refuses to load must be refused here, before anything is installed.
+    /// an RSA key has at least 2048 bits, and an EC key names its curve:
+    /// what the proxy refuses to load, or TLS 1.3 clients refuse to accept
+    /// (explicit curve parameters, RFC 5480), is refused here, before
+    /// anything is installed.
     StrongSignature,
 }
 
@@ -57,8 +59,16 @@ fn strong(cert: &X509Certificate<'_>) -> bool {
     // A trust anchor's own signature is not checked by anyone; its key is.
     let sig_ok = self_signed
         || !WEAK_SIGNATURES.contains(&cert.signature_algorithm.algorithm.to_id_string().as_str());
-    let key_ok = match cert.public_key().parsed() {
+    let spki = cert.public_key();
+    let key_ok = match spki.parsed() {
         Ok(x509_parser::public_key::PublicKey::RSA(k)) => k.key_size() >= 2048,
+        // id-ecPublicKey: the parameters must be a named curve's OID.
+        Ok(x509_parser::public_key::PublicKey::EC(_)) => spki
+            .algorithm
+            .parameters
+            .as_ref()
+            // By tag: `as_oid` also accepts the SEQUENCE of explicit parameters.
+            .is_some_and(|p| p.header.tag() == x509_parser::der_parser::asn1_rs::Tag::Oid),
         Ok(_) => true,
         Err(_) => false,
     };
@@ -406,5 +416,15 @@ mod tests {
         // And a strong self-signed one passes.
         let (cert, _) = leaf(&["os.empresa.test"], (2027, 9, 30));
         assert!(is_strong(&der(cert.as_bytes())));
+    }
+
+    #[test]
+    fn uma_chave_ec_com_parametros_explicitos_e_recusada() {
+        // LibreSSL's `-newkey ec -pkeyopt ec_paramgen_curve:P-256` writes the
+        // curve out in full; TLS 1.3 clients then fail the handshake (seen on
+        // a VM: decode error at CertificateVerify).
+        let pem = include_bytes!("../tests/fixtures/leaf-ec-explicit-params.pem");
+        let der = CertificateDer::from_pem_slice(pem).unwrap();
+        assert!(!strong(&X509Certificate::from_der(der.as_ref()).unwrap().1));
     }
 }

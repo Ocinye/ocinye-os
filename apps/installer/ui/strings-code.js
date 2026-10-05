@@ -10,9 +10,9 @@
   'use strict';
   const X = {
     'x.tlsWeak': [
-      'O certificado ou a cadeia estão assinados com SHA-1 ou MD5, ou a chave RSA tem menos de 2048 bits: o servidor recusa-o. Emita-o de novo com SHA-256.',
-      'The certificate or its chain is signed with SHA-1 or MD5, or the RSA key is shorter than 2048 bits: the server refuses it. Reissue it with SHA-256.',
-      'Le certificat ou sa chaîne est signé avec SHA-1 ou MD5, ou la clé RSA fait moins de 2048 bits : le serveur le refuse. Émettez-le de nouveau avec SHA-256.'],
+      'O certificado ou a cadeia estão assinados com SHA-1 ou MD5, a chave RSA tem menos de 2048 bits, ou a chave EC não nomeia a curva: o servidor ou os browsers recusam-no. Emita-o de novo com SHA-256 e uma curva nomeada.',
+      'The certificate or its chain is signed with SHA-1 or MD5, the RSA key is shorter than 2048 bits, or the EC key does not name its curve: the server or browsers refuse it. Reissue it with SHA-256 and a named curve.',
+      'Le certificat ou sa chaîne est signé avec SHA-1 ou MD5, la clé RSA fait moins de 2048 bits, ou la clé EC ne nomme pas sa courbe : le serveur ou les navigateurs le refusent. Émettez-le de nouveau avec SHA-256 et une courbe nommée.'],
     'x.osD': ['{v} · núcleo {k}', '{v} · kernel {k}', '{v} · noyau {k}'],
     'x.distroBlocked': [
       'O Ocinye OS v1 instala-se só em Ubuntu Server 24.04 LTS (instalação mínima, sem ambiente gráfico). Este servidor tem {v}.',
