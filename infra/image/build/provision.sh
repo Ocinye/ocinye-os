@@ -173,7 +173,15 @@ stage_metal() {
 stage_oie() {
   policy_on
   apt_update
-  "${APT[@]}" install --no-install-recommends linux-generic casper curtin dosfstools e2fsprogs gdisk parted efibootmgr rsync eject
+  "${APT[@]}" install --no-install-recommends linux-generic casper dosfstools e2fsprogs gdisk parted efibootmgr rsync eject \
+    python3-yaml python3-pyudev python3-debian python3-oauthlib python3-jsonschema
+  # curtin: the upstream tree at the commit pinned in base.json (noble has no
+  # curtin package). Installation environment only, never in a target image.
+  rm -rf /usr/lib/ocinye/curtin
+  tar -C /usr/lib/ocinye --no-same-owner -xf "$B/curtin.tar"
+  printf '#!/bin/sh\nexec /usr/lib/ocinye/curtin/bin/curtin "$@"\n' > /usr/local/bin/curtin
+  chmod 755 /usr/local/bin/curtin
+  curtin --help >/dev/null
   purge_kvm_kernel
   policy_off
   install -m 0755 "$B/bin/ocinye-oie" /usr/lib/ocinye/ocinye-oie

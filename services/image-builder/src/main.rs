@@ -164,6 +164,8 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
     let base = steps.time("B03", || {
         inputs::base(&base_cfg, &a.image_dir, &a.cache, a.arch)
     })?;
+    let (curtin_dir, curtin_input) =
+        steps.time("B03 curtin", || inputs::curtin(&base_cfg.curtin, &a.cache))?;
     let image = OcinyeImageVersion {
         release_id: bundle.manifest.release.id.clone(),
         revision: a.revision,
@@ -201,6 +203,22 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
             "cp",
             &["-a", cmd::p(&a.bundle.join("images")), cmd::p(&stage)],
             || asm("stage"),
+        )?;
+        // curtin (OIE only), without its .git.
+        cmd::run(
+            "B04",
+            "git",
+            &[
+                "-C",
+                cmd::p(&curtin_dir),
+                "archive",
+                "--format=tar",
+                "--prefix=curtin/",
+                "-o",
+                cmd::p(&stage.join("curtin.tar")),
+                "HEAD",
+            ],
+            || asm("curtin"),
         )?;
         let third: String = bundle
             .manifest
@@ -247,6 +265,19 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
             || asm("rootfs"),
         )
     })?;
+    let small = a.work.join("stage-small");
+    let _ = fs::remove_dir_all(&small);
+    fs::create_dir_all(small.join("bin")).map_err(|_| asm("stage"))?;
+    for f in [
+        "provision.sh",
+        "build.env",
+        "curtin.tar",
+        "rootfs.tar",
+        "bin/ocinye-firstboot",
+        "bin/ocinye-oie",
+    ] {
+        fs::copy(stage.join(f), small.join(f)).map_err(|_| asm("stage"))?;
+    }
     let bvm = vm::BuildVm::prepare(a.arch, &a.work.join("vm"), 2222, a.memory, a.cpus)?;
 
     // B05–B10, pass 1: the common layer.
@@ -322,6 +353,9 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         bvm.overlay(&common, &disk, "24G")?;
         let tsv = steps.time(&format!("B06-B10 {prof}"), || {
             let r = bvm.boot(&disk, prof)?;
+            // The small inputs again (script, binaries, curtin, fragments):
+            // a reused common layer must not run an older provision.sh.
+            r.upload("B05", &small)?;
             r.ssh("B06", &format!("sudo /root/ocinye-build/provision.sh {prof} >&2"))?;
             // finalize removes the build user's SSH access: read the inventory
             // and schedule the power-off in the same session.
@@ -504,6 +538,7 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
     // B16: metadata.
     let oci_sha = meta::write_canonical(&a.out.join("inventory/oci-images.json"), &oci_images)?;
     let mut inputs_list: Vec<BuildInput> = base.inputs.clone();
+    inputs_list.push(curtin_input.clone());
     inputs_list.push(BuildInput {
         kind: BuildInputKind::AptSnapshot,
         identity: base_cfg.apt_snapshot.clone(),

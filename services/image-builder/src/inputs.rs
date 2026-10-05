@@ -16,6 +16,7 @@ use crate::cmd::{self, p};
 #[serde(deny_unknown_fields)]
 pub struct BaseConfig {
     pub apt_snapshot: String,
+    pub curtin: CurtinPin,
     pub codename: String,
     pub images: std::collections::BTreeMap<String, BaseImage>,
     pub keyring: String,
@@ -26,6 +27,17 @@ pub struct BaseConfig {
     pub sums_signing_key_fingerprint: String,
     pub url_base: String,
     pub variant: String,
+}
+
+/// curtin for the OIE: noble ships it only inside the subiquity snap, so the
+/// installation environment takes the upstream tree at a pinned commit.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CurtinPin {
+    pub commit: String,
+    pub license: String,
+    pub repository: String,
+    pub tag: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -236,6 +248,61 @@ pub fn base(
         identity,
         inputs,
     })
+}
+
+/// The curtin tree at the pinned commit (cloned once into the cache, and
+/// refused unless `HEAD` is exactly that commit and the tree is clean).
+pub fn curtin(pin: &CurtinPin, cache: &Path) -> Result<(PathBuf, BuildInput), ImageBuildError> {
+    let step = "B03";
+    let fail = || ImageBuildError::ImageAssemblyFailed {
+        step: "curtin".into(),
+    };
+    if !ocinye_image_contracts::is_lower_hex(&pin.commit, 40) {
+        return Err(fail());
+    }
+    let dir = cache.join("curtin").join(&pin.commit);
+    let head = |d: &Path| {
+        cmd::output(step, "git", &["-C", p(d), "rev-parse", "HEAD"], fail)
+            .map(|o| String::from_utf8_lossy(&o).trim().to_owned())
+    };
+    if !dir.join(".git").exists() {
+        let _ = fs::remove_dir_all(&dir);
+        cmd::run(
+            step,
+            "git",
+            &[
+                "clone",
+                "-q",
+                "--depth",
+                "1",
+                "--branch",
+                &pin.tag,
+                &pin.repository,
+                p(&dir),
+            ],
+            fail,
+        )?;
+    }
+    let clean =
+        cmd::output(step, "git", &["-C", p(&dir), "status", "--porcelain"], fail)?.is_empty();
+    if head(&dir)? != pin.commit || !clean {
+        let _ = fs::remove_dir_all(&dir);
+        return Err(fail());
+    }
+    let tar = cmd::output(
+        step,
+        "git",
+        &["-C", p(&dir), "archive", "--format=tar", "HEAD"],
+        fail,
+    )?;
+    use sha2::Digest as _;
+    let input = BuildInput {
+        kind: BuildInputKind::Tool,
+        identity: format!("curtin {} ({})", pin.tag, pin.license),
+        digest: Sha256Hex(hex::encode(sha2::Sha256::digest(&tar))),
+        trust: format!("git-commit:{}", pin.commit),
+    };
+    Ok((dir, input))
 }
 
 #[cfg(test)]
