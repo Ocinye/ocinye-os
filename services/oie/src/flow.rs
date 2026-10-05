@@ -19,6 +19,9 @@ use crate::strings::STRINGS;
 pub const MIN_OIE_RAM: u64 = 2 << 30;
 
 pub trait Machine {
+    /// Take the installation for this console (the screen and the serial
+    /// line both show the welcome; the first to continue drives it).
+    fn take_console(&self) -> bool;
     fn uefi(&self) -> bool;
     fn arch_supported(&self) -> bool;
     fn memory(&self) -> u64;
@@ -132,7 +135,8 @@ pub fn run(ui: &mut Ui<'_>, m: &dyn Machine) -> Outcome {
         match ui.ask(&format!("[Enter] {k} · [L] {l}")).as_deref() {
             None => return Outcome::Abandoned,
             Some("l" | "L") => ui.lang = (ui.lang + 1) % 3,
-            Some(_) => break,
+            Some(_) if m.take_console() => break,
+            Some(_) => ui.say("Ocinye OS: instalação em curso noutra consola · installation in progress on another console"),
         }
     }
     // COMPAT
@@ -340,9 +344,13 @@ mod tests {
         installed: Cell<Option<String>>,
         mem: u64,
         uefi: bool,
+        busy: bool,
     }
 
     impl Machine for Fake {
+        fn take_console(&self) -> bool {
+            !self.busy
+        }
         fn uefi(&self) -> bool {
             self.uefi
         }
@@ -397,6 +405,7 @@ mod tests {
             installed: Cell::new(None),
             mem: 4 << 30,
             uefi: true,
+            busy: false,
         }
     }
 
@@ -452,6 +461,16 @@ mod tests {
             drive(&m, "\n").0,
             Outcome::Failed(OieError::InsufficientMemory { .. })
         ));
+        assert_eq!(m.installed.take(), None);
+    }
+
+    #[test]
+    fn outra_consola_com_a_instalacao_nao_escreve() {
+        let mut m = fake();
+        m.busy = true;
+        let (o, text) = drive(&m, "\n\n");
+        assert_eq!(o, Outcome::Abandoned);
+        assert!(text.contains("noutra consola"));
         assert_eq!(m.installed.take(), None);
     }
 

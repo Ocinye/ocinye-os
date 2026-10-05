@@ -30,6 +30,8 @@ use ocinye_image_contracts::oie::{
 
 struct Real {
     facts: Option<OiePayload>,
+    /// The console lock, once this console has taken the installation.
+    console: std::cell::RefCell<Option<fs::File>>,
 }
 
 fn findmnt_source(target: &str) -> Option<String> {
@@ -81,6 +83,25 @@ fn key_roots() -> Vec<PathBuf> {
 }
 
 impl flow::Machine for Real {
+    fn take_console(&self) -> bool {
+        if self.console.borrow().is_some() {
+            return true;
+        }
+        let Ok(f) = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open("/run/ocinye-oie/console.lock")
+        else {
+            return false;
+        };
+        if f.try_lock().is_ok() {
+            *self.console.borrow_mut() = Some(f);
+            true
+        } else {
+            false
+        }
+    }
     fn uefi(&self) -> bool {
         probe::is_uefi(Path::new("/sys"))
     }
@@ -219,27 +240,12 @@ fn main() {
         .as_slice()
     {
         ["run", mode @ ("--vt" | "--serial")] => {
-            // One console drives the installation; the other waits.
             let _ = fs::create_dir_all("/run/ocinye-oie");
-            let lock = fs::OpenOptions::new()
-                .create(true)
-                .truncate(false)
-                .write(true)
-                .open("/run/ocinye-oie/console.lock");
             let mut stdin = BufReader::new(std::io::stdin());
             let mut stdout = std::io::stdout();
-            let held = lock.as_ref().is_ok_and(|f| f.try_lock().is_ok());
-            if !held {
-                let _ = std::io::Write::write_all(
-                    &mut stdout,
-                    b"Ocinye OS: installation in progress on another console.\r\n",
-                );
-                if let Ok(f) = &lock {
-                    let _ = f.lock();
-                }
-            }
             let machine = Real {
                 facts: load_facts(),
+                console: std::cell::RefCell::new(None),
             };
             let mut ui = flow::Ui {
                 lang: 0,
@@ -265,6 +271,7 @@ fn main() {
         ["probe"] => {
             let m = Real {
                 facts: load_facts(),
+                console: std::cell::RefCell::new(None),
             };
             let d = ocinye_image_contracts::oie::classify(&flow::Machine::disks(&m));
             println!("{}", serde_json::to_string_pretty(&d).unwrap_or_default());
