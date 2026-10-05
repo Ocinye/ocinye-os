@@ -96,7 +96,11 @@ pub(crate) mod tests {
         use ocinye_installer_contracts::ident::*;
         use ocinye_installer_contracts::plan::*;
         let h = |s: &str| HostNameValue::parse(s).unwrap();
-        let dir = std::env::temp_dir().join(format!("ocinye-plan-{}", std::process::id()));
+        // One directory per call: tests run in parallel in one process, and a
+        // shared one is created by one test while another removes it.
+        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("ocinye-plan-{}-{n}", std::process::id()));
         let m = fixture_manifest(&dir);
         let _ = fs::remove_dir_all(&dir);
         InstallationPlan {
