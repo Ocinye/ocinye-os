@@ -52,6 +52,40 @@ Interromper não perde a instalação: reabrir o Installer encontra o diário, e
 retomar continua pela classe de segurança de cada fase; a criação da Instância
 nunca se repete às cegas.
 
+## Privilégio no servidor
+
+O Installer liga como um utilizador normal e decide, pela sondagem, como o
+bootstrap corre — um estado tipado (`Elevation`), nunca uma suposição:
+
+| Estado | Quando | O que acontece |
+|---|---|---|
+| `SudoPassword` (`SUDO_PASSWORD_REQUIRED`) | o utilizador está no grupo `sudo`/`admin`/`wheel` e `sudo -n true` falha | a janela pede a palavra-passe (I05); ela vai pelo stdin, na primeira linha, e nunca para disco, diário, recibo ou argumentos |
+| `SudoNoPassword` (`SUDO_PASSWORDLESS_AVAILABLE`) | `sudo -n true` passa | não se pede nada, e não se guarda segredo nenhum — nem vazio; o bootstrap corre com `sudo -n`, que **falha** em vez de esperar se a regra não valer |
+| `Root` | `uid=0` | corre directamente |
+| nenhum (`SUDO_UNAVAILABLE`) | nada disto | recusa (I27) |
+
+Sudo sem palavra-passe **não** alarga a confiança: a chave do anfitrião continua
+fixada, o protocolo continua fechado, e nada corre fora das fases tipadas.
+
+## Retorno da D013 (fase A)
+
+Três achados da fase A da D013 foram tratados na D011, antes da certificação
+final (o pacote de Design da D013 não foi alterado):
+
+- **D013_FEEDBACK_F01 — identidade imutável das imagens de execução.** Todas as
+  imagens de terceiros de produção passaram a `etiqueta@sha256`, e o
+  `MANIFEST.json` regista repositório, etiqueta e digest
+  ([artefactos de terceiros](../deployment/third-party-artifacts.md)).
+- **D013_FEEDBACK_REDIS — revisão de execução e de licença.** O Redis ficou
+  congelado no que já corria, e a revisão está aberta
+  ([dependência do Redis](../architecture/redis-runtime-dependency.md)):
+  `REDIS_PUBLIC_REDISTRIBUTION_APPROVED = FALSE`,
+  `D013_PUBLIC_IMAGE_RELEASE_BLOCKED_BY_REDIS_REVIEW = TRUE`.
+- **D013_FEEDBACK_F07 — sudo sem palavra-passe.** Provado numa VM local com um
+  operador sintético em `NOPASSWD` e palavra-passe bloqueada
+  (`scripts/installer-vm.sh create … --sudo-nopasswd`), ao lado do caminho com
+  palavra-passe, que continua provado.
+
 ## Fora da D011
 
 ACME (`DEFERRED`); assinatura do release (`RELEASE_SIGNING = NOT_IMPLEMENTED`);

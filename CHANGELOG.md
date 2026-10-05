@@ -40,6 +40,14 @@ O Installer gráfico remoto do pacote D011 do Claude Design
 - **Segurança (Garage)**: o `object-store-init` passava o token de administração
   e a chave secreta do armazenamento nos argumentos do `curl`, visíveis em `ps`
   para qualquer utilizador do anfitrião; passam a ir por ficheiro 0600 e stdin.
+- **Imagens de execução por digest** (retorno F01 da D013): nginx passa ao ramo
+  estável 1.30.5, pgvector fica em 0.8.7 sobre PostgreSQL 17, Redis fica
+  congelado em 7.4.11 até à revisão de versão e licença, Garage ganha a
+  etiqueta; todas `etiqueta@sha256` em produção, desenvolvimento e CI, e o
+  `MANIFEST.json` regista repositório, etiqueta e digest, recusando o resto.
+- **Redis**: o que o Ocinye lhe pede ficou escrito, e a revisão de licença está
+  aberta — a D013 não publica uma imagem pública com ele antes dela.
+- **Sudo sem palavra-passe** coberto nas provas (retorno F07 da D013).
 - **Provas** em VMs Ubuntu 24.04 descartáveis (Lima): `scripts/installer-vm.sh`,
   `scripts/installer-e2e.sh` e uma auditoria de segredos que procura cada valor
   em tudo o que fica ou se imprime, incluindo os argumentos de todos os processos
