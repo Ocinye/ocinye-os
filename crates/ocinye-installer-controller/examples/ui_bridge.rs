@@ -5,15 +5,15 @@
 //! loopback only, and is not part of any bundle.
 //!
 //! ```text
-//! OCINYE_BRIDGE_UI=apps/installer/ui OCINYE_BRIDGE_STATE=… \
-//! OCINYE_BRIDGE_RELEASE=… OCINYE_BRIDGE_KEY=… [OCINYE_BRIDGE_TLS_CERT=… …] \
-//! [OCINYE_BRIDGE_RESOLVE=host=ip,host=ip] cargo run --example ui_bridge -- 8766
+//! OCINYE_TEST_BRIDGE_UI=apps/installer/ui OCINYE_TEST_BRIDGE_STATE=… \
+//! OCINYE_TEST_BRIDGE_RELEASE=… OCINYE_TEST_BRIDGE_KEY=… [OCINYE_TEST_BRIDGE_TLS_CERT=… …] \
+//! [OCINYE_TEST_BRIDGE_RESOLVE=host=ip,host=ip] cargo run --example ui_bridge -- 8766
 //! ```
 //!
 //! Two test-only conveniences keep proof secrets out of whatever drives the
-//! browser: `OCINYE_BRIDGE_SUDO_FILE` — a `sudo` call whose password is the
+//! browser: `OCINYE_TEST_BRIDGE_SUDO_FILE` — a `sudo` call whose password is the
 //! placeholder `@file` gets the file's contents instead; and
-//! `OCINYE_BRIDGE_CREDENTIAL_FILE` — when the operator reveals the one-time
+//! `OCINYE_TEST_BRIDGE_CREDENTIAL_FILE` — when the operator reveals the one-time
 //! credential, the bridge also keeps it there (0600, never overwritten).
 
 use std::collections::BTreeMap;
@@ -32,19 +32,19 @@ fn env_path(k: &str) -> Option<PathBuf> {
 
 impl Native for Env {
     fn pick_folder(&self) -> Option<PathBuf> {
-        env_path("OCINYE_BRIDGE_RELEASE")
+        env_path("OCINYE_TEST_BRIDGE_RELEASE")
     }
     fn pick_file(&self, kind: &str) -> Option<PathBuf> {
         match kind {
-            "ssh_key" => env_path("OCINYE_BRIDGE_KEY"),
-            "cert" => env_path("OCINYE_BRIDGE_TLS_CERT"),
-            "key" => env_path("OCINYE_BRIDGE_TLS_KEY"),
-            "chain" => env_path("OCINYE_BRIDGE_TLS_CHAIN"),
+            "ssh_key" => env_path("OCINYE_TEST_BRIDGE_KEY"),
+            "cert" => env_path("OCINYE_TEST_BRIDGE_TLS_CERT"),
+            "key" => env_path("OCINYE_TEST_BRIDGE_TLS_KEY"),
+            "chain" => env_path("OCINYE_TEST_BRIDGE_TLS_CHAIN"),
             _ => None,
         }
     }
     fn save_file(&self, suggested: &str) -> Option<PathBuf> {
-        env_path("OCINYE_BRIDGE_STATE").map(|d| d.join(suggested))
+        env_path("OCINYE_TEST_BRIDGE_STATE").map(|d| d.join(suggested))
     }
     fn open_url(&self, url: &str) {
         eprintln!("open_url {url}");
@@ -87,10 +87,10 @@ async fn main() {
         .nth(1)
         .and_then(|p| p.parse().ok())
         .unwrap_or(8766);
-    let ui = env_path("OCINYE_BRIDGE_UI").expect("OCINYE_BRIDGE_UI");
-    let state = env_path("OCINYE_BRIDGE_STATE").expect("OCINYE_BRIDGE_STATE");
+    let ui = env_path("OCINYE_TEST_BRIDGE_UI").expect("OCINYE_TEST_BRIDGE_UI");
+    let state = env_path("OCINYE_TEST_BRIDGE_STATE").expect("OCINYE_TEST_BRIDGE_STATE");
     let app = App::new(state, "0.1.0");
-    if let Ok(r) = std::env::var("OCINYE_BRIDGE_RESOLVE") {
+    if let Ok(r) = std::env::var("OCINYE_TEST_BRIDGE_RESOLVE") {
         app.set_test_resolver(parse_resolve(&r)).await;
     }
     let native: Arc<dyn Native> = Arc::new(Env);
@@ -148,7 +148,7 @@ async fn main() {
                 let mut args: serde_json::Value =
                     serde_json::from_slice(&buf[head_end..]).unwrap_or_default();
                 if cmd == "sudo" && args["password"] == "@file" {
-                    if let Some(p) = env_path("OCINYE_BRIDGE_SUDO_FILE") {
+                    if let Some(p) = env_path("OCINYE_TEST_BRIDGE_SUDO_FILE") {
                         let pw = std::fs::read_to_string(p).unwrap_or_default();
                         args["password"] = serde_json::Value::String(pw.trim().to_owned());
                     }
@@ -158,7 +158,7 @@ async fn main() {
                         if let (true, Some(secret), Some(p)) = (
                             cmd == "reveal_credential",
                             v.as_str(),
-                            env_path("OCINYE_BRIDGE_CREDENTIAL_FILE"),
+                            env_path("OCINYE_TEST_BRIDGE_CREDENTIAL_FILE"),
                         ) {
                             use std::io::Write as _;
                             use std::os::unix::fs::OpenOptionsExt as _;
@@ -182,7 +182,7 @@ async fn main() {
             } else if path == "/bridge/reload-resolve" {
                 // Test-only: re-read the controlled DNS fixture (a proof of
                 // «DNS pending → resolved → Verificar novamente»).
-                let fixed = env_path("OCINYE_BRIDGE_RESOLVE_FILE")
+                let fixed = env_path("OCINYE_TEST_BRIDGE_RESOLVE_FILE")
                     .and_then(|p| std::fs::read_to_string(p).ok())
                     .map(|t| parse_resolve(t.trim()))
                     .unwrap_or_default();

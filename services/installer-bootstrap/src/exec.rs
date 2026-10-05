@@ -166,9 +166,9 @@ mod tests {
 
     #[test]
     fn o_ambiente_e_limpo() {
-        std::env::set_var("OCINYE_SEGREDO_DE_TESTE", "x");
+        std::env::set_var("OCINYE_TEST_SEGREDO", "x");
         let o = run_path(Path::new("/usr/bin/env"), &[], secs(5));
-        assert!(!o.stdout.contains("OCINYE_SEGREDO_DE_TESTE"));
+        assert!(!o.stdout.contains("OCINYE_TEST_SEGREDO"));
         assert!(o.stdout.contains("LANG=C.UTF-8"));
     }
 }

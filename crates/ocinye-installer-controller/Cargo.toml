@@ -25,7 +25,6 @@ chrono = { workspace = true }
 tokio = { workspace = true }
 zeroize = { workspace = true }
 rand = { workspace = true }
-thiserror = { workspace = true }
 # SSH transport. Without the default features: no `rsa` (RUSTSEC-2023-0071,
 # see .cargo/audit.toml) and no compression. Host keys and operator keys are
 # Ed25519 or ECDSA; the crypto backend is aws-lc-rs, already in the tree.
