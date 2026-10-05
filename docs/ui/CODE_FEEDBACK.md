@@ -1,3 +1,54 @@
+# CODE_FEEDBACK — integração da D011 (Ocinye OS Installer)
+
+De: Claude Code · Para: Claude Design · Pacote **D011** (`OCINYE_D011_READY_FOR_CODE=TRUE`,
+927 ficheiros, 926/926 somas), integrado em `feat/design-d011` a partir de `main @ 9596bc4`.
+ADRs [0022](../adrs/0022-graphical-remote-installer.md)–[0025](../adrs/0025-hardware-discovery-and-compute-boundary.md)
+importadas como `Proposed`; arquitectura e provas em [`docs/install/installer.md`](../install/installer.md).
+
+## Decisão de produto posterior ao pacote
+
+O servidor suportado é **só Ubuntu Server 24.04 LTS (mínimo, sem ambiente gráfico)**; o Debian
+saiu. Os textos do pacote que falam de Debian ou de «qualquer Linux com Docker» ficaram falsos e
+foram substituídos por textos do Code (`apps/installer/ui/strings-code.js`, chaves `x.*`,
+pt/en/fr), que se acrescentam aos do Design e nunca os editam. O Design pode reescrevê-los; a
+chave fica.
+
+## Textos e linhas do Code
+
+- `x.distroBlocked`, `x.distroGui`, `x.dockerUnsupported`, `x.dockerOld`: o alvo único.
+- `x.osD`, `x.archBlocked`, `x.timeBlocked`, `x.cpuBlocked`, `x.ramBlock`, `x.hwPartial`: o
+  produto mostra dados reais onde a referência tinha exemplos fixos.
+- `x.tlsWeak` — **linha nova na lista de verificações do TLS (I11), só quando falha.** As VMs de
+  prova mostraram dois certificados que passavam as cinco verificações do Design e depois
+  partiam o servidor: assinado com SHA-1 (o proxy recusa-se a arrancar) e uma chave EC com os
+  parâmetros da curva por extenso (os clientes TLS 1.3 falham o aperto de mão). O Code recusa-os
+  localmente (`STRONG_SIGNATURE`). **Pedido:** o Design decide se esta verificação é uma sexta
+  linha permanente da lista ou se se funde noutra.
+
+## Desvios do pacote, com razão
+
+| Onde | O quê | Porquê |
+|---|---|---|
+| Core | quatro subcomandos só de leitura — `verify-schema`, `verify-instance`, `verify-endpoints`, `verify-admin-bootstrap` — em vez de `instance-check` | cada verificação V responde à sua pergunta, e nenhuma escreve |
+| V12 | o lado do operador pede `/boot` e depois `/login` com o marcador que o servidor entrega; a ligação anfitrião → Distribuição verifica-se no servidor (`verify-endpoints`, V12b) | `/api/v1/access/resolve` é só do Core e o nginx não o expõe; e desde a D001 `/login` responde 303 para `/boot` sem o marcador |
+| V09 | `/` → 303, `/boot` → 200, `/login` → 200, num só `curl` com cookies | a mesma razão |
+| V07 | `verify-instance` acrescenta `applications{registered, active, essential_inactive}` | o pacote não dizia de onde vinha a contagem |
+| `endpoint-seed` | `--installation-id`; a auditoria chama-se `access_endpoint_seeded` | o registo liga o ponto à instalação que o semeou |
+| Estado | `INSTALLED_TEST_MODE` só com certificado auto-assinado; um certificado do operador que nenhuma raiz pública reconhece fica `ACTIVATION_PENDING [TLS_TRUST]` | o pacote não distinguia «de teste» de «ainda não confiável» |
+
+## Pedidos ao Design
+
+1. A linha `x.tlsWeak` (acima).
+2. **Parar a meio de uma fase.** Um «Parar» pedido durante uma fase pára no ponto seguro
+   seguinte e diz onde parou («depois de P07»); o ecrã I36 não tem texto para «pediu-se depois
+   de P06, parou depois de P07».
+3. **Firewall nftables próprio.** Com uma política `drop` escrita à mão, o preflight avisa
+   (acção externa) — mas as portas que o Docker publica passam pelo caminho de reencaminhamento
+   e a verificação de fora (V-FW) encontra-as abertas. O aviso é conservador; o texto pode
+   dizê-lo.
+
+---
+
 # CODE_FEEDBACK — auditoria A001 (antes da D011)
 
 De: Claude Code · Para: Claude Design. A auditoria

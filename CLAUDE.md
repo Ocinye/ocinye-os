@@ -90,11 +90,13 @@ sem que nada falhe.
 
 **Existe e funciona hoje:**
 
-- **Monorepo Rust**, Cargo workspace com 5 crates (`ocinye-contracts`,
-  `ocinye-domain`, `ocinye-observability`, `ocinye-core`, `ocinye-capabilities`),
-  4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
-  aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
-  `wasm/capabilities/bibtex-import`.
+- **Monorepo Rust**, Cargo workspace com 7 crates (`ocinye-contracts`,
+  `ocinye-domain`, `ocinye-observability`, `ocinye-core`, `ocinye-capabilities`,
+  `ocinye-installer-contracts`, `ocinye-installer-controller`), 6 serviços
+  (`core-server`, `worker`, `node-agent`, `conversion-runner`,
+  `installer-bootstrap`, `release-tool`) e 1 aplicação (`apps/workspace`). Fora
+  da workspace do host: a janela do Installer (`apps/installer`, Tauri) e uma
+  capacidade WASM (`wasm/capabilities/bibtex-import`).
 - **Ocinye Core: `IMPLEMENTED` e em produção.** 254 caminhos e 302 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
@@ -221,6 +223,18 @@ sem que nada falhe.
   serviços e confirma de fora que o Workspace responde. O resultado tem o layout
   da produção da Ocinye. `scripts/install-e2e.sh` prova-o num anfitrião
   descartável, duas vezes, de raiz.
+- **Ocinye OS Installer (D011): `IMPLEMENTED` em `feat/design-d011`, não
+  mergeado** ([ADR-0022](docs/adrs/0022-graphical-remote-installer.md) a
+  [ADR-0025](docs/adrs/0025-hardware-discovery-and-compute-boundary.md),
+  `Proposed`; [installer](docs/install/installer.md)). Uma janela no computador
+  do operador instala um release num **Ubuntu Server 24.04 LTS** novo por SSH,
+  com chave de anfitrião fixada, um bootstrap temporário de protocolo fechado,
+  plano selado, diário e retoma no servidor, Docker do repositório oficial com a
+  chave conferida, TLS do operador ou auto-assinado de teste, pontos de acesso
+  por Distribuição e a credencial temporária do primeiro administrador mostrada
+  uma vez. Provado em VMs Ubuntu 24.04 mínimas `arm64` locais; a certificação
+  final exige ainda uma VM `amd64` na cloud. ACME `DEFERRED`; assinatura do
+  release `NOT_IMPLEMENTED`; modo fornecedor de computação não existe.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
   `ocinye upgrade` faz checkpoint da base, troca o release, passa um portão de
@@ -615,7 +629,7 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **107 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **111 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -632,14 +646,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1843 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1964 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **731 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **737 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -1279,6 +1293,9 @@ crates/ocinye-domain            crates/ocinye-observability
 crates/ocinye-core              crates/ocinye-capabilities
 services/core-server            services/worker
 services/node-agent             services/conversion-runner
+crates/ocinye-installer-contracts crates/ocinye-installer-controller
+services/installer-bootstrap    services/release-tool
+apps/installer (fora da workspace)
 wasm/capabilities/bibtex-import
 docs    infra    migrations    scripts
 ```

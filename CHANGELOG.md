@@ -7,6 +7,44 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### D011 — Ocinye OS Installer — 2026-10-05 (ramo `feat/design-d011`)
+
+O Installer gráfico remoto do pacote D011 do Claude Design
+([ADR-0022](docs/adrs/0022-graphical-remote-installer.md) a
+[ADR-0025](docs/adrs/0025-hardware-discovery-and-compute-boundary.md), `Proposed`;
+[arquitectura e provas](docs/install/installer.md)). Alvo único: **Ubuntu Server
+24.04 LTS**, mínimo, sem ambiente gráfico. Sem deploy, sem instalação em produção.
+
+- **Janela (`apps/installer`)**: Tauri 2, fora da workspace, com os 19 ecrãs e 24
+  estados de erro do Design, CSP igual à do Workspace e a webview limitada aos 40
+  comandos do Installer; validada em pt/en/fr a 960×640, 1200×800 e 1600×1000.
+- **Controlador (`crates/ocinye-installer-controller`)**: SSH só com chave de
+  anfitrião fixada (Ed25519/ECDSA), verificação local do pacote e do TLS do
+  operador (incluindo assinaturas SHA-1/MD5 e curvas EC por extenso, recusadas),
+  plano selado por `plan_sha256`, verificação do lado do operador e recibo sem
+  segredos.
+- **Contratos (`crates/ocinye-installer-contracts`)**: `MANIFEST.json` canónico,
+  preflight, plano, protocolo fechado, diário, ciclo de vida e recibo tipados.
+- **Bootstrap (`services/installer-bootstrap`)**: binário estático temporário,
+  protocolo de comandos fechado, fases P01–P16 destacadas com diário no
+  servidor, retoma por classe de segurança, remoção só do que é seu.
+- **Core**: `endpoint-seed` (auditado, idempotente, sete recusas) e quatro
+  verificações só de leitura (`verify-schema`, `verify-instance`,
+  `verify-endpoints`, `verify-admin-bootstrap`).
+- **Instalação**: `install/ocinye` em fases chamáveis uma a uma, com
+  `--distribution` (repetível; `--profile` fica sinónimo) e `--endpoint`; o
+  pacote de release ganha `MANIFEST.json` e `ocinye-bootstrap`.
+- **Docker** do repositório oficial, com a impressão digital da chave conferida
+  contra o manifesto; `ufw` só abre 80/443 com `comment "ocinye"`; nada mais do
+  firewall é tocado.
+- **Segurança (Garage)**: o `object-store-init` passava o token de administração
+  e a chave secreta do armazenamento nos argumentos do `curl`, visíveis em `ps`
+  para qualquer utilizador do anfitrião; passam a ir por ficheiro 0600 e stdin.
+- **Provas** em VMs Ubuntu 24.04 descartáveis (Lima): `scripts/installer-vm.sh`,
+  `scripts/installer-e2e.sh` e uma auditoria de segredos que procura cada valor
+  em tudo o que fica ou se imprime, incluindo os argumentos de todos os processos
+  durante a instalação.
+
 ### Auditoria A001 — sistema inteiro antes da D011 — 2026-10-04 (ramo `audit/pre-d011-full-system`)
 
 Auditoria de D001–D010 sobre `main @ 32ba19a`, com correcção dos defeitos
