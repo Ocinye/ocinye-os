@@ -55,7 +55,7 @@ case "${1:-}" in
       --cache "$CACHE" --image-dir "$RAIZ/infra/image" \
       --bin-dir "$RAIZ/target/$alvo/release" --builder-commit "$commit" \
       --signing-dir "$CACHE/dev-signing" --formats "$formatos" \
-      --memory "${OCINYE_IMAGE_BUILD_MEMORY:-2560}" --cpus "${OCINYE_IMAGE_BUILD_CPUS:-3}"
+      --memory "${OCINYE_IMAGE_BUILD_MEMORY:-2560}" --cpus "${OCINYE_IMAGE_BUILD_CPUS:-3}" ${OCINYE_IMAGE_BUILD_REUSE_COMMON:+--reuse-common}
     echo "$CACHE/dist/$nome"
     ;;
   verify)

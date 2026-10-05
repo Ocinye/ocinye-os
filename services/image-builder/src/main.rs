@@ -55,6 +55,7 @@ struct Args {
     cpus: u32,
     zstd_level: u32,
     revision: u32,
+    reuse_common: bool,
 }
 
 fn usage() -> ! {
@@ -99,6 +100,7 @@ fn parse(args: &[String]) -> Args {
             .and_then(|m| m.parse().ok())
             .unwrap_or(19),
         revision: flag("--revision").and_then(|m| m.parse().ok()).unwrap_or(1),
+        reuse_common: args.iter().any(|x| x == "--reuse-common"),
     }
 }
 
@@ -249,19 +251,36 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
 
     // B05–B10, pass 1: the common layer.
     let common = a.work.join("common.qcow2");
-    bvm.overlay(&base.image, &common, "24G")?;
-    let (oci_json, runtime_txt) = steps.time("B05-B09 common", || {
-        let r = bvm.boot(&common, "common")?;
-        r.upload("B05", &stage)?;
-        r.ssh("B06", "sudo /root/ocinye-build/provision.sh common >&2")?;
-        let oci = r.ssh("B08", "sudo cat /root/ocinye-build/out/oci.json")?;
-        let rt = r.ssh("B07", "sudo cat /root/ocinye-build/out/dpkg-runtime.txt")?;
-        r.poweroff(false)?;
-        Ok((
-            String::from_utf8_lossy(&oci).into_owned(),
-            String::from_utf8_lossy(&rt).into_owned(),
-        ))
-    })?;
+    // `--reuse-common` (development iteration only): a common layer finished
+    // by an earlier run in this work directory, recorded as reused.
+    let saved_oci = a.work.join("common-oci.json");
+    let saved_rt = a.work.join("common-runtime.txt");
+    let reuse = a.reuse_common && common.exists() && saved_oci.exists() && saved_rt.exists();
+    let (oci_json, runtime_txt) = if reuse {
+        steps.time("B05-B09 common (reused)", || {
+            Ok((
+                fs::read_to_string(&saved_oci).map_err(|_| asm("reuse"))?,
+                fs::read_to_string(&saved_rt).map_err(|_| asm("reuse"))?,
+            ))
+        })?
+    } else {
+        bvm.overlay(&base.image, &common, "24G")?;
+        let (o, r) = steps.time("B05-B09 common", || {
+            let r = bvm.boot(&common, "common")?;
+            r.upload("B05", &stage)?;
+            r.ssh("B06", "sudo /root/ocinye-build/provision.sh common >&2")?;
+            let oci = r.ssh("B08", "sudo cat /root/ocinye-build/out/oci.json")?;
+            let rt = r.ssh("B07", "sudo cat /root/ocinye-build/out/dpkg-runtime.txt")?;
+            r.poweroff(false)?;
+            Ok((
+                String::from_utf8_lossy(&oci).into_owned(),
+                String::from_utf8_lossy(&rt).into_owned(),
+            ))
+        })?;
+        fs::write(&saved_oci, &o).map_err(|_| asm("save"))?;
+        fs::write(&saved_rt, &r).map_err(|_| asm("save"))?;
+        (o, r)
+    };
     let oci_images = content::oci_images(&oci_json, &bundle)?;
     let pin = |p: &str| {
         runtime_txt

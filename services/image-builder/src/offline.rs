@@ -344,9 +344,20 @@ fn any_nonempty_file(p: &Path) -> Option<String> {
 
 /// Secret patterns (Ocinye's own, plus private key armour and cloud keys).
 fn secret_in(bytes: &[u8]) -> Option<&'static str> {
+    // Text only: executables and libraries carry these strings as format
+    // text (ssh, gnutls), not as secrets.
+    if bytes.iter().take(8192).any(|b| *b == 0) {
+        return None;
+    }
     let find = |pat: &[u8]| bytes.windows(pat.len()).position(|w| w == pat);
-    if find(b"PRIVATE KEY-----").is_some() {
-        return Some("private-key");
+    if let Some(i) = find(b"PRIVATE KEY-----") {
+        let line_start = bytes[..i]
+            .iter()
+            .rposition(|b| *b == b'\n')
+            .map_or(0, |p| p + 1);
+        if bytes[line_start..i].windows(10).any(|w| w == b"-----BEGIN") {
+            return Some("private-key");
+        }
     }
     if let Some(i) = find(b"AKIA") {
         if bytes.get(i + 4..i + 20).is_some_and(|w| {
@@ -501,7 +512,16 @@ pub fn inspect(m: &Mounted, profile: &str, release_id: &str) -> Inspection {
             "getty.target.wants",
         ]
         .iter()
-        .any(|w| r.join("etc/systemd/system").join(w).join(unit).exists())
+        .any(|w| {
+            // Enable links are absolute (`/etc/systemd/system/…`): resolve
+            // them inside the image, never on the builder.
+            let link = r.join("etc/systemd/system").join(w).join(unit);
+            match fs::read_link(&link) {
+                Ok(t) if t.is_absolute() => r.join(t.strip_prefix("/").unwrap_or(&t)).exists(),
+                Ok(t) => link.parent().is_some_and(|d| d.join(t).exists()),
+                Err(_) => link.exists(),
+            }
+        })
     };
     c(
         "runtime_disabled_until_claimed",
@@ -598,6 +618,16 @@ mod tests {
             "longer hex runs are not garage key ids"
         );
         assert_eq!(secret_in(b"nothing to see"), None);
+        assert_eq!(
+            secret_in(b"\x7fELF\0\0 -----BEGIN OPENSSH PRIVATE KEY-----"),
+            None,
+            "binaries are not scanned"
+        );
+        assert_eq!(
+            secret_in(b"printf(\"%s PRIVATE KEY-----\")"),
+            None,
+            "format text is not armour"
+        );
     }
 
     #[test]
