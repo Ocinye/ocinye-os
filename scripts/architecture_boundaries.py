@@ -112,6 +112,17 @@ NORMAIS = {
     "ocinye-installer-controller": {"ocinye-contracts", "ocinye-installer-contracts"},
     "ocinye-bootstrap": {"ocinye-contracts", "ocinye-installer-contracts"},
     "ocinye-release-tool": {"ocinye-contracts", "ocinye-installer-contracts"},
+    # As imagens do Ocinye OS (D013, ADR-0027/0028), desde 2026-10-05 —
+    # PROVISIONAL_PENDING_D011_CERTIFICATION. Os contratos das imagens assentam
+    # nos do instalador (forma canónica, manifesto do release; PD-01/PD-02) e
+    # em mais nada. O construtor (numa VM descartável), o primeiro arranque e
+    # o ambiente de instalação (na máquina) falam só por esses contratos:
+    # nenhum conhece o Core, o domínio, a persistência ou o Workspace — uma
+    # imagem não cria Instância, organização nem membro.
+    "ocinye-image-contracts": {"ocinye-installer-contracts"},
+    "ocinye-firstboot": {"ocinye-image-contracts", "ocinye-installer-contracts"},
+    "ocinye-oie": {"ocinye-image-contracts", "ocinye-installer-contracts"},
+    "ocinye-image-builder": {"ocinye-image-contracts", "ocinye-installer-contracts"},
 }
 
 # Dependências de desenvolvimento. Um teste pode levantar o sistema todo; é
@@ -141,6 +152,11 @@ DEV = {
     # (`endpoint-seed`, `verify-*`) com os tipos que o bootstrap usa para a
     # ler, para que as duas pontas não divirjam. Só em teste: o binário do
     # Core não leva os contratos do instalador.
+    # As imagens (D013) nos testes: os mesmos contratos com o feature
+    # `test-support` (fixtures), nada mais.
+    "ocinye-firstboot": {"ocinye-image-contracts"},
+    "ocinye-oie": {"ocinye-image-contracts"},
+    "ocinye-image-builder": {"ocinye-image-contracts"},
 }
 
 

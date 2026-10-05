@@ -7,6 +7,33 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### D013 — Imagens do Ocinye OS, fase A de código — 2026-10-05 (ramo `feat/d013-image-builder-phase-a`)
+
+`PROVISIONAL_PENDING_D011_CERTIFICATION` — assenta em `feat/design-d011`, ainda
+não certificada; **não mergear**. Só construções de desenvolvimento; sem
+publicação, sem chave de produção, sem deploy
+([ADR-0026](docs/adrs/0026-release-and-image-signing.md) a
+[ADR-0029](docs/adrs/0029-image-machine-instance-identity.md), `Proposed`;
+[imagens](docs/install/images.md), [servidor físico](docs/install/bare-metal.md)).
+
+- **Contratos (`crates/ocinye-image-contracts`)**: manifestos da imagem e do
+  conteúdo, inventário de pacotes, portões do canal estável (falham fechados),
+  identidade da máquina, transições da reclamação como funções puras,
+  elegibilidade dos discos e confirmação escrita, verificação minisign com a
+  gramática fechada do comentário assinado, recibo da origem.
+- **Primeiro arranque (`services/firstboot`)**: identidade gerada depois da
+  entropia, integridade do release e das imagens pré-carregadas (nos dois
+  armazéns do Docker), firewall fechada, código de 125 bits só em tmpfs,
+  reclamação por SSH (conta restrita, comando forçado, `flock`), Docker activado
+  só em RECLAMADO, consola pt/en/fr com o código só a pedido.
+- **Ambiente de instalação (`services/oie`)**: discos protegidos (suporte,
+  montados, pequenos, sem caminho estável, ambíguos), confirmação pelo fim do
+  número de série, curtin com esquema fixo e sem rede, diário no disco.
+- **Construtor (`services/image-builder`, `infra/image`, `scripts/image-build.sh`,
+  `scripts/image-e2e.sh`)**: B01–B17 numa VM descartável, base fixada e
+  verificada por `gpgv`, limpeza e inspecção offline, ISO híbrido só UEFI, QCOW2,
+  RAW, SBOM SPDX 2.3, proveniência, assinatura de desenvolvimento.
+
 ### D011 — Ocinye OS Installer — 2026-10-05 (ramo `feat/design-d011`)
 
 O Installer gráfico remoto do pacote D011 do Claude Design
