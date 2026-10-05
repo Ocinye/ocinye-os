@@ -27,7 +27,9 @@ B=/root/ocinye-build
 # shellcheck source=/dev/null
 . "$B/build.env"
 export DEBIAN_FRONTEND=noninteractive
-APT=(apt-get -o APT::Snapshot="$APT_SNAPSHOT" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y)
+APT=(apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y)
+SNAPSHOT_URI="https://snapshot.ubuntu.com/ubuntu/$APT_SNAPSHOT"
+SOURCES=/etc/apt/sources.list.d/ubuntu.sources
 case "$ARCH" in arm64) SERIAL=ttyAMA0 ;; *) SERIAL=ttyS0 ;; esac
 log() { printf '[provision %s] %s\n' "$STAGE" "$*"; }
 STAGE="${1:?stage}"
@@ -52,6 +54,16 @@ stage_common() {
   log "waiting for cloud-init and the network"
   cloud-init status --wait >/dev/null 2>&1 || true
   log "apt snapshot $APT_SNAPSHOT"
+  # The build installs from the snapshot named in base.json (amd64 and arm64
+  # both live there); the image keeps the archive sources it came with.
+  [ -f "$B/ubuntu.sources.orig" ] || cp "$SOURCES" "$B/ubuntu.sources.orig"
+  cat > "$SOURCES" <<SRC
+Types: deb
+URIs: $SNAPSHOT_URI
+Suites: noble noble-updates noble-backports noble-security
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+SRC
   policy_on
   apt_update
   "${APT[@]}" dist-upgrade
@@ -214,7 +226,8 @@ stage_finalize() {
   done
   apt-get clean
   rm -rf /var/lib/apt/lists/*
-  # apt sources back to the archive (the snapshot was for the build only).
+  # apt sources back to the archive the base image had.
+  if [ -f "$B/ubuntu.sources.orig" ]; then cp "$B/ubuntu.sources.orig" "$SOURCES"; fi
   cloud-init clean --logs --seed || true
   rm -rf /var/lib/cloud/* /var/log/cloud-init*
   rm -f /etc/ssh/ssh_host_*
