@@ -2,7 +2,7 @@
 Description=Ocinye OS first boot (identity, integrity, claim state)
 Documentation=file:///usr/share/doc/ocinye/images.md
 After=local-fs.target systemd-random-seed.service systemd-machine-id-commit.service cloud-init.service
-Before=ssh.socket ssh.service ocinye-console@tty1.service ocinye-console@ttyS0.service
+Before=ssh.socket ssh.service
 Wants=systemd-random-seed.service
 
 [Service]

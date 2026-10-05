@@ -373,8 +373,8 @@ pub fn verify_release(
     }
 }
 
-/// `SHA256SUMS`: sorted, LF, `<64 hex>  <name>` lines, safe names, no
-/// duplicates. `None` if anything else is in it.
+/// `SHA256SUMS`: sorted, LF, `<64 hex>  <path>` lines, safe relative paths
+/// (no `..`, no leading `/`), no duplicates. `None` if anything else is in it.
 #[must_use]
 pub fn parse_sha256sums(bytes: &[u8]) -> Option<Vec<(String, Sha256Hex)>> {
     let text = std::str::from_utf8(bytes).ok()?;
@@ -385,7 +385,7 @@ pub fn parse_sha256sums(bytes: &[u8]) -> Option<Vec<(String, Sha256Hex)>> {
     for line in text.lines() {
         let (h, name) = line.split_once("  ")?;
         let h = Sha256Hex(h.to_owned());
-        if !h.is_valid() || !crate::manifest::is_safe_file_name(name) {
+        if !h.is_valid() || !crate::manifest::is_safe_relative_path(name) {
             return None;
         }
         if out.last().is_some_and(|(prev, _)| prev.as_str() >= name) {

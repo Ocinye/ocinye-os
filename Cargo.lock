@@ -3969,6 +3969,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocinye-image-builder"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "ocinye-image-contracts",
+ "ocinye-installer-contracts",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "ocinye-image-contracts"
 version = "0.1.0"
 dependencies = [
