@@ -45,6 +45,10 @@ case "${1:-}" in
     [ -d "$BUNDLES/$pacote" ] || { echo "pacote não encontrado: $BUNDLES/$pacote" >&2; exit 2; }
     [ -z "$(git -C "$RAIZ" status --porcelain)" ] || { echo "DIRTY_SOURCE_TREE: a árvore tem alterações" >&2; exit 3; }
     commit="$(git -C "$RAIZ" rev-parse HEAD)"
+    # A build needs room for the artifacts here and for the VM's scratch:
+    # refuse before starting rather than fill the disk (ENOSPC is INVALID).
+    livre=$(df -g "$HOME" | tail -1 | awk '{print $4}')
+    [ "$livre" -ge "${OCINYE_IMAGE_BUILD_MIN_FREE_GB:-30}" ] || { echo "ESPAÇO INSUFICIENTE: ${livre} GB livres" >&2; exit 4; }
     musl "$alvo"; musl aarch64-unknown-linux-musl
     vm_create
     limactl start "$VM" >/dev/null 2>&1 || true

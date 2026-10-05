@@ -331,6 +331,8 @@ pub fn iso(
         ],
         art(ImageFormat::Iso),
     )?;
+    // The tree is a copy of what the ISO now holds: give the space back.
+    let _ = fs::remove_dir_all(&tree);
     Ok(facts)
 }
 
