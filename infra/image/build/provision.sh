@@ -241,12 +241,7 @@ stage_finalize() {
   rm -rf /var/lib/docker/network/files/* /var/lib/docker/containers/* /var/lib/docker/volumes/* /var/lib/docker/buildkit 2>/dev/null || true
   rm -f /var/lib/docker/engine-id
   rm -rf /tmp/* /var/tmp/* /root/.bash_history /root/.cache /root/.ssh
-  if [ -n "${BUILD_USER:-}" ] && id "$BUILD_USER" >/dev/null 2>&1; then
-    rm -f "/etc/sudoers.d/90-cloud-init-users"
-    # The session we are in belongs to that user; it is removed offline (B11)
-    # if userdel cannot run now.
-    userdel -r -f "$BUILD_USER" 2>/dev/null || true
-  fi
+  # The build user (whose session this is) is removed offline, at B11.
   journalctl --rotate >/dev/null 2>&1 || true
   journalctl --vacuum-time=1s >/dev/null 2>&1 || true
   find /var/log -type f -exec truncate -s 0 {} + 2>/dev/null || true
