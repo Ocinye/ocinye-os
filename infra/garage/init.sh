@@ -24,9 +24,22 @@ URL="${OCINYE_GARAGE_ADMIN_URL:-http://object-store:3903}/v2"
 : "${OCINYE_STORAGE_BUCKET:?falta OCINYE_STORAGE_BUCKET}"
 CAPACIDADE="${OCINYE_GARAGE_CAPACITY:-1000000000000}"
 
+# Nenhum segredo vai na linha de comandos: os argumentos de um processo estão à
+# vista de qualquer utilizador do anfitrião (`ps`, /proc), e os destes contentores
+# também. O token vai num ficheiro 0600 (`-H @…`) e os corpos pelo stdin, ambos
+# escritos pelo `printf` da própria shell, que não é um processo.
+CABECALHO="$(mktemp)"
+trap 'rm -f "$CABECALHO"' EXIT
+chmod 600 "$CABECALHO"
+printf 'Authorization: Bearer %s\n' "$GARAGE_ADMIN_TOKEN" > "$CABECALHO"
+
 api() {  # método caminho [corpo]
-    curl -sS -X "$1" -H "Authorization: Bearer $GARAGE_ADMIN_TOKEN" \
-        -H 'Content-Type: application/json' ${3:+-d "$3"} "$URL/$2"
+    if [ -n "${3:-}" ]; then
+        printf '%s' "$3" | curl -sS -X "$1" -H @"$CABECALHO" \
+            -H 'Content-Type: application/json' --data-binary @- "$URL/$2"
+    else
+        curl -sS -X "$1" -H @"$CABECALHO" -H 'Content-Type: application/json' "$URL/$2"
+    fi
 }
 campo() {  # nome — o primeiro valor desse campo num JSON, sem jq
     grep -o "\"$1\": *[^,}]*" | head -1 | sed 's/^[^:]*: *//; s/"//g'
@@ -49,7 +62,13 @@ if printf '%s' "$estado" | grep -q '"role": *null'; then
 fi
 
 # ── A chave do Core, com o identificador e o segredo da configuração ─────
-if ! api GET "GetKeyInfo?id=$OCINYE_STORAGE_ACCESS_KEY" | grep -q '"accessKeyId"'; then
+# A chave procura-se na lista, comparada pela shell: no URL ficaria nos argumentos.
+chaves="$(api GET ListKeys)"
+case "$chaves" in
+    *"\"$OCINYE_STORAGE_ACCESS_KEY\""*) chave_existe=1 ;;
+    *) chave_existe= ;;
+esac
+if [ -z "$chave_existe" ]; then
     api POST ImportKey "{\"accessKeyId\":\"$OCINYE_STORAGE_ACCESS_KEY\",\"secretAccessKey\":\"$OCINYE_STORAGE_SECRET_KEY\",\"name\":\"ocinye-core\"}" \
         | grep -q '"accessKeyId"' || { echo "a importação da chave falhou" >&2; exit 1; }
     echo "chave do Core importada"
