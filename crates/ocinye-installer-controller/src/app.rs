@@ -28,6 +28,7 @@ pub trait Native: Send + Sync {
     /// Pick a folder (the release bundle).
     fn pick_folder(&self) -> Option<PathBuf>;
     /// Pick a file (an SSH key, a certificate, a key, a chain).
+    /// `kind`: `ssh_key`, or the TLS file — `cert`, `key`, `chain`.
     fn pick_file(&self, kind: &str) -> Option<PathBuf>;
     /// Choose where to save a file.
     fn save_file(&self, suggested: &str) -> Option<PathBuf>;
@@ -260,7 +261,7 @@ impl App {
             }
             "choose_key" => {
                 let n = Arc::clone(&native);
-                tokio::task::spawn_blocking(move || n.pick_file("key"))
+                tokio::task::spawn_blocking(move || n.pick_file("ssh_key"))
                     .await
                     .ok()
                     .flatten()

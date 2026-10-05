@@ -9,6 +9,12 @@
 //! OCINYE_BRIDGE_RELEASE=… OCINYE_BRIDGE_KEY=… [OCINYE_BRIDGE_TLS_CERT=… …] \
 //! [OCINYE_BRIDGE_RESOLVE=host=ip,host=ip] cargo run --example ui_bridge -- 8766
 //! ```
+//!
+//! Two test-only conveniences keep proof secrets out of whatever drives the
+//! browser: `OCINYE_BRIDGE_SUDO_FILE` — a `sudo` call whose password is the
+//! placeholder `@file` gets the file's contents instead; and
+//! `OCINYE_BRIDGE_CREDENTIAL_FILE` — when the operator reveals the one-time
+//! credential, the bridge also keeps it there (0600, never overwritten).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -30,10 +36,11 @@ impl Native for Env {
     }
     fn pick_file(&self, kind: &str) -> Option<PathBuf> {
         match kind {
-            "key" => env_path("OCINYE_BRIDGE_KEY"),
+            "ssh_key" => env_path("OCINYE_BRIDGE_KEY"),
             "cert" => env_path("OCINYE_BRIDGE_TLS_CERT"),
+            "key" => env_path("OCINYE_BRIDGE_TLS_KEY"),
             "chain" => env_path("OCINYE_BRIDGE_TLS_CHAIN"),
-            _ => env_path("OCINYE_BRIDGE_TLS_KEY").filter(|_| kind == "tls_key"),
+            _ => None,
         }
     }
     fn save_file(&self, suggested: &str) -> Option<PathBuf> {
@@ -131,10 +138,34 @@ async fn main() {
             let (status, ctype, body): (&str, &str, Vec<u8>) = if let Some(cmd) =
                 path.strip_prefix("/ipc/")
             {
-                let args: serde_json::Value =
+                let mut args: serde_json::Value =
                     serde_json::from_slice(&buf[head_end..]).unwrap_or_default();
+                if cmd == "sudo" && args["password"] == "@file" {
+                    if let Some(p) = env_path("OCINYE_BRIDGE_SUDO_FILE") {
+                        let pw = std::fs::read_to_string(p).unwrap_or_default();
+                        args["password"] = serde_json::Value::String(pw.trim().to_owned());
+                    }
+                }
                 match app.dispatch(cmd, args, native).await {
-                    Ok(v) => ("200 OK", "application/json", v.to_string().into_bytes()),
+                    Ok(v) => {
+                        if let (true, Some(secret), Some(p)) = (
+                            cmd == "reveal_credential",
+                            v.as_str(),
+                            env_path("OCINYE_BRIDGE_CREDENTIAL_FILE"),
+                        ) {
+                            use std::io::Write as _;
+                            use std::os::unix::fs::OpenOptionsExt as _;
+                            if let Ok(mut f) = std::fs::OpenOptions::new()
+                                .write(true)
+                                .create_new(true)
+                                .mode(0o600)
+                                .open(p)
+                            {
+                                let _ = f.write_all(secret.as_bytes());
+                            }
+                        }
+                        ("200 OK", "application/json", v.to_string().into_bytes())
+                    }
                     Err(e) => (
                         "400 Bad Request",
                         "application/json",
