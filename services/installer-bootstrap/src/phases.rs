@@ -516,6 +516,20 @@ pub fn p04(ctx: &mut Ctx<'_>) -> Result<Effects, Failure> {
                     phase: PhaseId::P04,
                     operation: Operation::EnableDocker,
                 });
+                // The socket unit the packages just installed is bound anew:
+                // a removed distribution Docker leaves its socket unit active
+                // until the next boot, holding /run/docker.sock, and dockerd
+                // then finds no socket-activated listener (seen on a VM).
+                for args in [&["daemon-reload"][..], &["restart", "docker.socket"][..]] {
+                    let r = exec::run(program::SYSTEMCTL, args, exec::secs(60));
+                    if !r.ok() {
+                        return Err(Failure::from_output(
+                            "PREREQUISITE_INSTALL_FAILED",
+                            true,
+                            &r,
+                        ));
+                    }
+                }
                 let en = exec::run(
                     program::SYSTEMCTL,
                     &["enable", "--now", "docker"],

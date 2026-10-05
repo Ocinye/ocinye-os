@@ -167,7 +167,13 @@ pub fn observe_docker() -> DockerObservation {
     {
         conflicts.push(RuntimeConflict::DockerSnap);
     }
-    if Path::new("/var/run/docker.sock").exists() && server_version.is_none() && !cli {
+    // Something answers on the Docker socket without a Docker CLI: a runtime
+    // that is not ours. A socket file nobody listens on (left by a purged
+    // package until the next boot) is not a runtime.
+    if !cli
+        && server_version.is_none()
+        && std::os::unix::net::UnixStream::connect("/var/run/docker.sock").is_ok()
+    {
         conflicts.push(RuntimeConflict::ForeignSocket);
     }
     DockerObservation {
