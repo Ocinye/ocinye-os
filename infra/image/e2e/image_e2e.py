@@ -180,7 +180,21 @@ def keygen(path):
     return path
 
 
+LAST_CONNECT = {}
+# The image's own firewall allows at most 6 connections per 30 s per source
+# on 22/tcp while it is unclaimed (`ufw limit`): stay under it.
+MIN_GAP = 6.5
+
+
+def throttle(port):
+    gap = time.time() - LAST_CONNECT.get(port, 0)
+    if gap < MIN_GAP:
+        time.sleep(MIN_GAP - gap)
+    LAST_CONNECT[port] = time.time()
+
+
 def ssh(port, user, key, remote=None, input_=None, timeout=120):
+    throttle(port)
     args = ["ssh", "-i", key, "-p", str(port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
             "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", f"{user}@127.0.0.1"]
     if remote:
@@ -199,6 +213,7 @@ def claim_session(port, key, messages, timeout=120):
 def wait_ssh_port(port, timeout):
     end = time.time() + timeout
     while time.time() < end:
+        throttle(port)
         try:
             with socket.create_connection(("127.0.0.1", port), 5) as s:
                 s.settimeout(5)
@@ -206,7 +221,7 @@ def wait_ssh_port(port, timeout):
                     return
         except OSError:
             pass
-        time.sleep(5)
+        time.sleep(10)
     raise TimeoutError("ssh port")
 
 

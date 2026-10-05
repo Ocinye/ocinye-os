@@ -249,6 +249,11 @@ fn on_claimed(sys: &dyn System) {
     ] {
         let _ = sys.systemctl(&["enable", "--now", unit]);
     }
+    // The rate limit on 22/tcp protects the open claim account; once the
+    // machine is claimed only key logins remain, and the Installer opens
+    // several sessions in a row — `limit` would lock the owner out.
+    let _ = sys.ufw(&["allow", "22/tcp", "comment", "ocinye-firstboot"]);
+    let _ = sys.ufw(&["delete", "limit", "22/tcp"]);
 }
 
 /// F1–F6 at boot. Later boots keep the identity, re-check integrity and
@@ -868,6 +873,10 @@ pub mod tests {
         assert!(!r.claimable().exists() && !r.code().exists());
         assert!(sys.called("systemctl enable --now docker.service"));
         assert!(sys.called("claim-account false"));
+        assert!(
+            sys.called("ufw allow 22/tcp comment ocinye-firstboot")
+                && sys.called("ufw delete limit 22/tcp")
+        );
         // Replay after Claimed.
         assert!(matches!(
             claim_provisioned(&r, &sys, &fp, "ocinye"),

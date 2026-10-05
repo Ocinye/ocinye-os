@@ -213,6 +213,12 @@ UNIT
 stage_finalize() {
   local profile="${2:?profile}"
   log "finalize $profile: what a clone must not share"
+  # The binaries and fragments of this run (a reused common layer may carry
+  # older ones).
+  install -m 0755 "$B/bin/ocinye-firstboot" /usr/lib/ocinye/ocinye-firstboot
+  tar -C / --no-same-owner -xf "$B/rootfs.tar"
+  chmod 0440 /etc/sudoers.d/60-ocinye-image
+  visudo -c >/dev/null
   case "$profile" in
     virt|metal)
       systemctl enable ocinye-firstboot.service ocinye-console@tty1.service "ocinye-console@$SERIAL.service" ;;
