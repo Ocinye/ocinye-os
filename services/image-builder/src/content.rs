@@ -145,6 +145,8 @@ pub fn inventory(
 struct DockerLs {
     repository: String,
     tag: String,
+    #[serde(default)]
+    digest: String,
     #[serde(rename = "ID")]
     id: String,
 }
@@ -182,13 +184,16 @@ pub fn oci_images(oci_json: &str, bundle: &Bundle) -> Result<Vec<OciImageRef>, I
         });
     }
     for t in &bundle.manifest.third_party_images {
-        let tag = t
-            .tag
-            .clone()
-            .ok_or_else(|| ImageBuildError::FloatingImageReference {
-                reference: t.reference.clone(),
-            })?;
-        let id = id_of(&t.repository, &tag).ok_or_else(|| ImageBuildError::OciDigestMismatch {
+        // By tag when the reference has one, else by the pinned digest (a
+        // digest-only reference never has a tag in the store).
+        let id = match &t.tag {
+            Some(tag) => id_of(&t.repository, tag),
+            None => rows
+                .iter()
+                .find(|r| r.repository == t.repository && r.digest == t.digest)
+                .map(|r| r.id.clone()),
+        }
+        .ok_or_else(|| ImageBuildError::OciDigestMismatch {
             name: t.repository.clone(),
         })?;
         out.push(OciImageRef {

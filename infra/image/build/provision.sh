@@ -99,9 +99,13 @@ SRC
   for t in "$B"/images/*.tar; do docker load -i "$t"; done
   while read -r ref; do
     [ -n "$ref" ] || continue
-    repo_tag="${ref%@*}"; digest="${ref#*@}"; repo="${repo_tag%:*}"
+    repo_tag="${ref%@*}"; digest="${ref#*@}"
+    last="${repo_tag##*/}"
+    if [ "${last#*:}" != "$last" ]; then repo="${repo_tag%:*}"; else repo="$repo_tag"; fi
     docker pull "$repo@$digest"
-    docker tag "$repo@$digest" "$repo_tag"
+    # The readable tag only when the reference has one: a digest-only
+    # reference is pulled by digest and never gains a floating tag.
+    if [ "$repo" != "$repo_tag" ]; then docker tag "$repo@$digest" "$repo_tag"; fi
   done < "$B/third-party.txt"
   docker image ls --digests --no-trunc --format '{{json .}}' > "$B/out/oci.json"
   systemctl stop docker.socket docker containerd
