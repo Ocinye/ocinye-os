@@ -302,6 +302,7 @@ def claim_by_code(r, vm, key, other_key, label):
     ok = ssh(vm.port, "ocinye", key, "sudo -n /usr/lib/ocinye/ocinye-firstboot confirm --claim " + enrolled["claim_id"])
     confirmed = ok.returncode == 0 and b'"Confirmed"' in ok.stdout
     r.check(f"{label}: confirmed by the enrolled key", confirmed, ok.stdout + ok.stderr)
+    r.check(f"{label}: confirm prints only the protocol JSON", ok.stdout.strip().count(b"\n") == 0 and ok.stdout.strip().startswith(b"{"), ok.stdout)
     again = ssh(vm.port, "ocinye", key, "sudo -n /usr/lib/ocinye/ocinye-firstboot confirm --claim " + enrolled["claim_id"])
     r.check(f"{label}: confirm replay refused (ALREADY_CLAIMED)", b"ALREADY_CLAIMED" in again.stdout, again.stdout)
     rc, ev, err = claim_session(vm.port, other_key, [{"cmd": "hello", "protocol": 1}])
@@ -310,7 +311,7 @@ def claim_by_code(r, vm, key, other_key, label):
 
 
 def machine_facts(port, key):
-    r = ssh(port, "ocinye", key, "cat /etc/machine-id; sudo -n cat /var/lib/ocinye-firstboot/identity.json; systemctl is-enabled docker.service; systemctl is-active docker.service; sudo -n ufw status | head -1")
+    r = ssh(port, "ocinye", key, "cat /etc/machine-id; sudo -n cat /var/lib/ocinye-firstboot/identity.json; echo; systemctl is-enabled docker.service; systemctl is-active docker.service; sudo -n ufw status | head -1")
     lines = r.stdout.decode().splitlines()
     return {"machine_id": lines[0] if lines else "", "identity": json.loads(lines[1]) if len(lines) > 1 else {}, "docker": lines[2:4], "ufw": lines[4:5]}
 

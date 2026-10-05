@@ -32,9 +32,13 @@ pub trait System {
 }
 
 fn run(program: &str, args: &[&str]) -> std::io::Result<()> {
+    // Never on stdout: stdout carries the claim protocol and the JSON the
+    // Installer reads.
     let st = Command::new(program)
         .args(args)
         .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .status()?;
     if st.success() {
         Ok(())
