@@ -1060,6 +1060,17 @@ impl Installer {
         }
     }
 
+    /// Whether a phase completed, by this session's events or the journal.
+    fn phase_completed(&self, phase: PhaseId) -> bool {
+        self.events
+            .iter()
+            .any(|e| matches!(e.event, Event::StepCompleted { phase: p } if p == phase))
+            || self
+                .journal
+                .as_ref()
+                .is_some_and(|j| j.completed.contains(&phase))
+    }
+
     /// I18 · the receipt (non-secret).
     #[must_use]
     pub fn receipt(&self) -> Option<InstallationReceipt> {
@@ -1071,6 +1082,9 @@ impl Installer {
             .items
             .iter()
             .any(|i| i.evidence == "FIRST_ACCESS_PENDING");
+        // What the plan changed, once the phase that does it was seen to
+        // complete (in this session's events or the server's journal).
+        let applied = planner::applied(&plan.system_changes, |p| self.phase_completed(p));
         let mut warnings: Vec<String> = self
             .preflight
             .as_ref()
@@ -1080,7 +1094,13 @@ impl Installer {
                     .filter(|i| {
                         i.status == ocinye_installer_contracts::preflight::CheckStatus::Warning
                     })
-                    .map(|i| format!("{:?}", i.id))
+                    // The check's stable id (`PF_CPU`), as everywhere else.
+                    .map(|i| {
+                        serde_json::to_value(i.id)
+                            .ok()
+                            .and_then(|v| v.as_str().map(str::to_owned))
+                            .unwrap_or_default()
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -1120,17 +1140,10 @@ impl Installer {
             },
             hardware: self.hardware.clone()?,
             provider_mode: ProviderMode::Off,
-            installed_packages: Vec::new(),
-            firewall_rules: plan
-                .system_changes
-                .iter()
-                .filter_map(|ch| match ch {
-                    ocinye_installer_contracts::plan::SystemChange::FirewallAllow {
-                        port, ..
-                    } => Some(format!("{port}/tcp")),
-                    _ => None,
-                })
-                .collect(),
+            // What the plan changed, once the phase that does it was seen to
+            // complete (in this session's events or the server's journal).
+            installed_packages: applied.0,
+            firewall_rules: applied.1,
             warnings,
             started_at: self.started_at.clone().unwrap_or_default(),
             ended_at: self.ended_at.clone().unwrap_or_default(),

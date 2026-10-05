@@ -13,6 +13,20 @@
       'O certificado ou a cadeia estão assinados com SHA-1 ou MD5, a chave RSA tem menos de 2048 bits, ou a chave EC não nomeia a curva: o servidor ou os browsers recusam-no. Emita-o de novo com SHA-256 e uma curva nomeada.',
       'The certificate or its chain is signed with SHA-1 or MD5, the RSA key is shorter than 2048 bits, or the EC key does not name its curve: the server or browsers refuse it. Reissue it with SHA-256 and a named curve.',
       'Le certificat ou sa chaîne est signé avec SHA-1 ou MD5, la clé RSA fait moins de 2048 bits, ou la clé EC ne nomme pas sa courbe : le serveur ou les navigateurs le refusent. Émettez-le de nouveau avec SHA-256 et une courbe nommée.'],
+    'x.welcomeNeed2': [
+      'Um servidor Ubuntu Server 24.04 LTS de 64 bits (instalação mínima, sem ambiente gráfico), com acesso SSH e sudo. O instalador instala o Docker quando falta.',
+      'A 64-bit Ubuntu Server 24.04 LTS server (minimal installation, no graphical environment) with SSH and sudo access. The installer installs Docker when it is missing.',
+      'Un serveur Ubuntu Server 24.04 LTS 64 bits (installation minimale, sans environnement graphique) avec accès SSH et sudo. L’installateur installe Docker s’il manque.'],
+    'x.preDockerInstall': [
+      'Não instalado · o plano vai instalar Docker Engine e o plugin compose a partir do repositório oficial do Docker para Ubuntu 24.04. Nada é instalado nesta verificação.',
+      'Not installed · the plan will install Docker Engine and the compose plugin from Docker’s official repository for Ubuntu 24.04. Nothing is installed by this check.',
+      'Non installé · le plan installera Docker Engine et le plugin compose depuis le dépôt officiel de Docker pour Ubuntu 24.04. Rien n’est installé par cette vérification.'],
+    'x.tlsProvided': ['fornecido · válido até {d}', 'provided · valid until {d}', 'fourni · valable jusqu’au {d}'],
+    'x.doneNext1': [
+      'Entre em {u} com a identidade privilegiada; defina a palavra-passe e o segundo factor.',
+      'Sign in at {u} with the privileged identity; set the password and second factor.',
+      'Connectez-vous sur {u} avec l’identité privilégiée ; définissez le mot de passe et le second facteur.'],
+    'x.verLoginD': ['{u}/ → 303 → /boot → 200 → /login → 200', '{u}/ → 303 → /boot → 200 → /login → 200', '{u}/ → 303 → /boot → 200 → /login → 200'],
     'x.osD': ['{v} · núcleo {k}', '{v} · kernel {k}', '{v} · noyau {k}'],
     'x.distroBlocked': [
       'O Ocinye OS v1 instala-se só em Ubuntu Server 24.04 LTS (instalação mínima, sem ambiente gráfico). Este servidor tem {v}.',

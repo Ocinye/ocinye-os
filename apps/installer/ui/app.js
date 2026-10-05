@@ -11,7 +11,8 @@
   let LANG = 'pt';
   let busy = false;
   let lastJson = '';
-  let ui = { forget: false, credential: null, details: false };
+  let lastScreen = null;
+  let ui = { forget: false, credential: null, details: false, auth: null };
 
   // ── textos
   const LI = () => ({ pt: 0, en: 1, fr: 2 }[LANG] || 0);
@@ -38,7 +39,9 @@
   const btn = (kind, label, o = {}) => `<button class="oi-btn oi-btn--${kind}${o.sm ? ' oi-btn--sm' : ''}" type="${o.submit ? 'submit' : 'button'}"${o.act ? ` data-act="${o.act}"` : ''}${o.arg ? ` data-arg="${esc(o.arg)}"` : ''}${o.disabled || busy ? ' disabled' : ''}${o.af ? ' data-autofocus' : ''}${o.kbd ? ` aria-keyshortcuts="${o.kbd}"` : ''}>${o.icon ? ic(o.icon) : ''}${label}</button>`;
   const alert = (tone, title, body, actions, icon) => `<div class="oi-alert" data-tone="${tone}" role="${tone === 'error' ? 'alert' : 'status'}"${tone === 'error' ? ' tabindex="-1" data-autofocus' : ''}>${ic(icon || { error: 'close', warn: 'warning', info: 'help', ok: 'check' }[tone])}<div><p class="oi-alert__t">${title}</p>${body ? `<p class="oi-alert__b">${body}</p>` : ''}${actions ? `<div class="oi-alert__a">${actions}</div>` : ''}</div></div>`;
   const kv = (rows) => `<dl class="oi-kv">${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>`;
-  const card = (title, inner, right, cls) => `<section class="oi-card${cls ? ' ' + cls : ''}">${title ? `<div class="oi-card__head"><h2 class="oi-card__title">${title}</h2>${right || ''}</div>` : ''}${inner}</section>`;
+  // `gid`: the card is a named group of fields (its title labels them), for
+  // forms where two cards repeat the same field names.
+  const card = (title, inner, right, cls, gid) => `<section class="oi-card${cls ? ' ' + cls : ''}"${gid ? ` role="group" aria-labelledby="${gid}"` : ''}>${title ? `<div class="oi-card__head"><h2 class="oi-card__title"${gid ? ` id="${gid}"` : ''}>${title}</h2>${right || ''}</div>` : ''}${inner}</section>`;
   const field = (fid, label, value, o = {}) => {
     const id = 'oi-f-' + fid;
     return `<div class="oi-field"><label for="${id}">${label}</label><input class="oi-input${o.mono ? ' oi-input--mono' : ''}" id="${id}" name="${fid}" type="${o.type || 'text'}" value="${esc(value)}"${o.err ? ` aria-invalid="true" aria-describedby="${id}-e"` : o.hint ? ` aria-describedby="${id}-h"` : ''}${o.af ? ' data-autofocus' : ''} autocomplete="${o.ac || 'off'}" spellcheck="false"${o.ro ? ' readonly' : ''}>${o.err ? `<span class="oi-err" id="${id}-e" role="alert">${ic('warning')}${o.err}</span>` : ''}${o.hint ? `<span class="oi-hint" id="${id}-h">${o.hint}</span>` : ''}</div>`;
@@ -82,7 +85,7 @@
 
   // ── ecrãs
   const S = {};
-  S.welcome = () => page({ title: t('welcome.title'), lead: t('welcome.lead'), primary: 'start', body: `<div class="oi-welcome">${card(t('welcome.need'), `<ul class="oi-changes"><li>${ic('download')}<span>${t('welcome.need1')}</span></li><li>${ic('compute')}<span>${t('welcome.need2')}</span></li><li>${ic('ob-globe')}<span>${t('welcome.need3')}</span></li></ul>`)}${alert('info', t('welcome.safe'), '', '', 'shield')}${card(t('welcome.facts'), kv([[t('welcome.version'), `<span class="oi-mono">${esc(V.app.version)}</span>`], [t('welcome.platform'), `<span class="oi-mono">${esc(V.app.platform)}</span>`], [t('welcome.source'), t('welcome.sourceV')], [t('welcome.scope'), t('welcome.scopeV')]]))}</div>`, foot: foot({ back: false, primary: t('a.start'), af: true, cancelLabel: t('a.close'), cancelAct: 'none' }) });
+  S.welcome = () => page({ title: t('welcome.title'), lead: t('welcome.lead'), primary: 'start', body: `<div class="oi-welcome">${card(t('welcome.need'), `<ul class="oi-changes"><li>${ic('download')}<span>${t('welcome.need1')}</span></li><li>${ic('compute')}<span>${t('x.welcomeNeed2')}</span></li><li>${ic('ob-globe')}<span>${t('welcome.need3')}</span></li></ul>`)}${alert('info', t('welcome.safe'), '', '', 'shield')}${card(t('welcome.facts'), kv([[t('welcome.version'), `<span class="oi-mono">${esc(V.app.version)}</span>`], [t('welcome.platform'), `<span class="oi-mono">${esc(V.app.platform)}</span>`], [t('welcome.source'), t('welcome.sourceV')], [t('welcome.scope'), t('welcome.scopeV')]]))}</div>`, foot: foot({ back: false, primary: t('a.start'), af: true, cancelLabel: t('a.close'), cancelAct: 'none' }) });
 
   function relKv(rejected) {
     const r = V.release;
@@ -105,7 +108,9 @@
 
   function serverForm(o = {}) {
     const d = V.draft;
-    const auth = d.auth;
+    // The operator's choice stays on this side until the test sends it: a
+    // poll of the controller's view must not undo it.
+    const auth = ui.auth || d.auth;
     const seg = ['agent', 'key', 'password'].map((x) => `<label class="oi-seg__opt"${x === auth ? ' data-on' : ''}><input type="radio" name="auth" value="${x}"${x === auth ? ' checked' : ''}>${ic(x === 'agent' ? 'key' : x === 'key' ? 'files' : 'lock')}${t('server.' + x)}</label>`).join('');
     const keyName = d.key_path ? d.key_path.split('/').pop() : '';
     const authBody = auth === 'agent' ? `<span class="oi-hint">${t('server.agentV')}</span>` : auth === 'key' ? `<div class="oi-file"${fieldErr('key') ? ' aria-invalid="true"' : ''}>${ic('key')}<span class="oi-file__name"${keyName ? '' : ' data-empty'}>${keyName ? esc(keyName) : t('tls.empty')}</span><span></span>${btn('secondary', t('a.choose'), { sm: true, act: 'choose_key' })}</div><span class="oi-hint">${fieldErr('key') || t('server.keyHint')}</span>` : field('pw', t('server.password'), '', { type: 'password', hint: t('server.pwHint'), err: fieldErr('pw') });
@@ -165,7 +170,7 @@
     rows.hw = [stOf(ITEM('PF_HWREAD')), t('pre.hwVisible'), stOf(ITEM('PF_HWREAD')) === 'pass' ? t('pre.hwVisibleD') : t('x.hwPartial')];
     const dk = o('PF_DOCKER'), pk = o('PF_PKG');
     let dd = t('pre.dockerD', { v: (dk.observed && dk.observed.server_version) || '' });
-    if (dk.state === 'MISSING_INSTALLABLE') dd = t('pre.dockerInstall');
+    if (dk.state === 'MISSING_INSTALLABLE') dd = t('x.preDockerInstall');
     if (dk.state === 'CONFLICTING_RUNTIME') dd = t('pre.dockerConflict');
     if (dk.state === 'INSTALLED_UNSUPPORTED_VERSION') dd = t('x.dockerOld', { v: (dk.observed && dk.observed.server_version) || '?' });
     if (dk.state === 'INSTALLATION_NOT_SUPPORTED') dd = t('x.dockerUnsupported');
@@ -270,9 +275,15 @@
   S.endpoints = () => {
     const rows = V.draft.endpoints;
     const enabled = V.draft.distributions;
-    const ip4 = (V.facts && V.facts.ipv4[0]) || V.draft.host;
-    const ip6 = V.facts && V.facts.ipv6[0];
-    const sel = (i, d) => `<select class="oi-input" name="ep-dist-${i}" aria-label="${t('ep.th.binding')}">${enabled.map((x) => `<option value="${x}"${x === d ? ' selected' : ''}>${t('ep.bound', { d: t('dist.' + x) })}</option>`).join('')}</select>`;
+    // The address the operator reached the server at, when it is one: a
+    // server can have several interfaces, and its first is not necessarily
+    // the one the names must point to.
+    const host = V.draft.host || '';
+    const isV4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+    const isV6 = host.includes(':');
+    const ip4 = isV4 ? host : (!isV6 && V.facts && V.facts.ipv4[0]) || (isV6 ? null : host);
+    const ip6 = isV6 ? host : (!isV4 && V.facts && V.facts.ipv6[0]) || null;
+    const sel = (i, d) => `<select class="oi-input" name="ep-dist-${i}" aria-label="${t('ep.th.binding')} ${i + 1}">${enabled.map((x) => `<option value="${x}"${x === d ? ' selected' : ''}>${t('ep.bound', { d: t('dist.' + x) })}</option>`).join('')}</select>`;
     const dnsSt = (s) => s === 'DNS_OK' ? badge('pass', t('st.dnsOk')) : s === 'DNS_WRONG_TARGET' ? badge('block', t('st.dnsWrong')) : s === 'DNS_UNRESOLVED' ? badge('warn', t('st.dnsUnresolved')) : badge('na', t('st.dnsRequired'));
     const body = rows.map((r, i) => `<tr><td><input class="oi-input oi-input--mono" name="ep-host-${i}" aria-label="${t('ep.th.host')} ${i + 1}" value="${esc(r.host)}"${i === 0 ? ' data-autofocus' : ''}${V.field_errors['ep' + i] || r.dns === 'DNS_WRONG_TARGET' ? ' aria-invalid="true"' : ''} spellcheck="false" autocomplete="off"></td><td>${i === 0 ? `<span class="oi-row"><span>${t('ep.generic')}</span>${badge('info', t('ep.canonical'))}</span>` : sel(i, r.distribution)}</td><td>${dnsSt(r.dns)}</td><td>${i === 0 ? '' : btn('ghost', t('a.remove'), { sm: true, act: 'ep_remove', arg: String(i) })}</td></tr>`).join('');
     const recs = rows.filter((r) => r.host).map((r) => `<tr><td class="oi-mono">${esc(r.host)}</td><td class="oi-mono">A</td><td class="oi-mono">${esc(ip4)}</td><td class="oi-mono">${esc((r.seen || []).join(', ') || '—')}</td><td>${dnsSt(r.dns)}</td></tr>` + (ip6 ? `<tr><td class="oi-mono">${esc(r.host)}</td><td class="oi-mono">AAAA</td><td class="oi-mono">${esc(ip6)}</td><td class="oi-mono">—</td><td>${badge('na', t('st.na'))}</td></tr>` : '')).join('');
@@ -302,7 +313,7 @@
 
   S.admin = () => {
     const a = V.draft.admin;
-    return page({ step: 'admin', title: t('adm.title'), lead: t('adm.lead'), primary: 'continue_admin', body: `<div class="oi-grid2">${card(t('adm.person'), `<p class="oi-small">${t('adm.personD')}</p><br><div class="oi-form">${field('pn', t('adm.name'), a[0], { af: true, ac: 'name', err: fieldErr('pn') })}${field('pe', t('adm.email'), a[1], { type: 'email', mono: true, ac: 'email', err: fieldErr('pe') })}</div>`)}${card(t('adm.priv'), `<p class="oi-small">${t('adm.privD')}</p><br><div class="oi-form">${field('an', t('adm.name'), a[2], { err: fieldErr('an') })}${field('ae', t('adm.email'), a[3], { type: 'email', mono: true, err: fieldErr('ae') })}</div>`)}</div>` + card(t('adm.after'), `<p class="oi-p">${t('adm.afterV')}</p>`), foot: foot() });
+    return page({ step: 'admin', title: t('adm.title'), lead: t('adm.lead'), primary: 'continue_admin', body: `<div class="oi-grid2">${card(t('adm.person'), `<p class="oi-small">${t('adm.personD')}</p><br><div class="oi-form">${field('pn', t('adm.name'), a[0], { af: true, ac: 'name', err: fieldErr('pn') })}${field('pe', t('adm.email'), a[1], { type: 'email', mono: true, ac: 'email', err: fieldErr('pe') })}</div>`, '', '', 'oi-adm-person')}${card(t('adm.priv'), `<p class="oi-small">${t('adm.privD')}</p><br><div class="oi-form">${field('an', t('adm.name'), a[2], { err: fieldErr('an') })}${field('ae', t('adm.email'), a[3], { type: 'email', mono: true, err: fieldErr('ae') })}</div>`, '', '', 'oi-adm-priv')}</div>` + card(t('adm.after'), `<p class="oi-p">${t('adm.afterV')}</p>`), foot: foot() });
   };
 
   S.review = () => {
@@ -392,7 +403,7 @@
     const get = (id) => { for (let i = all.length - 1; i >= 0; i--) if (all[i].id === id) return all[i]; return null; };
     const row = (id, k, d) => { const it = get(id); if (!it) return todo(t(k)); const s = it.status === 'PASS' ? 'pass' : it.status === 'PENDING' ? 'warn' : it.status === 'NOT_RUN' ? 'na' : 'block'; return check(s, t(k), d ? d(it) : esc(it.evidence)); };
     const c = V.plan ? V.plan.configuration : null;
-    return `<ul class="oi-checks" aria-live="polite">${grp('ver.g.server')}${row('V01', 'ver.services', () => t('ver.servicesD'))}${row('V02', 'ver.db', () => t('ver.dbD'))}${row('V03', 'ver.mig', (it) => esc(it.evidence))}${row('V04', 'ver.core', (it) => esc(it.evidence))}${row('V05', 'ver.instance', () => c ? t('ver.instanceD', { n: c.instance_name }) : '')}${row('V06', 'ver.dists', () => c ? t('ver.distsD', { d: c.distributions.map((d) => t('dist.' + d)).join(' · ') }) : '')}${row('V07', 'ver.registry', (it) => esc(it.evidence))}${row('V08', 'ver.storage', () => t('ver.storageD'))}${row('V12b', 'ver.ep', (it) => esc(it.evidence))}${grp('ver.g.local')}${row('V10', 'ver.dns', (it) => esc(it.evidence))}${row('VFw', 'ver.fw', () => t('ver.fwD'))}${row('V11', 'ver.https', (it) => esc(it.evidence))}${row('V12', 'ver.ep', (it) => esc(it.evidence))}${row('V13', 'ver.login', () => t('ver.loginD'))}</ul>`;
+    return `<ul class="oi-checks" aria-live="polite">${grp('ver.g.server')}${row('V01', 'ver.services', () => t('ver.servicesD'))}${row('V02', 'ver.db', () => t('ver.dbD'))}${row('V03', 'ver.mig', (it) => esc(it.evidence))}${row('V04', 'ver.core', (it) => esc(it.evidence))}${row('V05', 'ver.instance', () => c ? t('ver.instanceD', { n: c.instance_name }) : '')}${row('V06', 'ver.dists', () => c ? t('ver.distsD', { d: c.distributions.map((d) => t('dist.' + d)).join(' · ') }) : '')}${row('V07', 'ver.registry', (it) => esc(it.evidence))}${row('V08', 'ver.storage', () => t('ver.storageD'))}${row('V12b', 'ver.ep', (it) => esc(it.evidence))}${grp('ver.g.local')}${row('V10', 'ver.dns', (it) => esc(it.evidence))}${row('VFw', 'ver.fw', () => t('ver.fwD'))}${row('V11', 'ver.https', (it) => esc(it.evidence))}${row('V12', 'ver.ep', (it) => esc(it.evidence))}${row('V13', 'ver.login', () => t('x.verLoginD', { u: 'https://' + ((V.plan && V.plan.configuration.endpoints.canonical) || '') }))}</ul>`;
   }
   S.verifying = () => {
     const live = V.live || {};
@@ -411,19 +422,21 @@
     const life = `<div class="oi-summary" role="status" aria-label="${t('lc.install')} · ${t('lc.activation')} · ${t('lc.operational')}">${lcRow('lc.install', 'pass', 'lc.complete')}${lcRow('lc.activation', dns || test ? 'warn' : op ? 'pass' : 'warn', dns ? 'lc.pendingDns' : test ? 'lc.testMode' : op ? 'lc.complete' : 'st.pending')}${lcRow('lc.operational', op ? 'pass' : 'block', op ? 'lc.yes' : 'lc.no')}</div>`;
     const c = V.plan.configuration;
     const firstPending = (V.verification.items.find((i) => i.id === 'V10') || {}).evidence || '';
-    const pendHost = firstPending.split(':')[1] || '';
+    const pendHost = (firstPending.split(':')[1] || '').split(',').join(', ');
     const head = dns ? `<div class="oi-done" data-st="warn"><span class="oi-done__ic">${ic('warning')}</span><div><p class="oi-alert__t">${t('done.pendT')}</p><p class="oi-alert__b">${reasons.includes('DNS') ? t('done.pendD', { h: mono(pendHost || c.endpoints.canonical), ip: mono(V.draft.host) }) : esc(reasons.join(', '))}</p><div class="oi-alert__a">${btn('secondary', t('a.recheck'), { sm: true, icon: 'refresh', act: 'recheck' })}</div></div></div><p class="oi-small">${t('done.recheckNote')}</p>`
       : test ? `<div class="oi-done" data-st="warn"><span class="oi-done__ic">${ic('warning')}</span><div><p class="oi-alert__t">${t('done.testT')}</p><p class="oi-alert__b">${t('done.testD')}</p></div></div>`
         : op ? `<div class="oi-done"><span class="oi-done__ic">${ic('check')}</span><div><p class="oi-alert__t">${t('done.ok')}</p></div></div>`
           : alert('warn', t('fail.title'), esc(lc.state), btn('secondary', t('a.recheck'), { sm: true, icon: 'refresh', act: 'recheck' }));
     const v = (id) => (V.verification.items.find((i) => i.id === id) || {}).status;
-    const epSt = () => v('V12') === 'PASS' ? badge('pass', t('st.pass')) : badge('warn', t('st.pending'));
+    // An endpoint passes when its name resolves to the server (V10) and the
+    // Workspace answers it (V12): V12 alone connects by address.
+    const epSt = () => v('V12') === 'PASS' && v('V10') === 'PASS' ? badge('pass', t('st.pass')) : badge('warn', t('st.pending'));
     const epList = [c.endpoints.canonical].concat(c.endpoints.bound.map((b) => b.host)).map((h) => `<span class="oi-mono">${esc(h)}</span> ${epSt()}`).join('<br>');
     const h = V.hardware || {};
     const hwLine = esc((h.cpu && h.cpu.model) || '—') + ' · ' + gb(h.memory && h.memory.total_bytes) + ' · ' + (h.gpu && h.gpu.gpus ? h.gpu.gpus.length + ' GPU' : t('x.noneGpu'));
     const chips = `<div class="oi-row">${c.distributions.map((d) => `<span class="oi-chip">${ic('dist-' + d)}${t('dist.' + d)}</span>`).join('')}</div>`;
     const lost = (V.events || []).some((e) => e.event && e.event.code === 'CREDENTIAL_NOT_RECOVERABLE');
-    return page({ step: 'done', title: t(dns ? 'done.titleInstalled' : test ? 'done.titleTest' : op ? 'done.title' : 'done.titleInstalled'), lead: dns || test ? '' : t('done.lead'), primary: 'open_ocinye', body: life + head + (lost ? alert('warn', t('x.credLost'), '') : '') + `<div class="oi-grid2">${card('', kv([[t('done.instance'), esc(c.instance_name)], [t('done.server'), `<span class="oi-mono">${esc(V.draft.host)}</span>`], [t('done.release'), `<span class="oi-mono">${esc(V.plan.release.id)}</span>`], ['TLS', test ? t('c.tlsSelf') : t('c.tlsProvided')], [t('done.hw'), hwLine], [t('cn.provider'), t('cn.off')]]))}${card('', kv([[t('done.dists'), chips], [t('done.eps'), epList]]))}</div>` + card(t('done.next'), `<ul class="oi-changes"><li>${ic('key')}<span>${t('done.next1')}</span></li><li>${ic('lock')}<span>${t('done.next2')}</span></li><li>${ic('members')}<span>${t('done.next3')}</span></li></ul>`, `<span class="oi-row">${V.credential && !V.credential_acknowledged ? btn('secondary', t('a.credential'), { sm: true, icon: 'key', act: 'show_credential' }) : ''}${btn('ghost', t('a.receipt'), { sm: true, icon: 'list', act: 'show_receipt' })}</span>`), foot: foot({ back: false, cancelLabel: t('a.close'), cancelAct: 'none', note: `<span class="oi-small">${t('done.opens')}</span>`, extra: btn('secondary', t('a.saveReport'), { icon: 'download', act: 'save_receipt' }), primary: test ? t('done.openTest') : t('a.open'), disabled: !(op || test), af: op || test }) });
+    return page({ step: 'done', title: t(dns ? 'done.titleInstalled' : test ? 'done.titleTest' : op ? 'done.title' : 'done.titleInstalled'), lead: dns || test ? '' : t('done.lead'), primary: 'open_ocinye', body: life + head + (lost ? alert('warn', t('x.credLost'), '') : '') + `<div class="oi-grid2">${card('', kv([[t('done.instance'), esc(c.instance_name)], [t('done.server'), `<span class="oi-mono">${esc(V.draft.host)}</span>`], [t('done.release'), `<span class="oi-mono">${esc(V.plan.release.id)}</span>`], ['TLS', c.tls.mode === 'SELF_SIGNED_TEST' ? t('c.tlsSelf') : t('x.tlsProvided', { d: (c.tls.not_after || '').slice(0, 10) })], [t('done.hw'), hwLine], [t('cn.provider'), t('cn.off')]]))}${card('', kv([[t('done.dists'), chips], [t('done.eps'), epList]]))}</div>` + card(t('done.next'), `<ul class="oi-changes"><li>${ic('key')}<span>${t('x.doneNext1', { u: mono('https://' + V.plan.configuration.endpoints.canonical) })}</span></li><li>${ic('lock')}<span>${t('done.next2')}</span></li><li>${ic('members')}<span>${t('done.next3')}</span></li></ul>`, `<span class="oi-row">${V.credential && !V.credential_acknowledged ? btn('secondary', t('a.credential'), { sm: true, icon: 'key', act: 'show_credential' }) : ''}${btn('ghost', t('a.receipt'), { sm: true, icon: 'list', act: 'show_receipt' })}</span>`), foot: foot({ back: false, cancelLabel: t('a.close'), cancelAct: 'none', note: `<span class="oi-small">${t('done.opens')}</span>`, extra: btn('secondary', t('a.saveReport'), { icon: 'download', act: 'save_receipt' }), primary: test ? t('done.openTest') : t('a.open'), disabled: !(op || test), af: op || test }) });
   };
   S.credential = () => {
     const cr = V.credential || {};
@@ -455,7 +468,11 @@
     const fn = S[screen] || S.welcome;
     root.innerHTML = fn();
     document.documentElement.lang = { pt: 'pt-PT', en: 'en', fr: 'fr' }[LANG];
-    if (!force) root.querySelectorAll('input,select').forEach((el) => { if (el.name && keep[el.name] !== undefined && el.type !== 'password') el.value = keep[el.name]; });
+    // What the operator typed survives any re-render of the same screen —
+    // a poll, or a change such as the authentication method. A new screen
+    // starts from the view.
+    if (screen === lastScreen) root.querySelectorAll('input,select').forEach((el) => { if (el.name && keep[el.name] !== undefined) el.value = keep[el.name]; });
+    lastScreen = screen;
     const back = active && document.getElementById(active);
     const af = back || root.querySelector('.oi-dialog [data-autofocus]') || root.querySelector('[data-autofocus]') || root.querySelector('#oi-h1');
     if (af && af.focus) af.focus({ preventScroll: true });
@@ -532,7 +549,7 @@
   });
   document.addEventListener('change', (e) => {
     const el = e.target;
-    if (el.name === 'auth') { V.draft.auth = el.value; render(true); }
+    if (el.name === 'auth') { ui.auth = el.value; render(true); }
     if (el.name === 'dist') {
       const cur = V.draft.distributions.slice();
       const next = el.checked ? cur.concat([el.value]) : cur.filter((d) => d !== el.value);

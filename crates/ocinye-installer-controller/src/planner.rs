@@ -10,7 +10,7 @@ use ocinye_installer_contracts::hardware::HardwareCapabilities;
 use ocinye_installer_contracts::ident::{InstallationId, PlanId};
 use ocinye_installer_contracts::manifest::ReleaseManifest;
 use ocinye_installer_contracts::plan::{
-    FirewallManager, HardwareSummary, InstallationConfiguration, InstallationPlan, Proto,
+    FirewallManager, HardwareSummary, InstallationConfiguration, InstallationPlan, PhaseId, Proto,
     ReleaseIdentity, SystemChange, TargetIdentity,
 };
 use ocinye_installer_contracts::preflight::{
@@ -103,6 +103,40 @@ pub fn build(
         plan_sha256: String::new(),
     }
     .seal()
+}
+
+/// The packages and firewall rules a plan actually applied: those of its
+/// changes whose phase completed (P04 installs packages, P08 opens ports).
+/// The receipt states these, not the plan's intentions.
+#[must_use]
+pub fn applied(
+    changes: &[SystemChange],
+    completed: impl Fn(PhaseId) -> bool,
+) -> (Vec<String>, Vec<String>) {
+    let packages = if completed(PhaseId::P04) {
+        changes
+            .iter()
+            .flat_map(|c| match c {
+                SystemChange::InstallDockerFromOfficialRepo { packages, .. }
+                | SystemChange::EnsurePackages { packages } => packages.clone(),
+                _ => Vec::new(),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let rules = if completed(PhaseId::P08) {
+        changes
+            .iter()
+            .filter_map(|c| match c {
+                SystemChange::FirewallAllow { port, .. } => Some(format!("{port}/tcp")),
+                _ => None,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    (packages, rules)
 }
 
 #[cfg(test)]
@@ -225,5 +259,26 @@ mod tests {
         let a = PlanId::from_random(random8());
         let b = PlanId::from_random(random8());
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn o_recibo_diz_o_que_foi_aplicado_e_nao_o_que_se_pretendia() {
+        let m = manifest();
+        let c = system_changes(
+            &report(
+                ContainerRuntimeState::MissingInstallable,
+                FirewallObservation::default(),
+                vec![],
+            ),
+            &m,
+        );
+        let (none, _) = applied(&c, |_| false);
+        assert!(
+            none.is_empty(),
+            "P04 did not complete: nothing was installed"
+        );
+        let (pkgs, rules) = applied(&c, |p| p == PhaseId::P04);
+        assert_eq!(pkgs, m.prerequisites.docker_packages);
+        assert!(rules.is_empty());
     }
 }

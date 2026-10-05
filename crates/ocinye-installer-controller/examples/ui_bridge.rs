@@ -65,6 +65,22 @@ fn mime(p: &str) -> &'static str {
     }
 }
 
+/// `host=ip,host=ip`.
+fn parse_resolve(r: &str) -> BTreeMap<String, Vec<std::net::IpAddr>> {
+    let mut fixed = BTreeMap::new();
+    for pair in r.split(',').filter(|p| !p.is_empty()) {
+        if let Some((h, ip)) = pair.split_once('=') {
+            if let Ok(ip) = ip.trim().parse() {
+                fixed
+                    .entry(h.trim().to_owned())
+                    .or_insert_with(Vec::new)
+                    .push(ip);
+            }
+        }
+    }
+    fixed
+}
+
 #[tokio::main]
 async fn main() {
     let port: u16 = std::env::args()
@@ -75,16 +91,7 @@ async fn main() {
     let state = env_path("OCINYE_BRIDGE_STATE").expect("OCINYE_BRIDGE_STATE");
     let app = App::new(state, "0.1.0");
     if let Ok(r) = std::env::var("OCINYE_BRIDGE_RESOLVE") {
-        let mut fixed = BTreeMap::new();
-        for pair in r.split(',').filter(|p| !p.is_empty()) {
-            if let Some((h, ip)) = pair.split_once('=') {
-                fixed
-                    .entry(h.to_owned())
-                    .or_insert_with(Vec::new)
-                    .push(ip.parse().expect("ip"));
-            }
-        }
-        app.set_test_resolver(fixed).await;
+        app.set_test_resolver(parse_resolve(&r)).await;
     }
     let native: Arc<dyn Native> = Arc::new(Env);
     let listener = TcpListener::bind(("127.0.0.1", port)).await.expect("bind");
@@ -172,6 +179,16 @@ async fn main() {
                         serde_json::json!({ "error": e }).to_string().into_bytes(),
                     ),
                 }
+            } else if path == "/bridge/reload-resolve" {
+                // Test-only: re-read the controlled DNS fixture (a proof of
+                // «DNS pending → resolved → Verificar novamente»).
+                let fixed = env_path("OCINYE_BRIDGE_RESOLVE_FILE")
+                    .and_then(|p| std::fs::read_to_string(p).ok())
+                    .map(|t| parse_resolve(t.trim()))
+                    .unwrap_or_default();
+                let n = fixed.len();
+                app.set_test_resolver(fixed).await;
+                ("200 OK", "text/plain", format!("{n}").into_bytes())
             } else if path == "/bridge-ipc.js" {
                 ("200 OK", "text/javascript", SHIM.as_bytes().to_vec())
             } else {
