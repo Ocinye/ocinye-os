@@ -532,7 +532,7 @@ pub fn inspect(m: &Mounted, profile: &str, release_id: &str) -> Inspection {
         "oie" => c(
             "oie_enabled",
             wants("ocinye-oie@tty1.service")
-                && wants("ocinye-oie@ttyS0.service")
+                && (wants("ocinye-oie@ttyS0.service") || wants("ocinye-oie@ttyAMA0.service"))
                 && r.join("usr/lib/ocinye/ocinye-oie").exists(),
             None,
         ),
