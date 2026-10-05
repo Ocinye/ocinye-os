@@ -23,6 +23,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 
 CODE_RE = re.compile(r"\b([0-9A-HJKMNP-TV-Z]{5}(?:-[0-9A-HJKMNP-TV-Z]{5}){4})\b")
@@ -126,29 +127,42 @@ class Vm:
                 time.sleep(0.2)
         else:
             raise RuntimeError("serial socket")
+        # Drain the console all the time: a guest whose serial port backs up
+        # stalls (sshd's banner included).
+        self.lock = threading.Lock()
+        threading.Thread(target=self._reader, daemon=True).start()
+
+    def _reader(self):
+        while self.proc and self.proc.poll() is None:
+            try:
+                data = self.conn.recv(65536)
+            except BlockingIOError:
+                time.sleep(0.05)
+                continue
+            except OSError:
+                return
+            if not data:
+                return
+            text = data.decode("utf-8", errors="replace").replace("\r", "")
+            with self.lock:
+                self.buf += text
+            self.transcript.write(redact(text))
+            self.transcript.flush()
 
     def _pump(self):
-        try:
-            data = self.conn.recv(65536)
-        except BlockingIOError:
-            return False
-        if not data:
-            return False
-        text = data.decode("utf-8", errors="replace").replace("\r", "")
-        self.buf += text
-        self.transcript.write(redact(text))
-        self.transcript.flush()
-        return True
+        # The reader thread does the reading; this only yields.
+        return False
 
     def expect(self, pattern, timeout):
         """Wait for a regex in the console output since the last expect."""
         rx = re.compile(pattern)
         end = time.time() + timeout
         while time.time() < end:
-            m = rx.search(self.buf)
-            if m:
-                self.buf = self.buf[m.end():]
-                return m
+            with self.lock:
+                m = rx.search(self.buf)
+                if m:
+                    self.buf = self.buf[m.end():]
+                    return m
             if self.proc.poll() is not None:
                 raise RuntimeError(f"{self.name}: qemu exited")
             if not self._pump():
