@@ -193,7 +193,16 @@ pub fn serve(stdin: &mut (dyn BufRead + Send), stdout: &mut dyn Write, root: &St
     loop {
         line.clear();
         match stdin.read_line(&mut line) {
-            Ok(0) | Err(_) => return 0,
+            Ok(0) | Err(_) => {
+                // The Installer went away (closed, killed, refused and left)
+                // without a Cleanup. Nothing was handed to an executor from
+                // here — that session would be relaying, not reading
+                // commands — so the upload is this session's alone to drop.
+                if let Some(upload) = upload_dir() {
+                    let _ = fs::remove_dir_all(upload);
+                }
+                return 0;
+            }
             Ok(_) => {}
         }
         let Ok(cmd) = serde_json::from_str::<Command>(line.trim()) else {

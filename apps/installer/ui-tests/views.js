@@ -125,7 +125,7 @@
   set('endpoints', (v) => { v.screen = 'endpoints'; });
   set('endpoints-dns-pending', (v) => { v.screen = 'endpoints'; v.draft.endpoints[1].dns = 'DNS_UNRESOLVED'; v.draft.endpoints[1].seen = []; v.draft.endpoints[2].dns = 'DNS_REQUIRED'; });
   set('endpoints-dns-wrong', (v) => { v.screen = 'endpoints'; v.draft.endpoints[2].dns = 'DNS_WRONG_TARGET'; v.draft.endpoints[2].seen = ['198.51.100.7']; });
-  const tlsv = (bad) => ({ checks: [['PARSE', true], ['KEY_MATCH', !bad], ['NOT_EXPIRED', true], ['COVERS_NAMES', !bad], ['CHAIN', true]], not_after: '2027-09-30T00:00:00Z', expiring_soon: false, names: ['os.empresa.test', '*.empresa.test'], uncovered: bad ? ['research.empresa.test'] : [] });
+  const tlsv = (bad) => ({ checks: [['PARSE', true], ['KEY_MATCH', !bad], ['NOT_EXPIRED', true], ['COVERS_NAMES', !bad], ['CHAIN', true], ['STRONG_SIGNATURE', !bad]], not_after: '2027-09-30T00:00:00Z', expiring_soon: false, names: ['os.empresa.test', '*.empresa.test'], uncovered: bad ? ['research.empresa.test'] : [] });
   set('tls-provided-valid', (v) => { v.screen = 'tls'; v.tls_validation = tlsv(false); });
   set('tls-invalid', (v) => { v.screen = 'tls'; v.tls_validation = tlsv(true); });
   set('tls-self-signed', (v) => { v.screen = 'tls'; v.draft.tls_mode = 'self'; });

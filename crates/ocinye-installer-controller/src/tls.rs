@@ -35,6 +35,34 @@ pub enum TlsCheck {
     CoversNames,
     /// The chain parses and links to the certificate.
     Chain,
+    /// No certificate the server would present is signed with SHA-1 or MD5,
+    /// and an RSA key has at least 2048 bits: what OpenSSL 3 in the proxy
+    /// refuses to load must be refused here, before anything is installed.
+    StrongSignature,
+}
+
+/// Signature algorithms no current TLS stack accepts for a server chain.
+const WEAK_SIGNATURES: [&str; 6] = [
+    "1.2.840.113549.1.1.2", // md2WithRSAEncryption
+    "1.2.840.113549.1.1.4", // md5WithRSAEncryption
+    "1.2.840.113549.1.1.5", // sha1WithRSAEncryption
+    "1.3.14.3.2.29",        // sha1WithRSASignature (OIW)
+    "1.2.840.10045.4.1",    // ecdsa-with-SHA1
+    "1.2.840.10040.4.3",    // dsa-with-sha1
+];
+
+/// The certificate is signed strongly enough, and its RSA key is long enough.
+fn strong(cert: &X509Certificate<'_>) -> bool {
+    let self_signed = cert.subject() == cert.issuer();
+    // A trust anchor's own signature is not checked by anyone; its key is.
+    let sig_ok = self_signed
+        || !WEAK_SIGNATURES.contains(&cert.signature_algorithm.algorithm.to_id_string().as_str());
+    let key_ok = match cert.public_key().parsed() {
+        Ok(x509_parser::public_key::PublicKey::RSA(k)) => k.key_size() >= 2048,
+        Ok(_) => true,
+        Err(_) => false,
+    };
+    sig_ok && key_ok
 }
 
 /// The result of the I11 checks.
@@ -173,6 +201,11 @@ pub fn validate(
         (Some(_), None) => false,
     };
     checks.push((TlsCheck::Chain, chain_ok));
+    let strong_all = strong(&cert)
+        && chain
+            .iter()
+            .all(|c| X509Certificate::from_der(c.as_ref()).is_ok_and(|(_, c)| strong(&c)));
+    checks.push((TlsCheck::StrongSignature, strong_all));
 
     let all = checks.iter().all(|(_, ok)| *ok);
     let plan = all.then(|| TlsPlan::OperatorSupplied {
@@ -355,5 +388,23 @@ mod tests {
         assert!(!covers(&names, "a.b.empresa.test"));
         assert!(!covers(&names, "empresa.test"));
         assert!(!covers(&["x.test".to_owned()], "y.test"));
+    }
+
+    #[test]
+    fn uma_assinatura_sha1_e_recusada_aqui_como_o_proxy_a_recusa() {
+        // Signed by a test CA with ecdsa-with-SHA1 (LibreSSL's default): the
+        // proxy's OpenSSL 3 refuses it with "ca md too weak" (seen on a VM).
+        let weak = include_bytes!("../tests/fixtures/leaf-ecdsa-with-sha1.pem");
+        let ca = include_bytes!("../tests/fixtures/test-ca-sha256.pem");
+        let der = |pem: &[u8]| CertificateDer::from_pem_slice(pem).unwrap();
+        let (w, ca) = (der(weak), der(ca));
+        fn is_strong(d: &CertificateDer<'_>) -> bool {
+            strong(&X509Certificate::from_der(d.as_ref()).unwrap().1)
+        }
+        assert!(!is_strong(&w));
+        assert!(is_strong(&ca));
+        // And a strong self-signed one passes.
+        let (cert, _) = leaf(&["os.empresa.test"], (2027, 9, 30));
+        assert!(is_strong(&der(cert.as_bytes())));
     }
 }
