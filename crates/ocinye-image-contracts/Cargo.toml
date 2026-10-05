@@ -1,0 +1,24 @@
+[package]
+name = "ocinye-image-contracts"
+description = "Typed contracts of Ocinye OS images: manifests, first boot, claim, OIE, signing (D013)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# PROVISIONAL_PENDING_D011_CERTIFICATION (PD-02): canonical JSON and SecretText
+# come from the D011 installer contracts.
+ocinye-installer-contracts = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+minisign-verify = { workspace = true }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }
+blake2 = { workspace = true }
