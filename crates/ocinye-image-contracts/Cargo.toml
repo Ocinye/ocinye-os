@@ -19,6 +19,10 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 minisign-verify = { workspace = true }
 
+[features]
+# Fixtures for consumers' tests (never in a release build).
+test-support = []
+
 [dev-dependencies]
 ed25519-dalek = { workspace = true }
 blake2 = { workspace = true }

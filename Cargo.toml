@@ -15,6 +15,7 @@ members = [
     "services/conversion-runner",
     "services/installer-bootstrap",
     "services/release-tool",
+    "services/firstboot",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them

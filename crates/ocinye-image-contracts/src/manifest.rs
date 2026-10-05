@@ -719,15 +719,18 @@ impl ImageContentManifest {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
+/// Fixtures shared by the tests of this crate and of its consumers.
+#[cfg(any(test, feature = "test-support"))]
+#[doc(hidden)]
+#[allow(missing_docs)]
+pub mod fixtures {
     use super::*;
 
-    pub(crate) fn h(c: char) -> Sha256Hex {
+    pub fn h(c: char) -> Sha256Hex {
         Sha256Hex(c.to_string().repeat(64))
     }
 
-    pub(crate) fn version() -> OcinyeImageVersion {
+    pub fn version() -> OcinyeImageVersion {
         OcinyeImageVersion {
             release_id: "3f9c2a7d1e04".into(),
             revision: 2,
@@ -735,7 +738,7 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn content() -> ImageContentManifest {
+    pub fn content() -> ImageContentManifest {
         ImageContentManifest {
             schema: 1,
             image: version(),
@@ -768,7 +771,7 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn manifest() -> OcinyeImageManifest {
+    pub fn manifest() -> OcinyeImageManifest {
         let v = version();
         let stem = v.artifact_stem(Arch::Amd64);
         OcinyeImageManifest {
@@ -850,6 +853,12 @@ pub(crate) mod tests {
             created_at: "2026-09-30T00:00:00Z".into(),
         }
     }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    pub(crate) use super::fixtures::*;
+    use super::*;
 
     #[test]
     fn um_manifesto_valido_passa_e_e_estavel_na_forma_canonica() {

@@ -3955,6 +3955,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocinye-firstboot"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "chrono",
+ "hex",
+ "ocinye-image-contracts",
+ "ocinye-installer-contracts",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "ocinye-image-contracts"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,26 @@
+[package]
+name = "ocinye-firstboot"
+description = "First boot, claim and console of an Ocinye OS image (D013)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ocinye-firstboot"
+path = "src/main.rs"
+
+[dependencies]
+ocinye-image-contracts = { workspace = true }
+# PROVISIONAL_PENDING_D011_CERTIFICATION (PD-02): canonical JSON.
+ocinye-installer-contracts = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+ocinye-image-contracts = { workspace = true, features = ["test-support"] }
+base64 = { workspace = true }
