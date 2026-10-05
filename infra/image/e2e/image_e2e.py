@@ -63,6 +63,9 @@ def firmware(arch):
     return "/usr/share/AAVMF/AAVMF_CODE.fd", "/usr/share/AAVMF/AAVMF_VARS.fd"
 
 
+RUNNING = []
+
+
 class Vm:
     """One QEMU guest with its serial console on a unix socket."""
 
@@ -111,6 +114,7 @@ class Vm:
         else:
             cmd += ["-nic", "none"]
         log(f"{self.name}: start ({'kvm' if kvm else 'tcg'}, net={'yes' if net else 'none'})")
+        RUNNING.append(self)
         self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=open(os.path.join(self.work, f"{self.name}-qemu.err"), "a"))
         for _ in range(100):
             try:
@@ -331,6 +335,8 @@ def scenario_virt(a):
         a_vm.expect(UNCLAIMED_RX, BOOT_BUDGET)
         wait_ssh_port(a_vm.port, 300)
         r.check("A: console shows UNCLAIMED without a code on screen", not CODE_RE.search(a_vm.buf))
+        boot_log = open(a_vm.transcript.name, encoding="utf-8", errors="replace").read()
+        r.check("A: boot has no systemd ordering cycle", "Ordering cycle" not in boot_log)
         facts = claim_by_code(r, a_vm, k1, k2, "A")
         fa = machine_facts(a_vm.port, k1) if facts else {}
         r.check("A: docker enabled and running only after CLAIMED", fa.get("docker") == ["enabled", "active"], fa.get("docker"))
@@ -496,7 +502,12 @@ def main():
     p.add_argument("--iso")
     a = p.parse_args()
     os.makedirs(a.work, exist_ok=True)
-    return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso}[a.scenario](a)
+    try:
+        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso}[a.scenario](a)
+    finally:
+        # No guest outlives its scenario, whatever happened.
+        for vm in RUNNING:
+            vm.stop()
 
 
 if __name__ == "__main__":
