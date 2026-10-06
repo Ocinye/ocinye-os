@@ -83,6 +83,7 @@ pub fn curtin_config(disk: &InstallationTargetDisk, rootfs: &Path) -> String {
 # Rendered by ocinye-oie for {by_path} (confirmed with its token).
 showtrace: true
 install:
+  target: {target}
   unmount: disabled
   save_install_config: /root/curtin-install-cfg.yaml
   save_install_log: /root/curtin-install.log
@@ -114,6 +115,7 @@ kernel:
         esp_label = layout::ESP_LABEL,
         root_label = layout::ROOT_LABEL,
         root_mib = root_mib,
+        target = TARGET,
     )
 }
 
@@ -282,6 +284,10 @@ mod tests {
         assert!(c.contains("size: 37120M, number: 2"), "{c}");
         assert!(c.contains("fstype: ext4") && c.contains("swap:\n  size: 0"));
         assert!(c.contains("network:\n  config: disabled"));
+        assert!(
+            c.contains("install:\n  target: /target\n"),
+            "curtin mounts where the OIE checks"
+        );
         assert!(c.contains("type: fsimage, uri: \"file:///cdrom/payload/rootfs-metal.squashfs\""));
     }
 
