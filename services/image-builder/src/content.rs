@@ -63,6 +63,9 @@ fn class_of(name: &str, base: &BTreeSet<String>) -> (ContentClass, Option<String
         "efibootmgr" | "shim-signed" | "mokutil" => {
             (ContentClass::InstallationRequired, "UEFI boot")
         }
+        "initramfs-tools" | "initramfs-tools-core" | "initramfs-tools-bin" => {
+            (ContentClass::InstallationRequired, "initrd for the kernel")
+        }
         n if n.starts_with("grub-") || n.starts_with("shim") => {
             (ContentClass::InstallationRequired, "UEFI boot")
         }

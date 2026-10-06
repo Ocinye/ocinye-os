@@ -149,7 +149,7 @@ purge_kvm_kernel() {
 stage_virt() {
   policy_on
   apt_update
-  "${APT[@]}" install --no-install-recommends linux-virtual
+  "${APT[@]}" install --no-install-recommends linux-virtual initramfs-tools
   purge_kvm_kernel
   policy_off
   update-grub
@@ -163,7 +163,9 @@ stage_metal() {
     amd64) boot_pkgs+=(grub-efi-amd64-signed shim-signed) ;;
     arm64) boot_pkgs+=(grub-efi-arm64-signed shim-signed) ;;
   esac
-  "${APT[@]}" install --no-install-recommends linux-generic linux-firmware "${boot_pkgs[@]}"
+  # initramfs-tools explicitly: the minimal base boots without an initrd, and
+  # real hardware needs one for its storage drivers.
+  "${APT[@]}" install --no-install-recommends linux-generic linux-firmware initramfs-tools "${boot_pkgs[@]}"
   purge_kvm_kernel
   policy_off
   touch /etc/cloud/cloud-init.disabled
@@ -174,6 +176,7 @@ stage_oie() {
   policy_on
   apt_update
   "${APT[@]}" install --no-install-recommends linux-generic casper dosfstools e2fsprogs gdisk parted efibootmgr rsync eject \
+    lvm2 mdadm dmsetup lshw \
     python3-yaml python3-pyudev python3-debian python3-oauthlib python3-jsonschema
   # curtin: the upstream tree at the commit pinned in base.json (noble has no
   # curtin package). Installation environment only, never in a target image.

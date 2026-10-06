@@ -74,6 +74,10 @@ pub fn check_media(media: &Path, facts: &OiePayload) -> Result<ImageContentManif
 /// network configuration written, nothing fetched.
 pub fn curtin_config(disk: &InstallationTargetDisk, rootfs: &Path) -> String {
     let esp_mib = layout::ESP_BYTES >> 20;
+    // curtin sizes partitions in bytes (no "rest of the disk"): the root is
+    // what is left after the 1 MiB alignment, the ESP and 1 MiB for the
+    // backup GPT, in whole MiB.
+    let root_mib = (disk.bytes >> 20).saturating_sub(1 + esp_mib + 1);
     format!(
         "\
 # Rendered by ocinye-oie for {by_path} (confirmed with its token).
@@ -87,7 +91,7 @@ storage:
   config:
     - {{id: disk0, type: disk, path: {by_path}, ptable: gpt, wipe: superblock-recursive, preserve: false, grub_device: false}}
     - {{id: esp, type: partition, device: disk0, size: {esp_mib}M, flag: boot, number: 1, grub_device: true}}
-    - {{id: root, type: partition, device: disk0, size: -1, number: 2}}
+    - {{id: root, type: partition, device: disk0, size: {root_mib}M, number: 2}}
     - {{id: esp_fs, type: format, volume: esp, fstype: fat32, label: {esp_label}}}
     - {{id: root_fs, type: format, volume: root, fstype: ext4, label: {root_label}}}
     - {{id: root_mnt, type: mount, device: root_fs, path: /}}
@@ -109,6 +113,7 @@ kernel:
         rootfs = rootfs.display(),
         esp_label = layout::ESP_LABEL,
         root_label = layout::ROOT_LABEL,
+        root_mib = root_mib,
     )
 }
 
@@ -273,6 +278,8 @@ mod tests {
         assert!(c.contains("path: /dev/disk/by-path/pci-0000:00:04.0, ptable: gpt"));
         assert!(!c.contains("/dev/vda"), "never a kernel name");
         assert!(c.contains("size: 1024M, flag: boot"));
+        // 40 GB disk = 38146 MiB; minus 1 + 1024 + 1.
+        assert!(c.contains("size: 37120M, number: 2"), "{c}");
         assert!(c.contains("fstype: ext4") && c.contains("swap:\n  size: 0"));
         assert!(c.contains("network:\n  config: disabled"));
         assert!(c.contains("type: fsimage, uri: \"file:///cdrom/payload/rootfs-metal.squashfs\""));
