@@ -83,8 +83,6 @@ pub fn squashfs(root: &Path, out: &Path, extra: &[(&str, &Path)]) -> Result<(), 
         "zstd".into(),
         "-xattrs".into(),
         "-quiet".into(),
-        "-e".into(),
-        "boot/efi".into(),
     ];
     for (dest, src) in extra {
         let mut dirs = vec![];
@@ -103,6 +101,8 @@ pub fn squashfs(root: &Path, out: &Path, extra: &[(&str, &Path)]) -> Result<(), 
             format!("{dest} f 444 0 0 cat {}", src.display()),
         ]);
     }
+    // `-e` takes every argument after it as an exclude: it goes last.
+    args.extend(["-e".into(), "boot/efi".into()]);
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     cmd::run("B15", "mksquashfs", &refs, art(ImageFormat::Iso))
 }
@@ -242,6 +242,20 @@ pub fn iso(
         &tree.join("casper/filesystem.squashfs"),
         &[("usr/lib/ocinye/oie/payload.json", &facts_path)],
     )?;
+    // The OIE checks the medium against these facts: they must be inside.
+    let listing = cmd::output(
+        "B15",
+        "unsquashfs",
+        &[
+            "-l",
+            p(&tree.join("casper/filesystem.squashfs")),
+            "usr/lib/ocinye/oie/payload.json",
+        ],
+        art(ImageFormat::Iso),
+    )?;
+    if !String::from_utf8_lossy(&listing).contains("usr/lib/ocinye/oie/payload.json") {
+        return Err(f());
+    }
     let (kernel, initrd) = kernel_pair(&oie.mnt.join("boot")).ok_or_else(&f)?;
     fs::copy(&kernel, tree.join("casper/vmlinuz")).map_err(|_| f())?;
     fs::copy(&initrd, tree.join("casper/initrd")).map_err(|_| f())?;
