@@ -312,6 +312,10 @@ pub fn iso(
             art(ImageFormat::Iso),
         )?;
     }
+    // xorriso writes inside the build VM, then one sequential copy out
+    // (random writes onto the shared output folder are very slow).
+    let local = work.join("image.iso");
+    let _ = fs::remove_file(&local);
     let _ = fs::remove_file(out);
     cmd::run(
         "B15",
@@ -340,13 +344,15 @@ pub fn iso(
             "--interval:appended_partition_2:all::",
             "-no-emul-boot",
             "-o",
-            p(out),
+            p(&local),
             p(&tree),
         ],
         art(ImageFormat::Iso),
     )?;
     // The tree is a copy of what the ISO now holds: give the space back.
     let _ = fs::remove_dir_all(&tree);
+    fs::copy(&local, out).map_err(|_| f())?;
+    let _ = fs::remove_file(&local);
     Ok(facts)
 }
 
