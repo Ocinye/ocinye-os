@@ -302,6 +302,12 @@ pub struct ProfileFacts {
     pub package_inventory_sha256: Sha256Hex,
     /// Installed root filesystem usage.
     pub installed_bytes: u64,
+    /// SBOM of this profile's root filesystem. An SBOM describes a rootfs, and
+    /// each profile is a distinct rootfs (`metal` carries `linux-firmware`
+    /// that `virt` does not), so it lives here and not once at the top: a build
+    /// that emits several profiles publishes one truthful SBOM for each, and
+    /// never a single SBOM that misrepresents the others.
+    pub sbom: SbomReference,
 }
 
 /// Source identity.
@@ -384,8 +390,6 @@ pub struct OcinyeImageManifest {
     pub oci_images: Vec<OciImageRef>,
     /// Exact runtime versions.
     pub runtime: RuntimePins,
-    /// SBOM.
-    pub sbom: SbomReference,
     /// Inventories, one per profile.
     pub package_inventory: Vec<FileRef>,
     /// Provenance.
@@ -536,13 +540,21 @@ impl OcinyeImageManifest {
         if !is_apt_snapshot(&self.apt_snapshot) {
             return Err(bad("apt_snapshot"));
         }
-        if self.profiles.is_empty()
-            || self
-                .profiles
-                .iter()
-                .any(|p| !p.content_sha256.is_valid() || !p.package_inventory_sha256.is_valid())
-        {
+        if self.profiles.is_empty() {
             return Err(bad("profiles"));
+        }
+        for p in &self.profiles {
+            if !p.content_sha256.is_valid() || !p.package_inventory_sha256.is_valid() {
+                return Err(bad("profiles"));
+            }
+            // A mandatory SBOM per profile, fail-closed: a profile reaches the
+            // manifest only with a real SPDX 2.3 digest of its own rootfs.
+            if p.sbom.format != SBOM_FORMAT
+                || !is_safe_relative_path(&p.sbom.file)
+                || !p.sbom.sha256.is_valid()
+            {
+                return Err(bad("profiles.sbom"));
+            }
         }
         let stem = self.image.artifact_stem(self.architecture);
         for a in &self.artifacts {
@@ -587,12 +599,6 @@ impl OcinyeImageManifest {
         }
         if self.runtime.repo_key_fingerprint.len() != 40 {
             return Err(bad("runtime.repo_key_fingerprint"));
-        }
-        if self.sbom.format != SBOM_FORMAT
-            || !is_safe_relative_path(&self.sbom.file)
-            || !self.sbom.sha256.is_valid()
-        {
-            return Err(bad("sbom"));
         }
         if self.package_inventory.is_empty()
             || self
@@ -802,6 +808,11 @@ pub mod fixtures {
                 content_sha256: h('7'),
                 package_inventory_sha256: h('8'),
                 installed_bytes: 3_900_000_000,
+                sbom: SbomReference {
+                    format: SBOM_FORMAT.into(),
+                    file: "sbom/x-virt.spdx.json".into(),
+                    sha256: h('a'),
+                },
             }],
             artifacts: vec![
                 ImageArtifact {
@@ -835,7 +846,6 @@ pub mod fixtures {
                 docker_compose_plugin: "5.6.0-1~ubuntu.24.04~noble".into(),
                 repo_key_fingerprint: "9DC858229FC7DD38854AE2D88D81803C0EBFCD88".into(),
             },
-            sbom: SbomReference { format: SBOM_FORMAT.into(), file: "sbom/x.spdx.json".into(), sha256: h('a') },
             package_inventory: vec![FileRef { file: "inventory/packages-virt.json".into(), sha256: h('8') }],
             provenance: FileRef { file: "provenance/build-provenance.json".into(), sha256: h('c') },
             builder: BuilderRef {
@@ -951,7 +961,10 @@ pub(crate) mod tests {
                 "oci_images",
                 Box::new(|m| m.oci_images[0].digest = OciDigest("nginx:latest".into())),
             ),
-            ("sbom", Box::new(|m| m.sbom.format = "cyclonedx".into())),
+            (
+                "profiles.sbom",
+                Box::new(|m| m.profiles[0].sbom.format = "cyclonedx".into()),
+            ),
             (
                 "package_inventory",
                 Box::new(|m| m.provenance.file = "../etc/passwd".into()),
@@ -966,6 +979,100 @@ pub(crate) mod tests {
             f(&mut m);
             assert_eq!(m.validate().unwrap_err().field, field);
         }
+    }
+
+    // --- SBOM is per-profile and mandatory (D013 image-builder fix) ---
+
+    fn profile(name: ImageProfile, sbom_file: &str) -> ProfileFacts {
+        ProfileFacts {
+            name,
+            content_sha256: h('7'),
+            package_inventory_sha256: h('8'),
+            installed_bytes: 1_000_000_000,
+            sbom: SbomReference {
+                format: SBOM_FORMAT.into(),
+                file: sbom_file.into(),
+                sha256: h('a'),
+            },
+        }
+    }
+
+    fn iso_artifact(m: &OcinyeImageManifest) -> ImageArtifact {
+        let stem = m.image.artifact_stem(m.architecture);
+        ImageArtifact {
+            format: ImageFormat::Iso,
+            profile: ImageProfile::Metal,
+            file: format!("{stem}.iso"),
+            sha256: h('3'),
+            bytes: 1,
+            uncompressed_sha256: None,
+            uncompressed_bytes: None,
+            virtual_bytes: None,
+            boot: vec![BootMode::UefiX86_64],
+        }
+    }
+
+    /// A (ISO-only): a metal-profile build validates with its own SBOM, and an
+    /// empty SBOM digest — the exact bug: `MANIFEST_FAILED {"field":"sbom"}`
+    /// from an unwritten scratch file — can never reach a valid manifest.
+    #[test]
+    fn iso_only_exige_sbom_do_perfil_metal() {
+        let mut m = manifest();
+        m.profiles = vec![profile(ImageProfile::Metal, "sbom/x-metal.spdx.json")];
+        m.artifacts = vec![iso_artifact(&m)];
+        m.validate()
+            .expect("iso-only metal build with a real SBOM is valid");
+
+        // The empty digest the old `unwrap_or_default()` produced.
+        m.profiles[0].sbom.sha256 = Sha256Hex(String::new());
+        assert_eq!(m.validate().unwrap_err().field, "profiles.sbom");
+    }
+
+    /// B (virt-only): a virt-only build still carries a valid SBOM, and loses
+    /// validity the instant that SBOM is absent.
+    #[test]
+    fn virt_only_continua_com_sbom_valido() {
+        let m = manifest();
+        assert_eq!(m.profiles.len(), 1);
+        assert_eq!(m.profiles[0].name, ImageProfile::Virt);
+        m.validate().unwrap();
+
+        let mut empty = m;
+        empty.profiles[0].sbom.sha256 = Sha256Hex(String::new());
+        assert_eq!(empty.validate().unwrap_err().field, "profiles.sbom");
+    }
+
+    /// C (mixed): both the virt and the metal rootfs each publish their own
+    /// SBOM. A mixed build cannot validate while one profile's SBOM is missing,
+    /// so it can never ship a single SBOM that misrepresents the other profile.
+    #[test]
+    fn perfis_mistos_exigem_um_sbom_por_perfil() {
+        let mut m = manifest();
+        m.profiles = vec![
+            profile(ImageProfile::Virt, "sbom/x-virt.spdx.json"),
+            profile(ImageProfile::Metal, "sbom/x-metal.spdx.json"),
+        ];
+        m.artifacts.push(iso_artifact(&m));
+        m.validate()
+            .expect("qcow2+raw+iso each with their profile's SBOM is valid");
+
+        // The metal SBOM goes missing: the mixed manifest is refused, not
+        // published with only the virt SBOM standing in for the ISO.
+        m.profiles[1].sbom.sha256 = Sha256Hex(String::new());
+        assert_eq!(m.validate().unwrap_err().field, "profiles.sbom");
+    }
+
+    /// D (fail-closed): a malformed SBOM reference — wrong format or an escaping
+    /// path — is refused for any profile, the virt one included.
+    #[test]
+    fn sbom_malformado_falha_fechado() {
+        let mut m = manifest();
+        m.profiles[0].sbom.format = "cyclonedx".into();
+        assert_eq!(m.validate().unwrap_err().field, "profiles.sbom");
+
+        let mut m = manifest();
+        m.profiles[0].sbom.file = "../../etc/passwd".into();
+        assert_eq!(m.validate().unwrap_err().field, "profiles.sbom");
     }
 
     #[test]

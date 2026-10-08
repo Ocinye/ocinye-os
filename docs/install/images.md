@@ -81,6 +81,29 @@ inventário de pacotes, o SBOM SPDX 2.3 (syft), a proveniência, o
 volta a verificar tudo. Imagens `amd64` são montadas com TCG (lento); `arm64`
 com KVM.
 
+**Arquitectura da ferramenta ≠ arquitectura do alvo.** O syft é uma ferramenta
+de construção: a sua arquitectura é a da máquina onde **corre** — a VM de
+construção — e nunca a da imagem Ocinye que se produz. O syft lê o sistema de
+ficheiros montado como dados (`syft scan dir:<rootfs>`): não arranca a imagem,
+não faz `chroot` nem executa binários do alvo, pelo que um syft `arm64` numa VM
+`arm64` produz correctamente o SBOM de uma raiz `amd64`. O instalador escolhe o
+binário pela arquitectura da VM (`uname -m`: `x86_64`→`amd64`, `aarch64`→`arm64`;
+desconhecida falha fechado) e verifica-o contra `infra/image/builder/syft.sha256`.
+No caminho de desenvolvimento em Apple Silicon:
+
+```text
+Mac Apple Silicon (arm64)
+  → VM Lima de construção arm64
+    → syft linux/arm64
+    → QEMU TCG para os passos que executam código amd64 da imagem
+    → o syft lê a raiz amd64 offline, como ficheiros
+  → imagem Ocinye amd64
+```
+
+O assunto do SBOM (arquitectura/perfil) é o da raiz do alvo; não se instala syft
+dentro da imagem, nem se emula um syft `amd64` para correr numa VM `arm64`. Isto
+**não** afirma reprodutibilidade byte a byte nem certificação `amd64` física.
+
 A chave de desenvolvimento fica em `~/.cache/ocinye-image-builder/dev-signing/`
 (gerada uma vez, `0700`), nunca no repositório nem numa imagem. A saída fica em
 `~/.cache/ocinye-image-builder/dist/<nome>/`.

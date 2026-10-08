@@ -48,11 +48,10 @@ provision:
       modprobe nbd max_part=16 || true
       echo nbd > /etc/modules-load.d/nbd.conf
       echo "options nbd max_part=16" > /etc/modprobe.d/nbd.conf
-      # syft, fixado por versão e soma (infra/image/builder/syft.sha256).
-      SYFT=1.54.0
-      SUM=ee6d4566373a05b344bc6b5f1706f14419bf9338ba39ff686e247deefe9b8818
-      cd /tmp
-      curl -fsSLo syft.tgz "https://github.com/anchore/syft/releases/download/v${SYFT}/syft_${SYFT}_linux_arm64.tar.gz"
-      echo "${SUM}  syft.tgz" | sha256sum -c -
-      tar -xzf syft.tgz syft && install -m 0755 syft /usr/local/bin/syft && rm -f syft syft.tgz
+      # syft is installed by scripts/image-build.sh from the mounted repo
+      # (infra/image/builder/install-syft.sh), which picks the binary for THIS
+      # builder VM's architecture (never the Ocinye target's) and verifies it
+      # against the pinned infra/image/builder/syft.sha256. Kept out of this
+      # static provision block so there is one architecture-aware source of
+      # truth instead of a hardcoded per-arch download here.
       install -d -m 0755 /var/lib/ocinye-image-build

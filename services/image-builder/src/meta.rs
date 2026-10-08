@@ -42,29 +42,36 @@ pub fn write_canonical<T: serde::Serialize>(
     ))
 }
 
+/// The syft invocation: a host-side scan of the mounted rootfs as a `dir:`
+/// source. Syft reads the files; it never chroots into the target, nor runs a
+/// binary from it, so the builder's own syft (its architecture) scans a
+/// target rootfs of any architecture. Kept separate so a test can assert the
+/// shape without running syft.
+fn syft_scan_args(target: &str, out_spec: &str, name: &str) -> Vec<String> {
+    vec![
+        "scan".into(),
+        target.into(),
+        "-q".into(),
+        "-o".into(),
+        out_spec.into(),
+        "--source-name".into(),
+        name.into(),
+    ]
+}
+
 /// SPDX 2.3 JSON of a mounted root filesystem, by syft.
 pub fn sbom(root: &Path, out: &Path, name: &str) -> Result<Sha256Hex, ImageBuildError> {
     let target = format!("dir:{}", root.display());
     let o = format!("spdx-json={}", out.display());
-    cmd::run(
-        "B16",
-        "syft",
-        &["scan", &target, "-q", "-o", &o, "--source-name", name],
-        || ImageBuildError::SbomFailed {
-            reason: "syft".into(),
-        },
-    )?;
-    let v: serde_json::Value =
-        serde_json::from_slice(&fs::read(out).unwrap_or_default()).map_err(|_| {
-            ImageBuildError::SbomFailed {
-                reason: "json".into(),
-            }
-        })?;
-    if v["spdxVersion"].as_str() != Some("SPDX-2.3") {
-        return Err(ImageBuildError::SbomFailed {
-            reason: format!("spdxVersion {}", v["spdxVersion"]),
-        });
-    }
+    let args = syft_scan_args(&target, &o, name);
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    cmd::run("B16", "syft", &argv, || ImageBuildError::SbomFailed {
+        reason: "syft".into(),
+    })?;
+    // Fail closed: syft must have written a parseable SPDX 2.3 document. A
+    // missing file reads as empty bytes and fails the parse — never a silent
+    // empty digest.
+    require_spdx_2_3(&fs::read(out).unwrap_or_default())?;
     Ok(Sha256Hex(
         cmd::sha256_file(out)
             .map_err(|_| ImageBuildError::SbomFailed {
@@ -72,6 +79,24 @@ pub fn sbom(root: &Path, out: &Path, name: &str) -> Result<Sha256Hex, ImageBuild
             })?
             .0,
     ))
+}
+
+/// The SBOM document is SPDX 2.3 JSON (the only format D013 publishes).
+///
+/// # Errors
+///
+/// `SbomFailed` if the bytes are not JSON or `spdxVersion` is not `SPDX-2.3`.
+fn require_spdx_2_3(bytes: &[u8]) -> Result<(), ImageBuildError> {
+    let v: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| ImageBuildError::SbomFailed {
+            reason: "json".into(),
+        })?;
+    if v["spdxVersion"].as_str() != Some("SPDX-2.3") {
+        return Err(ImageBuildError::SbomFailed {
+            reason: format!("spdxVersion {}", v["spdxVersion"]),
+        });
+    }
+    Ok(())
 }
 
 /// Every file under `dir` (relative, sorted), except the signature itself.
@@ -243,5 +268,58 @@ pub fn verify(
                 serde_json::to_string(&v).unwrap_or_default()
             ),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Syft scans the mounted rootfs as a `dir:` source — host-side, never a
+    /// chroot and never a binary executed from the target rootfs. This is what
+    /// lets an arm64 builder syft produce an amd64 image's SBOM.
+    #[test]
+    fn syft_le_o_rootfs_montado_como_dir_sem_chroot() {
+        let args = syft_scan_args(
+            "dir:/work/mnt-metal",
+            "spdx-json=/out/x-metal.spdx.json",
+            "x",
+        );
+        assert_eq!(args[0], "scan");
+        assert!(args[1].starts_with("dir:"), "source is a filesystem dir");
+        assert!(
+            !args.iter().any(|a| a == "chroot" || a.contains("chroot")),
+            "no chroot into the target"
+        );
+        // The target rootfs path is only ever a `dir:` data source, never an
+        // executable argument.
+        assert!(args.iter().all(|a| a != "/work/mnt-metal"));
+    }
+
+    /// E: a syft document declaring SPDX 2.3 is accepted.
+    #[test]
+    fn spdx_2_3_e_aceite() {
+        let doc = br#"{"spdxVersion":"SPDX-2.3","name":"x"}"#;
+        require_spdx_2_3(doc).unwrap();
+    }
+
+    /// D (meta layer): another SPDX version, non-JSON, and the empty bytes an
+    /// unwritten/missing SBOM file reads as all fail closed with `SbomFailed`.
+    #[test]
+    fn sbom_nao_2_3_ou_ausente_falha_fechado() {
+        let older = br#"{"spdxVersion":"SPDX-2.2"}"#;
+        assert!(matches!(
+            require_spdx_2_3(older),
+            Err(ImageBuildError::SbomFailed { .. })
+        ));
+        assert!(matches!(
+            require_spdx_2_3(b"not json"),
+            Err(ImageBuildError::SbomFailed { .. })
+        ));
+        // A missing output file reads as empty bytes (fs::read(..).unwrap_or_default()).
+        assert!(matches!(
+            require_spdx_2_3(b""),
+            Err(ImageBuildError::SbomFailed { .. })
+        ));
     }
 }

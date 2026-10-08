@@ -51,3 +51,12 @@ ao Design, registadas:
   entra no ISO (só `IMAGE_CONTENT.json`).
 - A base Ubuntu fica fixada em `infra/image/base.json` (série, digests, soma do
   `SHA256SUMS`, impressão digital e soma do anel de chaves em `infra/image/keys/`).
+- **Arquitectura da ferramenta ≠ do alvo.** O syft corre na VM de construção e
+  lê a raiz montada como dados (`syft scan dir:<rootfs>`), sem `chroot` nem
+  execução de binários do alvo: a sua arquitectura segue a da VM, não a da
+  imagem. `infra/image/builder/install-syft.sh` escolhe-a por `uname -m`
+  (`x86_64`→`amd64`, `aarch64`/`arm64`→`arm64`; desconhecida falha fechado) e
+  verifica contra `infra/image/builder/syft.sha256`, a única fonte das somas. O
+  SBOM continua por perfil (`metal`→ISO, `virt`→QCOW2/RAW), e a sua arquitectura
+  é a da raiz do alvo. Em Apple Silicon: VM `arm64`, syft `arm64`, TCG para os
+  passos `amd64`, e o syft lê a raiz `amd64` offline.

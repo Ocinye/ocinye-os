@@ -148,6 +148,19 @@ fn asm(step: &str) -> ImageBuildError {
 fn build(a: &Args) -> Result<(), ImageBuildError> {
     let mut steps = Steps(vec![]);
     let started = chrono::Utc::now();
+    // Three independent architectures, never conflated: this binary runs inside
+    // the builder VM, so its own arch is the builder platform/binary arch; the
+    // image's arch is `--arch`. An arm64 builder builds amd64 images, and its
+    // arm64 syft scans the amd64 rootfs as data. Log all three so the build
+    // record keeps them distinct.
+    cmd::log(
+        "B00",
+        &format!(
+            "BUILDER_PLATFORM linux/{a0} BUILDER_BINARY_ARCH {a0} TARGET_ARCH {t}",
+            a0 = builder_arch(),
+            t = a.arch.as_str()
+        ),
+    );
     let base_cfg: inputs::BaseConfig = serde_json::from_slice(
         &fs::read(a.image_dir.join("base.json")).map_err(|_| asm("base.json"))?,
     )
@@ -439,22 +452,34 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
             .nth(1)
             .and_then(|l| l.trim().parse().ok())
             .unwrap_or(0);
+        // B16: the SBOM of *this profile's own* root filesystem (SPDX 2.3, by
+        // syft). It is a mandatory per-profile fact, resolved here in memory —
+        // never through an optional `work/sbom.sha256` scratch file that an
+        // ISO-only build (which has no `virt` profile) would leave unwritten.
+        // `meta::sbom` fails closed with a typed `SbomFailed` if syft, the JSON
+        // or the SPDX version is wrong, so an empty digest can never be carried
+        // forward.
+        let sbom_file = format!("sbom/{stem}-{prof}.spdx.json");
+        let sb = a.out.join(&sbom_file);
+        fs::create_dir_all(sb.parent().ok_or_else(|| asm("sbom"))?).map_err(|_| asm("sbom"))?;
+        let sbom_sha = steps.time(&format!("B16 sbom {prof}"), || {
+            meta::sbom(&m.mnt, &sb, &format!("{stem}-{prof}"))
+        })?;
         facts.push(ProfileFacts {
             name: profile,
             content_sha256: Sha256Hex(cm.sha256()),
             package_inventory_sha256: inv_sha.clone(),
             installed_bytes,
+            sbom: SbomReference {
+                format: SBOM_FORMAT.into(),
+                file: sbom_file,
+                sha256: sbom_sha,
+            },
         });
         inventories.push(FileRef {
             file: format!("inventory/packages-{prof}.json"),
             sha256: inv_sha,
         });
-        if *prof == "virt" {
-            let sb = a.out.join(format!("sbom/{stem}.spdx.json"));
-            fs::create_dir_all(sb.parent().ok_or_else(|| asm("sbom"))?).map_err(|_| asm("sbom"))?;
-            let sbom_sha = steps.time("B16 sbom", || meta::sbom(&m.mnt, &sb, &stem))?;
-            fs::write(a.work.join("sbom.sha256"), &sbom_sha.0).map_err(|_| asm("sbom"))?;
-        }
     }
 
     // B15: artifacts.
@@ -596,7 +621,6 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
     };
     let prov_sha =
         meta::write_canonical(&a.out.join("provenance/build-provenance.json"), &provenance)?;
-    let sbom_sha = Sha256Hex(fs::read_to_string(a.work.join("sbom.sha256")).unwrap_or_default());
     let manifest = OcinyeImageManifest {
         schema: ocinye_image_contracts::IMAGE_MANIFEST_SCHEMA,
         product: ocinye_image_contracts::PRODUCT.into(),
@@ -618,11 +642,6 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         artifacts,
         oci_images: oci_images.clone(),
         runtime,
-        sbom: SbomReference {
-            format: SBOM_FORMAT.into(),
-            file: format!("sbom/{stem}.spdx.json"),
-            sha256: sbom_sha,
-        },
         package_inventory: inventories,
         provenance: FileRef {
             file: "provenance/build-provenance.json".into(),
@@ -672,6 +691,16 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         ),
     );
     Ok(())
+}
+
+/// This builder binary's own architecture (the builder VM's), as `amd64` /
+/// `arm64`. It follows where the tool runs, never the `--arch` target image.
+fn builder_arch() -> &'static str {
+    match std::env::consts::ARCH {
+        "x86_64" => "amd64",
+        "aarch64" => "arm64",
+        other => other,
+    }
 }
 
 fn sha_text(s: &str) -> String {

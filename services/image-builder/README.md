@@ -18,5 +18,15 @@ desenvolvimento e re-verificação com o mesmo código que o Installer usará.
 Ferramentas na VM: QEMU, qemu-img, cloud-image-utils, gpgv, xorriso,
 squashfs-tools, mtools, dosfstools, zstd, minisign, parted, syft (fixado).
 
+**Arquitectura da ferramenta ≠ arquitectura do alvo.** O construtor e o syft
+correm na VM de construção e a sua arquitectura é a dela (`BUILDER_PLATFORM`,
+registado no arranque), independente de `--arch` (a arquitectura da imagem,
+`TARGET_ARCH`). O syft lê a raiz montada como dados (`syft scan dir:<rootfs>`) —
+sem `chroot`, sem executar binários do alvo —, por isso um syft `arm64` numa VM
+`arm64` produz o SBOM de uma raiz `amd64`. `infra/image/builder/install-syft.sh`
+escolhe o binário por `uname -m` da VM e verifica-o contra `syft.sha256`; uma
+arquitectura de VM desconhecida falha fechado. Testes do mapeamento:
+`infra/image/builder/install-syft.test.sh`.
+
 Testes: `cargo test -p ocinye-image-builder`; a construção e as provas reais
 com `scripts/image-build.sh` e `scripts/image-e2e.sh`.

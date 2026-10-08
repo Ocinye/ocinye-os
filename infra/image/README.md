@@ -8,6 +8,6 @@ O que entra numa imagem do Ocinye OS e como se constrói (D013).
 | `keys/` | chaves **públicas** de confiança ([README](keys/README.md)) |
 | `rootfs/` | fragmentos copiados para a raiz: sshd (bloco `Match User ocinye-claim`), sudoers, cloud-init (lista de permissões), netplan por omissão, unidades systemd |
 | `build/provision.sh` | o que corre dentro da VM de construção, por fases (`common`, `virt`, `metal`, `oie`, `finalize`) |
-| `builder/` | a VM Lima do construtor e a soma fixada do syft |
+| `builder/` | a VM Lima do construtor, o instalador do syft (`install-syft.sh`, escolhe o binário pela arquitectura **da VM de construção**, não a do alvo) e a soma fixada (`syft.sha256`) |
 | `e2e/image_e2e.py` | o banco de ensaio das imagens (`scripts/image-e2e.sh`) |
 | `tools/gen-console-strings.js` | gera as tabelas de texto das consolas a partir do `strings.js` do Design |
