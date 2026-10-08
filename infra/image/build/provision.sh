@@ -158,14 +158,30 @@ stage_virt() {
 stage_metal() {
   policy_on
   apt_update
+  # The complete in-target UEFI boot stack that curtin's install_missing_packages
+  # requests for a debian UEFI install (curtin 24.0.0 curthooks.py): efibootmgr,
+  # the real grub-efi-<arch> (unconditionally requested), its -bin, and the
+  # -signed flavour, plus shim-signed. curtin only fetches what is NOT already
+  # installed, so pre-installing the whole set here makes the offline ISO install
+  # do zero apt/network work. grub-efi-<arch> was previously left out, and the
+  # minimal base's grub-pc satisfied grub-efi-amd64-signed's
+  # "grub-efi-amd64 | grub-pc" alternative in its place — so curtin later tried to
+  # fetch grub-efi-amd64 with no NIC and the install failed.
   boot_pkgs=(efibootmgr)
   case "$ARCH" in
-    amd64) boot_pkgs+=(grub-efi-amd64-signed shim-signed) ;;
-    arm64) boot_pkgs+=(grub-efi-arm64-signed shim-signed) ;;
+    amd64) boot_pkgs+=(grub-efi-amd64 grub-efi-amd64-bin grub-efi-amd64-signed shim-signed) ;;
+    arm64) boot_pkgs+=(grub-efi-arm64 grub-efi-arm64-bin grub-efi-arm64-signed shim-signed) ;;
   esac
   # initramfs-tools explicitly: the minimal base boots without an initrd, and
   # real hardware needs one for its storage drivers.
   "${APT[@]}" install --no-install-recommends linux-generic linux-firmware initramfs-tools "${boot_pkgs[@]}"
+  # D013 v1 is UEFI-only (BIOS legado NOT_SUPPORTED_V1): the BIOS GRUB flavour
+  # must not linger in the metal rootfs. Remove it only now that grub-efi-<arch>
+  # is installed, so the signed package's alternative dependency stays satisfied.
+  if [ "$ARCH" = amd64 ]; then
+    mapfile -t bios_grub < <(dpkg-query -W -f='${Package}\n' grub-pc grub-pc-bin 2>/dev/null || true)
+    if [ "${#bios_grub[@]}" -gt 0 ]; then "${APT[@]}" purge "${bios_grub[@]}"; fi
+  fi
   purge_kvm_kernel
   policy_off
   touch /etc/cloud/cloud-init.disabled

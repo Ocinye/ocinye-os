@@ -119,6 +119,28 @@ kernel:
     )
 }
 
+/// A bounded machine token for *why* curtin failed, for engineering evidence —
+/// never a full log. The missing-package case is checked first on purpose: an
+/// offline `apt-get install grub-efi-amd64` fails with "no installation
+/// candidate", whose text names "grub", so a plain substring match would hide a
+/// package-availability failure behind a genuine bootloader-install failure.
+pub fn curtin_failure_subreason(stderr_lower: &str) -> &'static str {
+    if stderr_lower.contains("no installation candidate")
+        || stderr_lower.contains("unable to locate package")
+        || stderr_lower.contains("has no installation candidate")
+    {
+        "missing_offline_package"
+    } else if stderr_lower.contains("efibootmgr") {
+        "efibootmgr"
+    } else if stderr_lower.contains("shim") {
+        "shim"
+    } else if stderr_lower.contains("grub") {
+        "grub_install"
+    } else {
+        "other"
+    }
+}
+
 /// Steps 2–3–5: curtin partitions, writes and installs the boot loader.
 pub fn run_curtin(config: &Path) -> Result<(), OieError> {
     let out = Command::new("curtin")
@@ -129,14 +151,21 @@ pub fn run_curtin(config: &Path) -> Result<(), OieError> {
         .map_err(|_| OieError::DiskWriteFailed {
             device: "curtin".into(),
         })?;
+    let text = String::from_utf8_lossy(&out.stderr).to_lowercase();
+    let subreason = if out.status.success() {
+        "ok"
+    } else {
+        curtin_failure_subreason(&text)
+    };
+    // The detailed log leads with one bounded reason line, then the full output.
+    let header = format!("ocinye-oie curtin subreason: {subreason}\n");
     let _ = fs::write(
         "/run/ocinye-oie/curtin.out",
-        [&out.stdout[..], &out.stderr[..]].concat(),
+        [header.as_bytes(), &out.stdout[..], &out.stderr[..]].concat(),
     );
     if out.status.success() {
         return Ok(());
     }
-    let text = String::from_utf8_lossy(&out.stderr).to_lowercase();
     if text.contains("grub") || text.contains("efibootmgr") || text.contains("shim") {
         Err(OieError::BootloaderInstallFailed)
     } else {
@@ -327,6 +356,34 @@ mod tests {
             check_media(&media, &facts),
             Err(OieError::ImageManifestInvalid { .. })
         ));
+    }
+
+    #[test]
+    fn subreason_distingue_pacote_em_falta_de_falha_do_bootloader() {
+        // The exact offline failure: apt cannot find grub-efi-amd64. The text
+        // names "grub", but the cause is a missing package, not grub-install.
+        assert_eq!(
+            curtin_failure_subreason("e: package 'grub-efi-amd64' has no installation candidate"),
+            "missing_offline_package"
+        );
+        assert_eq!(
+            curtin_failure_subreason("e: unable to locate package grub-efi-amd64"),
+            "missing_offline_package"
+        );
+        // Genuine bootloader-execution failures stay distinguishable.
+        assert_eq!(
+            curtin_failure_subreason("running command grub-install failed"),
+            "grub_install"
+        );
+        assert_eq!(
+            curtin_failure_subreason("efibootmgr: could not write entry"),
+            "efibootmgr"
+        );
+        assert_eq!(
+            curtin_failure_subreason("shim-signed postinst error"),
+            "shim"
+        );
+        assert_eq!(curtin_failure_subreason("disk write error"), "other");
     }
 
     #[test]

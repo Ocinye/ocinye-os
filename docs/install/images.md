@@ -25,6 +25,15 @@ Arranque: **só UEFI** (BIOS legado `NOT_SUPPORTED_V1`); Secure Boot
 `NOT_TESTED` (shim e GRUB assinados pela Ubuntu, mas não provado). Disco: GPT,
 ESP 1 GiB, ext4 no resto, **sem swap**, sem cifra.
 
+**A instalação pela ISO é offline por construção.** `network.config: disabled`
+no curtin não basta — o curtin só deixa de tocar na rede se a raiz `metal` já
+tiver tudo o que ele pediria. Para UEFI debian, o curtin pede em-alvo
+`efibootmgr`, `grub-efi-<arch>` (e o seu `-bin`), `grub-efi-<arch>-signed` e
+`shim-signed`, e só instala o que faltar; por isso a raiz `metal` traz a pilha
+UEFI completa e, em v1 só-UEFI, **não** traz o GRUB de BIOS (`grub-pc`,
+`grub-pc-bin`). A construção falha fechado (`uefi_boot_stack_complete`,
+`no_bios_grub`) se a raiz `metal` não cumprir isto — não se espera pelo OIE.
+
 ## O ciclo de vida de uma máquina
 
 ```text

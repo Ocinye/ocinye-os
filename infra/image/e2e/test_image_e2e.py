@@ -71,6 +71,26 @@ class LanguageDetector(unittest.TestCase):
         self.assertIsNotNone(re.search(m.DONE_OR_FAIL_RX, "A instalação parou"))
 
 
+class CurtinSubreason(unittest.TestCase):
+    # Section 8: the preserved log is classified into a bounded token, and a
+    # missing offline package is not hidden behind a bootloader failure.
+    def test_missing_package_detected_first(self):
+        self.assertEqual(
+            m.curtin_subreason("e: package 'grub-efi-amd64' has no installation candidate"),
+            "missing_offline_package",
+        )
+        self.assertEqual(
+            m.curtin_subreason("e: unable to locate package grub-efi-amd64"),
+            "missing_offline_package",
+        )
+
+    def test_real_bootloader_failures_stay_distinct(self):
+        self.assertEqual(m.curtin_subreason("running command grub-install failed"), "grub_install")
+        self.assertEqual(m.curtin_subreason("efibootmgr: could not write entry"), "efibootmgr")
+        self.assertEqual(m.curtin_subreason("shim-signed postinst error"), "shim")
+        self.assertEqual(m.curtin_subreason("disk write error"), "other")
+
+
 class StatusPredicate(unittest.TestCase):
     # B, H: the verdict is a pure function of the checks and the invalid reason.
     def test_pass_only_when_every_check_passed(self):

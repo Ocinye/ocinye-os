@@ -286,6 +286,23 @@ def base_installed(text):
     return any(marker in text for marker in BASE_DONE)
 
 
+def curtin_subreason(stderr_lower):
+    """A bounded machine token for why a curtin install failed, derived from the
+    saved log. Mirrors the OIE's own classifier (services/oie/src/install.rs):
+    the missing-package case is tested first, because an offline
+    `apt-get install grub-efi-amd64` fails with 'no installation candidate',
+    whose text names 'grub'."""
+    if any(s in stderr_lower for s in ("no installation candidate", "unable to locate package")):
+        return "missing_offline_package"
+    if "efibootmgr" in stderr_lower:
+        return "efibootmgr"
+    if "shim" in stderr_lower:
+        return "shim"
+    if "grub" in stderr_lower:
+        return "grub_install"
+    return "other"
+
+
 def read_code(vm):
     """Press P on the console and read the code off the screen; hide it again."""
     vm.drain(2)
@@ -597,6 +614,12 @@ def collect_target_diagnostics(disk, diag, run=None, pick_dev=None):
             with RoMount(root, rootmnt, run=run):
                 _copy_if(os.path.join(rootmnt, "root/curtin-install.log"),
                          os.path.join(diag, "curtin-install.log"), collected)
+                saved_log = os.path.join(diag, "curtin-install.log")
+                if os.path.isfile(saved_log):
+                    low = open(saved_log, encoding="utf-8", errors="replace").read().lower()
+                    with open(os.path.join(diag, "curtin-failure-subreason.txt"), "w") as f:
+                        f.write(curtin_subreason(low) + "\n")
+                    collected.append("curtin-failure-subreason.txt")
                 _copy_if(os.path.join(rootmnt, "root/curtin-install-cfg.yaml"),
                          os.path.join(diag, "curtin-install-cfg.yaml"), collected)
                 _copy_if(os.path.join(rootmnt, "etc/fstab"), os.path.join(diag, "fstab"), collected)
@@ -744,6 +767,27 @@ def scenario_iso(a):
             out = j.stdout.decode()
             r.check("ISO: OIE journal on the installed disk", '"steps"' in out and '"media_check"' in out, out[:200])
             r.check("ISO: ext4 root, vfat ESP, GPT, no swap", "ext4" in out and "vfat" in out and '"label":"gpt"' in out.replace(" ", "") and out.strip().endswith("0"), out[-300:])
+            # The ESP must carry this architecture's UEFI boot artifacts, and the
+            # installed disk's saved curtin log must show the offline install
+            # fetched nothing: a zero count over the fetch/resolution-failure and
+            # in-target install signatures proves no network package op was needed.
+            efi_expect = {
+                "amd64": ["EFI/ubuntu/shimx64.efi", "EFI/ubuntu/grubx64.efi"],
+                "arm64": ["EFI/ubuntu/shimaa64.efi", "EFI/ubuntu/grubaa64.efi"],
+            }[a.arch]
+            p = ssh(vm2.port, "ocinye", k1,
+                    "sudo -n find /boot/efi/EFI -maxdepth 3 -type f -printf '%P\\n' 2>/dev/null; "
+                    "echo '---LOG---'; "
+                    "sudo -n grep -ciE "
+                    "'no installation candidate|unable to locate package|temporary failure resolving|could not resolve host|installing packages on target system' "
+                    "/root/curtin-install.log 2>/dev/null")
+            esp_part, _, log_part = p.stdout.decode().partition("---LOG---")
+            esp_files = set(esp_part.split())
+            r.check("ISO: ESP carries the UEFI boot artifacts for the architecture",
+                    all(f in esp_files for f in efi_expect), sorted(esp_files))
+            hit = re.search(r"\b(\d+)\b", log_part)
+            r.check("ISO: offline install required no package fetch (empty curtin apt)",
+                    hit is not None and hit.group(1) == "0", log_part.strip()[:200])
             log(f"ISO resources after claim: {json.dumps(measure(vm2.port, k1))}")
         vm2.stop()
     except Exception as e:  # noqa: BLE001

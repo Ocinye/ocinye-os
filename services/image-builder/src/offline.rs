@@ -412,8 +412,82 @@ fn scan(root: &Path, dir: &Path, skip: &[&str], out: &mut Vec<String>) {
     }
 }
 
+/// The in-target UEFI boot stack curtin's `install_missing_packages` requests
+/// for a debian UEFI install (curtin 24.0.0 `curthooks.py`): efibootmgr, the
+/// real `grub-efi-<arch>` (requested unconditionally), its `-bin`, and the
+/// `-signed` flavour, plus `shim-signed`. curtin installs only what is missing,
+/// so the metal rootfs must already carry every one of these or the offline ISO
+/// install fetches over a network it does not have. Returns `(required_present,
+/// forbidden_present)`; v1 is UEFI-only, so the BIOS flavour is forbidden.
+pub fn boot_packages(arch: &str) -> (Vec<&'static str>, Vec<&'static str>) {
+    match arch {
+        "amd64" => (
+            vec![
+                "grub-efi-amd64",
+                "grub-efi-amd64-bin",
+                "grub-efi-amd64-signed",
+                "shim-signed",
+                "efibootmgr",
+            ],
+            vec!["grub-pc", "grub-pc-bin"],
+        ),
+        "arm64" => (
+            vec![
+                "grub-efi-arm64",
+                "grub-efi-arm64-bin",
+                "grub-efi-arm64-signed",
+                "shim-signed",
+                "efibootmgr",
+            ],
+            // grub-pc is an amd64/i386 (BIOS) package; it cannot be present here.
+            vec![],
+        ),
+        _ => (vec![], vec![]),
+    }
+}
+
+/// Packages marked `install ok installed` in a target's dpkg status file.
+fn installed_debs(status_path: &Path) -> std::collections::BTreeSet<String> {
+    let mut set = std::collections::BTreeSet::new();
+    let Ok(text) = fs::read_to_string(status_path) else {
+        return set;
+    };
+    let mut pkg: Option<String> = None;
+    for line in text.lines() {
+        if let Some(n) = line.strip_prefix("Package: ") {
+            pkg = Some(n.trim().to_string());
+        } else if let Some(st) = line.strip_prefix("Status: ") {
+            if st.trim() == "install ok installed" {
+                if let Some(p) = pkg.take() {
+                    set.insert(p);
+                }
+            }
+        } else if line.is_empty() {
+            pkg = None;
+        }
+    }
+    set
+}
+
+/// `(missing_required, present_forbidden)` for the metal rootfs's boot stack.
+pub fn boot_package_report(
+    arch: &str,
+    installed: &std::collections::BTreeSet<String>,
+) -> (Vec<&'static str>, Vec<&'static str>) {
+    let (required, forbidden) = boot_packages(arch);
+    let missing = required
+        .into_iter()
+        .filter(|p| !installed.contains(*p))
+        .collect();
+    let present = forbidden
+        .into_iter()
+        .filter(|p| installed.contains(*p))
+        .collect();
+    (missing, present)
+}
+
 /// B12: the inspection the image must pass, written as `inspection.json`.
-pub fn inspect(m: &Mounted, profile: &str, release_id: &str) -> Inspection {
+pub fn inspect(m: &Mounted, profile: &str, arch: &str, release_id: &str) -> Inspection {
     let r = &m.mnt;
     let mut checks = vec![];
     let mut c = |check: &'static str, ok: bool, detail: Option<String>| {
@@ -542,6 +616,23 @@ pub fn inspect(m: &Mounted, profile: &str, release_id: &str) -> Inspection {
             None,
         ),
     }
+    // The metal rootfs is the one the ISO's OIE installs onto a blank disk with
+    // curtin and no network. If its UEFI boot stack is incomplete the install
+    // cannot populate the ESP — fail the image build here, not at OIE runtime.
+    if profile == "metal" {
+        let installed = installed_debs(&r.join("var/lib/dpkg/status"));
+        let (missing, forbidden) = boot_package_report(arch, &installed);
+        c(
+            "uefi_boot_stack_complete",
+            missing.is_empty(),
+            (!missing.is_empty()).then(|| missing.join(",")),
+        );
+        c(
+            "no_bios_grub",
+            forbidden.is_empty(),
+            (!forbidden.is_empty()).then(|| forbidden.join(",")),
+        );
+    }
     c(
         "no_instance_state",
         !r.join("srv/ocinye").exists()
@@ -627,6 +718,88 @@ mod tests {
             secret_in(b"printf(\"%s PRIVATE KEY-----\")"),
             None,
             "format text is not armour"
+        );
+    }
+
+    fn pkgset(names: &[&str]) -> std::collections::BTreeSet<String> {
+        names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn amd64_metal_exige_a_pilha_uefi_completa() {
+        // A: the complete amd64 UEFI boot stack leaves nothing missing.
+        let full = pkgset(&[
+            "grub-efi-amd64",
+            "grub-efi-amd64-bin",
+            "grub-efi-amd64-signed",
+            "shim-signed",
+            "efibootmgr",
+            "linux-generic",
+        ]);
+        let (missing, forbidden) = boot_package_report("amd64", &full);
+        assert!(missing.is_empty(), "{missing:?}");
+        assert!(forbidden.is_empty());
+        // The exact failure that shipped: grub-efi-amd64 absent, grub-pc present.
+        let broken = pkgset(&[
+            "grub-efi-amd64-bin",
+            "grub-efi-amd64-signed",
+            "shim-signed",
+            "efibootmgr",
+            "grub-pc",
+            "grub-pc-bin",
+        ]);
+        let (missing, forbidden) = boot_package_report("amd64", &broken);
+        assert_eq!(missing, vec!["grub-efi-amd64"]);
+        assert_eq!(forbidden, vec!["grub-pc", "grub-pc-bin"]);
+    }
+
+    #[test]
+    fn arm64_metal_exige_a_pilha_uefi_arm64() {
+        // B: arm64 needs the arm64 flavour, and has no BIOS grub to forbid.
+        let full = pkgset(&[
+            "grub-efi-arm64",
+            "grub-efi-arm64-bin",
+            "grub-efi-arm64-signed",
+            "shim-signed",
+            "efibootmgr",
+        ]);
+        let (missing, forbidden) = boot_package_report("arm64", &full);
+        assert!(missing.is_empty(), "{missing:?}");
+        assert!(forbidden.is_empty());
+    }
+
+    #[test]
+    fn nomes_de_arquitectura_nao_se_misturam() {
+        // F: the amd64 stack never satisfies arm64 and vice versa; no leak.
+        let (req_amd, forb_amd) = boot_packages("amd64");
+        assert!(req_amd.iter().all(|p| !p.contains("arm64")));
+        assert!(forb_amd.contains(&"grub-pc"));
+        let (req_arm, forb_arm) = boot_packages("arm64");
+        assert!(req_arm.iter().all(|p| !p.contains("amd64")));
+        assert!(forb_arm.is_empty(), "arm64 has no grub-pc to forbid");
+        // C: an amd64 image that kept grub-pc fails the forbidden check.
+        let amd_with_bios = pkgset(&["grub-efi-amd64", "grub-pc"]);
+        let (_m, forbidden) = boot_package_report("amd64", &amd_with_bios);
+        assert_eq!(forbidden, vec!["grub-pc"]);
+    }
+
+    #[test]
+    fn dpkg_status_le_so_os_instalados() {
+        let d = std::env::temp_dir().join(format!("ocinye-dpkg-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        fs::write(
+            d.join("status"),
+            "Package: grub-efi-amd64\nStatus: install ok installed\nVersion: 1\n\n\
+             Package: grub-pc\nStatus: deinstall ok config-files\nVersion: 2\n\n\
+             Package: shim-signed\nStatus: install ok installed\nVersion: 3\n\n",
+        )
+        .unwrap();
+        let set = installed_debs(&d.join("status"));
+        assert!(set.contains("grub-efi-amd64") && set.contains("shim-signed"));
+        assert!(
+            !set.contains("grub-pc"),
+            "a removed package left as config-files is not installed"
         );
     }
 

@@ -380,7 +380,7 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         let cleaned = steps.time(&format!("B11 {prof}"), || offline::sanitize(&m))?;
         cmd::log("B11", &format!("{prof}: {}", cleaned.join(", ")));
         if *prof == "oie" {
-            let ins = offline::inspect(&m, prof, &bundle.manifest.release.id);
+            let ins = offline::inspect(&m, prof, a.arch.as_str(), &bundle.manifest.release.id);
             write_json(
                 &a.out.join(format!("provenance/inspection-{prof}.json")),
                 &ins,
@@ -429,7 +429,12 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         fs::write(&cpath, cm.to_canonical()).map_err(|_| asm("content"))?;
         content_paths.insert(prof.to_string(), cpath);
         let ins = steps.time(&format!("B12 {prof}"), || {
-            Ok(offline::inspect(&m, prof, &bundle.manifest.release.id))
+            Ok(offline::inspect(
+                &m,
+                prof,
+                a.arch.as_str(),
+                &bundle.manifest.release.id,
+            ))
         })?;
         write_json(
             &a.out.join(format!("provenance/inspection-{prof}.json")),
