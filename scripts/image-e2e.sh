@@ -27,5 +27,19 @@ if quer virt; then corre virt --qcow2 "$dist/$stem.qcow2" || rc=1; fi
 if quer raw; then corre raw --raw-zst "$dist/$stem.raw.zst" --raw-sha256 "$raw_sha" || rc=1; fi
 if quer iso; then corre iso --iso "$dist/$stem.iso" || rc=1; fi
 mkdir -p "$CACHE/e2e/$nome"
-limactl shell "$VM" sudo -n sh -c "cp $work/*/result-*.json $work/*/*-serial.log '$CACHE/e2e/$nome/' 2>/dev/null || true"
+# Copy the verdicts and serial logs out, and — for a failed install — the
+# OFFLINE diagnostics the harness gathered (curtin's saved log/config, the ESP
+# tree, fstab, the boot trees). The preserved target.qcow2 is large and stays in
+# the builder VM's work directory ($work/*/failure/target.qcow2); the diagnostics
+# are what must survive the VM being destroyed, so they always come out.
+limactl shell "$VM" sudo -n sh -c "
+  cp $work/*/result-*.json $work/*/*-serial.log '$CACHE/e2e/$nome/' 2>/dev/null
+  for f in $work/*/failure $work/*/failure-*; do
+    [ -d \"\$f\" ] || continue
+    s=\$(basename \"\$(dirname \"\$f\")\")-\$(basename \"\$f\")
+    mkdir -p '$CACHE/e2e/$nome/'\"\$s\"
+    cp -a \"\$f\"/diagnostics '$CACHE/e2e/$nome/'\"\$s\"/ 2>/dev/null
+  done
+  true
+"
 exit $rc

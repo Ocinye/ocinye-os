@@ -243,6 +243,12 @@ def wait_ssh_port(port, timeout):
     raise TimeoutError("ssh port")
 
 
+def result_status(items, invalid):
+    """The single predicate behind every verdict. The failure-evidence gate and
+    the reported RESULT must agree, so both read it here (§59)."""
+    return "INVALID" if invalid else ("PASS" if items and all(i["ok"] for i in items) else "FAIL")
+
+
 class Results:
     def __init__(self, scenario):
         self.scenario, self.items = scenario, []
@@ -253,7 +259,7 @@ class Results:
         return ok
 
     def finish(self, work, invalid=None):
-        status = "INVALID" if invalid else ("PASS" if self.items and all(i["ok"] for i in self.items) else "FAIL")
+        status = result_status(self.items, invalid)
         out = {"scenario": self.scenario, "status": status, "invalid": invalid, "checks": self.items}
         with open(os.path.join(work, f"result-{self.scenario}.json"), "w") as f:
             json.dump(out, f, indent=1)
@@ -263,6 +269,21 @@ class Results:
 
 UNCLAIMED_RX = r"N[AÃ]O RECLAMADO"
 BOOT_BUDGET = 900
+
+# The OIE prints one of BASE_DONE when the base install succeeds, one of
+# BASE_FAIL when it stops with an error — in the medium's language (pt/en/fr,
+# services/oie/src/strings.rs `c13.done.t` / `c13.err.t`). The console waits for
+# either, and `base_installed` decides which it was. Both are derived from the
+# same lists so an English or French success can never be read as failure again.
+BASE_DONE = ("Base instalada", "Base installed", "Base installée")
+BASE_FAIL_RX = (r"A instala[cç][aã]o parou", r"Installation stopped", r"L.installation s.est arr")
+DONE_OR_FAIL_RX = "(" + "|".join([re.escape(s) for s in BASE_DONE] + list(BASE_FAIL_RX)) + ")"
+
+
+def base_installed(text):
+    """True iff the serial shows the base-installed marker in any product
+    language. Kept in lockstep with DONE_OR_FAIL_RX (same source list)."""
+    return any(marker in text for marker in BASE_DONE)
 
 
 def read_code(vm):
@@ -424,12 +445,236 @@ def make_data_disk(path, size):
         sh("losetup", "-d", dev, check=False)
 
 
+# --- Failure evidence for the ISO install -------------------------------------
+# A real BOOTLOADER_INSTALL_FAILED can only be diagnosed from the disk curtin
+# wrote and the logs it saved on the target root (`save_install_log`,
+# `save_install_config`). The live installer VM's own /run/ocinye-oie/curtin.out
+# lives on tmpfs and dies with the VM, so the recoverable copies are on the
+# target. On FAIL/INVALID we keep the disk and read it OFFLINE — never booted,
+# always mounted read-only, qemu-nbd always disconnected. This runs inside the
+# disposable builder VM as root; nothing here runs on an operator's machine.
+
+
+def _run_cmd(args, check=True):
+    return subprocess.run(args, capture_output=True, check=check)
+
+
+def _free_nbd():
+    for i in range(16):
+        try:
+            if open(f"/sys/block/nbd{i}/size").read().strip() == "0":
+                return f"/dev/nbd{i}"
+        except OSError:
+            continue
+    return None
+
+
+class NbdAttach:
+    """A disk image attached READ-ONLY on an nbd device; detached on exit even
+    when the body raises. Every shell-out goes through `run` so the read-only
+    flag and the guaranteed disconnect are testable without root."""
+
+    def __init__(self, disk, run=None, pick_dev=None):
+        self.disk, self.run, self.pick_dev = disk, run or _run_cmd, pick_dev or _free_nbd
+        self.dev = None
+
+    def __enter__(self):
+        self.run(["modprobe", "nbd", "max_part=16"], check=False)
+        self.dev = self.pick_dev()
+        if not self.dev:
+            raise RuntimeError("no free nbd device")
+        # -r is mandatory: the target is evidence and must not be written to.
+        self.run(["qemu-nbd", "--fork", "-r", "-c", self.dev, self.disk])
+        self.run(["partprobe", self.dev], check=False)
+        return self
+
+    def __exit__(self, *exc):
+        if self.dev:
+            self.run(["qemu-nbd", "-d", self.dev], check=False)
+            self.dev = None
+        return False
+
+
+class RoMount:
+    """A filesystem mounted read-only; unmounted on exit even when the body
+    raises. Read-only is not negotiable here."""
+
+    def __init__(self, source, mnt, run=None):
+        self.source, self.mnt, self.run = source, mnt, run or _run_cmd
+
+    def __enter__(self):
+        os.makedirs(self.mnt, exist_ok=True)
+        self.run(["mount", "-o", "ro", self.source, self.mnt])
+        return self
+
+    def __exit__(self, *exc):
+        self.run(["umount", self.mnt], check=False)
+        return False
+
+
+def _capture(run, args, dest, collected):
+    try:
+        r = run(args, check=False)
+        with open(dest, "wb") as f:
+            f.write(r.stdout or b"")
+            if getattr(r, "stderr", None):
+                f.write(b"\n--- stderr ---\n")
+                f.write(r.stderr)
+        collected.append(os.path.basename(dest))
+    except Exception as e:  # noqa: BLE001 — a missing tool is a gap, not a crash
+        log(f"diag: {args[0]} failed: {e}")
+
+
+def _copy_if(src, dest, collected):
+    if os.path.isfile(src):
+        shutil.copy2(src, dest)
+        collected.append(os.path.basename(dest))
+
+
+def _copy_tree_if(src, dest, collected):
+    if os.path.isdir(src):
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+        collected.append(os.path.basename(dest) + "/")
+
+
+def _listing(root, dest, collected):
+    """A plain recursive listing of a tree (no bytes copied), read-only."""
+    if not os.path.isdir(root):
+        return
+    lines = []
+    for dirpath, dirs, files in os.walk(root):
+        dirs.sort()
+        rel = os.path.relpath(dirpath, root)
+        for name in sorted(files):
+            p = os.path.join(dirpath, name)
+            try:
+                size = os.path.getsize(p)
+            except OSError:
+                size = -1
+            lines.append(f"{size:>12}  {os.path.join(rel, name) if rel != '.' else name}")
+    with open(dest, "w") as f:
+        f.write("\n".join(lines) + ("\n" if lines else ""))
+    collected.append(os.path.basename(dest))
+
+
+def _grub_shim_packages(status_path, dest, collected):
+    """Which grub/shim/efibootmgr packages the target root has, read offline
+    from dpkg's status file (no chroot, no execution)."""
+    if not os.path.isfile(status_path):
+        return
+    out = []
+    pkg = ver = None
+    for line in open(status_path, encoding="utf-8", errors="replace"):
+        if line.startswith("Package: "):
+            pkg = line[9:].strip()
+        elif line.startswith("Version: "):
+            ver = line[9:].strip()
+        elif line.strip() == "" and pkg:
+            if any(t in pkg for t in ("grub", "shim", "efibootmgr", "efivar")):
+                out.append(f"{pkg} {ver or '?'}")
+            pkg = ver = None
+    with open(dest, "w") as f:
+        f.write("\n".join(sorted(out)) + ("\n" if out else ""))
+    collected.append(os.path.basename(dest))
+
+
+def collect_target_diagnostics(disk, diag, run=None, pick_dev=None):
+    """Attach the preserved disk read-only and copy the installation's own
+    evidence into `diag`. The OIE lays the target out with the ESP as GPT
+    partition 1 and the root as partition 2 (`curtin_config`)."""
+    run = run or _run_cmd
+    collected = []
+    with NbdAttach(disk, run=run, pick_dev=pick_dev) as nbd:
+        dev = nbd.dev
+        _capture(run, ["sfdisk", "-d", dev], os.path.join(diag, "partition-table.sfdisk"), collected)
+        _capture(run, ["lsblk", "-J", "-o", "NAME,LABEL,FSTYPE,SIZE,PARTTYPE,PARTTYPENAME,PARTFLAGS,RO", dev],
+                 os.path.join(diag, "lsblk.json"), collected)
+        esp, root = f"{dev}p1", f"{dev}p2"
+        # Target root: curtin's saved log and config, installer/ocinye logs,
+        # fstab, the boot trees, and the bootloader packages that are present.
+        try:
+            rootmnt = os.path.join(diag, "_root")
+            with RoMount(root, rootmnt, run=run):
+                _copy_if(os.path.join(rootmnt, "root/curtin-install.log"),
+                         os.path.join(diag, "curtin-install.log"), collected)
+                _copy_if(os.path.join(rootmnt, "root/curtin-install-cfg.yaml"),
+                         os.path.join(diag, "curtin-install-cfg.yaml"), collected)
+                _copy_if(os.path.join(rootmnt, "etc/fstab"), os.path.join(diag, "fstab"), collected)
+                _copy_tree_if(os.path.join(rootmnt, "var/log/curtin"), os.path.join(diag, "var-log-curtin"), collected)
+                _copy_tree_if(os.path.join(rootmnt, "var/log/installer"), os.path.join(diag, "var-log-installer"), collected)
+                _copy_tree_if(os.path.join(rootmnt, "var/log/ocinye"), os.path.join(diag, "var-log-ocinye"), collected)
+                _listing(os.path.join(rootmnt, "boot"), os.path.join(diag, "boot-tree.txt"), collected)
+                _listing(os.path.join(rootmnt, "boot/efi"), os.path.join(diag, "boot-efi-tree.txt"), collected)
+                _grub_shim_packages(os.path.join(rootmnt, "var/lib/dpkg/status"),
+                                    os.path.join(diag, "grub-shim-packages.txt"), collected)
+        except Exception as e:  # noqa: BLE001
+            _capture(run, ["true"], os.path.join(diag, "root-mount-error.txt"), [])
+            with open(os.path.join(diag, "root-mount-error.txt"), "w") as f:
+                f.write(f"{type(e).__name__}: {e}\n")
+            log(f"diag: target root not mountable: {e}")
+        # ESP: whether it mounts at all is itself a diagnostic, then its EFI tree
+        # (EFI/ubuntu/shimx64.efi, EFI/ubuntu/grubx64.efi, EFI/BOOT/BOOTX64.EFI).
+        espmnt = os.path.join(diag, "_esp")
+        try:
+            with RoMount(esp, espmnt, run=run):
+                _listing(espmnt, os.path.join(diag, "esp-tree.txt"), collected)
+                with open(os.path.join(diag, "esp-mountable.txt"), "w") as f:
+                    f.write("yes\n")
+        except Exception as e:  # noqa: BLE001
+            with open(os.path.join(diag, "esp-mountable.txt"), "w") as f:
+                f.write(f"no: {type(e).__name__}: {e}\n")
+            log(f"diag: ESP not mountable: {e}")
+        collected.append("esp-mountable.txt")
+    return collected
+
+
+def _unique_dir(base):
+    """`base`, or `base-2`, `base-3`… so repeated failures never overwrite
+    earlier evidence silently."""
+    cand, n = base, 2
+    while os.path.exists(cand):
+        cand, n = f"{base}-{n}", n + 1
+    return cand
+
+
+def preserve_iso_failure(work, target, collector=None):
+    """On ISO FAIL/INVALID, keep the disk curtin wrote under the work directory
+    and gather offline evidence beside it. Never raises: preserving evidence
+    must not change the verdict (§59, H)."""
+    collector = collector or collect_target_diagnostics
+    try:
+        failure = _unique_dir(os.path.join(work, "failure"))
+        diag = os.path.join(failure, "diagnostics")
+        os.makedirs(diag, exist_ok=True)
+        summary = {"preserved_disk": None, "diagnostics": [], "collector_error": None}
+        if os.path.exists(target):
+            preserved = os.path.join(failure, "target.qcow2")
+            # A move keeps the actual disk curtin wrote (same filesystem, no copy).
+            os.replace(target, preserved)
+            summary["preserved_disk"] = preserved
+            try:
+                summary["diagnostics"] = collector(preserved, diag)
+            except Exception as e:  # noqa: BLE001 — evidence collection is best-effort
+                summary["collector_error"] = f"{type(e).__name__}: {e}"
+                log(f"ISO: offline evidence collection failed: {e}")
+        else:
+            log(f"ISO: no target disk at {target} to preserve")
+        with open(os.path.join(diag, "COLLECTION.json"), "w") as f:
+            json.dump(summary, f, indent=1)
+        log(f"ISO: failure evidence under {failure}")
+        return failure
+    except Exception as e:  # noqa: BLE001 — never let preservation break the run
+        log(f"ISO: could not preserve failure evidence: {e}")
+        return None
+
+
 def scenario_iso(a):
     r = Results(f"iso-{a.arch}")
     work = a.work
     target = os.path.join(work, "target.qcow2")
     data = os.path.join(work, "data.raw")
     small = os.path.join(work, "small.raw")
+    invalid = None
     try:
         sh("qemu-img", "create", "-q", "-f", "qcow2", target, "40G")
         make_data_disk(data, "24G")
@@ -475,8 +720,8 @@ def scenario_iso(a):
         vm.expect(r"(4 caracteres|4 characters)", 120)
         vm.send("7F3A\r")
         vm.expect(r"(Chave SSH do operador|Operator SSH key)", 120)
-        vm.expect(r"(Base instalada|Base installed|A instala[cç][aã]o parou)", 5400)
-        installed = "Base instalada" in open(vm.transcript.name, encoding="utf-8", errors="replace").read()
+        vm.expect(DONE_OR_FAIL_RX, 5400)
+        installed = base_installed(open(vm.transcript.name, encoding="utf-8", errors="replace").read())
         r.check("ISO: base installed offline (no NIC attached)", installed)
         vm.send("\r")
         try:
@@ -502,8 +747,15 @@ def scenario_iso(a):
             log(f"ISO resources after claim: {json.dumps(measure(vm2.port, k1))}")
         vm2.stop()
     except Exception as e:  # noqa: BLE001
-        return r.finish(work, invalid=f"{type(e).__name__}: {e}")
-    return r.finish(work)
+        invalid = f"{type(e).__name__}: {e}"
+    # The same predicate decides the verdict and whether to keep the evidence,
+    # so they can never disagree. Preservation runs with every guest already
+    # stopped (main()'s finally also stops them), so the disk is quiescent.
+    if result_status(r.items, invalid) != "PASS":
+        for vm in RUNNING:
+            vm.stop()
+        preserve_iso_failure(work, target)
+    return r.finish(work, invalid=invalid)
 
 
 def main():
