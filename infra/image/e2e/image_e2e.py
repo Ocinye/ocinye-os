@@ -303,6 +303,43 @@ def curtin_subreason(stderr_lower):
     return "other"
 
 
+ROOT_RE = re.compile(r"\broot=(PARTUUID|UUID)=(\S+)", re.IGNORECASE)
+
+
+def grub_root_refs(grub_cfg_text):
+    """Every `root=PARTUUID=…` / `root=UUID=…` on a `linux` line of a grub.cfg,
+    as lowercase `(kind, value)` pairs."""
+    refs = []
+    for line in grub_cfg_text.splitlines():
+        s = line.strip()
+        if s.startswith("linux") and "root=" in s:
+            m = ROOT_RE.search(s)
+            if m:
+                refs.append((m.group(1).upper(), m.group(2).lower()))
+    return refs
+
+
+def evaluate_root_identity(refs, forced, target_partuuid, target_fsuuid):
+    """Decide whether the installed boot config resolves root to the actual
+    target. Pure: the I/O lives in `installed_root_identity`. Returns
+    `(ok, detail)`; a mismatch leads with a typed token so the harness can fail
+    in seconds instead of waiting out a 900 s second-boot timeout."""
+    pu = (target_partuuid or "").lower()
+    fu = (target_fsuuid or "").lower()
+    if forced:
+        return False, f"INSTALLED_ROOT_IDENTITY_MISMATCH: GRUB_FORCE_PARTUUID in {','.join(sorted(forced))}"
+    if not refs:
+        return False, "INSTALLED_ROOT_IDENTITY_UNKNOWN: no root= on any linux line"
+
+    def resolves(kind, val):
+        return (kind == "PARTUUID" and val == pu and pu) or (kind == "UUID" and val == fu and fu)
+
+    shown = ",".join(f"{k}={v}" for k, v in refs)
+    if all(resolves(k, v) for k, v in refs):
+        return True, f"root={shown} == target(PARTUUID={pu},UUID={fu})"
+    return False, f"INSTALLED_ROOT_IDENTITY_MISMATCH: grub root={shown} != target(PARTUUID={pu},UUID={fu})"
+
+
 def read_code(vm):
     """Press P on the console and read the code off the screen; hide it again."""
     vm.drain(2)
@@ -623,6 +660,14 @@ def collect_target_diagnostics(disk, diag, run=None, pick_dev=None):
                 _copy_if(os.path.join(rootmnt, "root/curtin-install-cfg.yaml"),
                          os.path.join(diag, "curtin-install-cfg.yaml"), collected)
                 _copy_if(os.path.join(rootmnt, "etc/fstab"), os.path.join(diag, "fstab"), collected)
+                # The generated boot config and the grub defaults that shape its
+                # root= identity (the force-partuuid class of defect lives here).
+                _copy_if(os.path.join(rootmnt, "boot/grub/grub.cfg"),
+                         os.path.join(diag, "grub.cfg"), collected)
+                _copy_if(os.path.join(rootmnt, "etc/default/grub"),
+                         os.path.join(diag, "default-grub"), collected)
+                _copy_tree_if(os.path.join(rootmnt, "etc/default/grub.d"),
+                              os.path.join(diag, "default-grub.d"), collected)
                 _copy_tree_if(os.path.join(rootmnt, "var/log/curtin"), os.path.join(diag, "var-log-curtin"), collected)
                 _copy_tree_if(os.path.join(rootmnt, "var/log/installer"), os.path.join(diag, "var-log-installer"), collected)
                 _copy_tree_if(os.path.join(rootmnt, "var/log/ocinye"), os.path.join(diag, "var-log-ocinye"), collected)
@@ -649,6 +694,55 @@ def collect_target_diagnostics(disk, diag, run=None, pick_dev=None):
             log(f"diag: ESP not mountable: {e}")
         collected.append("esp-mountable.txt")
     return collected
+
+
+def installed_root_identity(disk, run=None, pick_dev=None):
+    """Attach the freshly installed disk READ-ONLY and prove that its generated
+    boot config resolves root to this target's own root partition/filesystem,
+    not a build-time identity. Returns a facts dict with `ok`/`detail`. Never
+    raises — an attach/mount failure is reported as INVALID, not a crash."""
+    run = run or _run_cmd
+    facts = {
+        "ok": False,
+        "detail": "",
+        "target_root_partuuid": None,
+        "target_root_fsuuid": None,
+        "grub_root_refs": [],
+        "forced_partuuid_files": [],
+    }
+    try:
+        with NbdAttach(disk, run=run, pick_dev=pick_dev) as nbd:
+            p2 = f"{nbd.dev}p2"
+            facts["target_root_partuuid"] = run(
+                ["blkid", "-s", "PARTUUID", "-o", "value", p2], check=False
+            ).stdout.decode().strip().lower()
+            facts["target_root_fsuuid"] = run(
+                ["blkid", "-s", "UUID", "-o", "value", p2], check=False
+            ).stdout.decode().strip().lower()
+            mnt = disk + ".idmnt"
+            with RoMount(p2, mnt, run=run):
+                cfg = os.path.join(mnt, "boot/grub/grub.cfg")
+                refs = grub_root_refs(
+                    open(cfg, encoding="utf-8", errors="replace").read()
+                ) if os.path.isfile(cfg) else []
+                gd = os.path.join(mnt, "etc/default/grub.d")
+                forced = []
+                if os.path.isdir(gd):
+                    for fn in sorted(os.listdir(gd)):
+                        try:
+                            txt = open(os.path.join(gd, fn), encoding="utf-8", errors="replace").read()
+                        except OSError:
+                            continue
+                        if any(l.lstrip().startswith("GRUB_FORCE_PARTUUID=") for l in txt.splitlines()):
+                            forced.append(fn)
+                facts["grub_root_refs"] = [f"{k}={v}" for k, v in refs]
+                facts["forced_partuuid_files"] = forced
+                facts["ok"], facts["detail"] = evaluate_root_identity(
+                    refs, forced, facts["target_root_partuuid"], facts["target_root_fsuuid"]
+                )
+    except Exception as e:  # noqa: BLE001
+        facts["detail"] = f"INSTALLED_ROOT_IDENTITY_INVALID: {type(e).__name__}: {e}"
+    return facts
 
 
 def _unique_dir(base):
@@ -755,41 +849,50 @@ def scenario_iso(a):
             vm.stop()
         r.check("ISO: the data disk is byte-for-byte unchanged", sha256(data) == data_before)
         r.check("ISO: the small disk is byte-for-byte unchanged", sha256(small) == small_before)
-        # First boot from the installed disk (same UEFI variables: the boot entry curtin wrote).
-        vm2 = Vm("iso", a.arch, work, memory=2048)
-        vm2.start([{"file": target, "serial": "OCY-TARGET-7F3A", "boot": True}])
-        vm2.expect(UNCLAIMED_RX, BOOT_BUDGET)
-        wait_ssh_port(vm2.port, 300)
-        k1, k2 = keygen(os.path.join(work, "operator_i")), keygen(os.path.join(work, "operator_j"))
-        facts = claim_by_code(r, vm2, k1, k2, "ISO")
-        if facts:
-            j = ssh(vm2.port, "ocinye", k1, "sudo -n cat /var/log/ocinye/oie-install.json; findmnt -n -o FSTYPE /; findmnt -n -o FSTYPE /boot/efi; sudo -n sfdisk -J /dev/vda; swapon --noheadings | wc -l")
-            out = j.stdout.decode()
-            r.check("ISO: OIE journal on the installed disk", '"steps"' in out and '"media_check"' in out, out[:200])
-            r.check("ISO: ext4 root, vfat ESP, GPT, no swap", "ext4" in out and "vfat" in out and '"label":"gpt"' in out.replace(" ", "") and out.strip().endswith("0"), out[-300:])
-            # The ESP must carry this architecture's UEFI boot artifacts, and the
-            # installed disk's saved curtin log must show the offline install
-            # fetched nothing: a zero count over the fetch/resolution-failure and
-            # in-target install signatures proves no network package op was needed.
-            efi_expect = {
-                "amd64": ["EFI/ubuntu/shimx64.efi", "EFI/ubuntu/grubx64.efi"],
-                "arm64": ["EFI/ubuntu/shimaa64.efi", "EFI/ubuntu/grubaa64.efi"],
-            }[a.arch]
-            p = ssh(vm2.port, "ocinye", k1,
-                    "sudo -n find /boot/efi/EFI -maxdepth 3 -type f -printf '%P\\n' 2>/dev/null; "
-                    "echo '---LOG---'; "
-                    "sudo -n grep -ciE "
-                    "'no installation candidate|unable to locate package|temporary failure resolving|could not resolve host|installing packages on target system' "
-                    "/root/curtin-install.log 2>/dev/null")
-            esp_part, _, log_part = p.stdout.decode().partition("---LOG---")
-            esp_files = set(esp_part.split())
-            r.check("ISO: ESP carries the UEFI boot artifacts for the architecture",
-                    all(f in esp_files for f in efi_expect), sorted(esp_files))
-            hit = re.search(r"\b(\d+)\b", log_part)
-            r.check("ISO: offline install required no package fetch (empty curtin apt)",
-                    hit is not None and hit.group(1) == "0", log_part.strip()[:200])
-            log(f"ISO resources after claim: {json.dumps(measure(vm2.port, k1))}")
-        vm2.stop()
+        # Before the (slow) second boot, prove OFFLINE that the installed boot
+        # config resolves root to THIS target. A stale build-time PARTUUID is a
+        # typed INSTALLED_ROOT_IDENTITY_MISMATCH in seconds, not a 900 s timeout.
+        ident = installed_root_identity(target)
+        log(f"ISO installed root identity: {json.dumps(ident)}")
+        id_ok = r.check("ISO: installed boot config resolves to the actual target root", ident["ok"], ident["detail"])
+        if id_ok:
+            # First boot from the installed disk (same UEFI variables: the boot entry curtin wrote).
+            vm2 = Vm("iso", a.arch, work, memory=2048)
+            vm2.start([{"file": target, "serial": "OCY-TARGET-7F3A", "boot": True}])
+            vm2.expect(UNCLAIMED_RX, BOOT_BUDGET)
+            wait_ssh_port(vm2.port, 300)
+            k1, k2 = keygen(os.path.join(work, "operator_i")), keygen(os.path.join(work, "operator_j"))
+            facts = claim_by_code(r, vm2, k1, k2, "ISO")
+            if facts:
+                j = ssh(vm2.port, "ocinye", k1, "sudo -n cat /var/log/ocinye/oie-install.json; findmnt -n -o FSTYPE /; findmnt -n -o FSTYPE /boot/efi; sudo -n sfdisk -J /dev/vda; swapon --noheadings | wc -l")
+                out = j.stdout.decode()
+                r.check("ISO: OIE journal on the installed disk", '"steps"' in out and '"media_check"' in out, out[:200])
+                r.check("ISO: ext4 root, vfat ESP, GPT, no swap", "ext4" in out and "vfat" in out and '"label":"gpt"' in out.replace(" ", "") and out.strip().endswith("0"), out[-300:])
+                # The ESP carries this architecture's UEFI boot path (shim → grub
+                # under EFI/grub, the bootloader-id this image uses) and the
+                # removable fallback EFI/BOOT; and the installed disk's saved
+                # curtin log must show the offline install fetched nothing — a
+                # zero count over the fetch/resolution-failure and in-target
+                # install signatures proves no network package op was needed.
+                efi_expect = {
+                    "amd64": ["EFI/grub/shimx64.efi", "EFI/grub/grubx64.efi", "EFI/BOOT/BOOTX64.EFI"],
+                    "arm64": ["EFI/grub/shimaa64.efi", "EFI/grub/grubaa64.efi", "EFI/BOOT/BOOTAA64.EFI"],
+                }[a.arch]
+                p = ssh(vm2.port, "ocinye", k1,
+                        "sudo -n find /boot/efi/EFI -maxdepth 3 -type f -printf '%P\\n' 2>/dev/null; "
+                        "echo '---LOG---'; "
+                        "sudo -n grep -ciE "
+                        "'no installation candidate|unable to locate package|temporary failure resolving|could not resolve host|installing packages on target system' "
+                        "/root/curtin-install.log 2>/dev/null")
+                esp_part, _, log_part = p.stdout.decode().partition("---LOG---")
+                esp_files = set(esp_part.split())
+                r.check("ISO: ESP carries the UEFI boot artifacts for the architecture",
+                        all(f in esp_files for f in efi_expect), sorted(esp_files))
+                hit = re.search(r"\b(\d+)\b", log_part)
+                r.check("ISO: offline install required no package fetch (empty curtin apt)",
+                        hit is not None and hit.group(1) == "0", log_part.strip()[:200])
+                log(f"ISO resources after claim: {json.dumps(measure(vm2.port, k1))}")
+            vm2.stop()
     except Exception as e:  # noqa: BLE001
         invalid = f"{type(e).__name__}: {e}"
     # The same predicate decides the verdict and whether to keep the evidence,

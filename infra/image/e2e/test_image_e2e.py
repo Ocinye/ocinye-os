@@ -91,6 +91,59 @@ class CurtinSubreason(unittest.TestCase):
         self.assertEqual(m.curtin_subreason("disk write error"), "other")
 
 
+class RootIdentity(unittest.TestCase):
+    # The force-partuuid defect and its guard: the installed boot config must
+    # resolve root to the actual target, not a build-time identity.
+    TPU = "f62eda4e-48ab-45da-b7a9-f18c15f667b6"
+    TFU = "e42c50f0-ca81-4d09-9c6f-f3a031c6c0c0"
+
+    def test_grub_root_refs_reads_linux_lines(self):
+        cfg = (
+            "menuentry 'x' {\n"
+            "  search --no-floppy --fs-uuid --set=root e42c50f0-ca81-4d09-9c6f-f3a031c6c0c0\n"
+            "  linux /boot/vmlinuz root=PARTUUID=bd907978-e121-479a-9598-288628fcfd21 ro console=ttyS0\n"
+            "}\n"
+        )
+        self.assertEqual(
+            m.grub_root_refs(cfg),
+            [("PARTUUID", "bd907978-e121-479a-9598-288628fcfd21")],
+        )
+
+    def test_stale_forced_partuuid_is_a_typed_mismatch(self):
+        # The exact shipped defect: a forced cloud-image PARTUUID.
+        refs = [("PARTUUID", "bd907978-e121-479a-9598-288628fcfd21")]
+        ok, detail = m.evaluate_root_identity(refs, ["40-force-partuuid.cfg"], self.TPU, self.TFU)
+        self.assertFalse(ok)
+        self.assertIn("INSTALLED_ROOT_IDENTITY_MISMATCH", detail)
+        self.assertIn("GRUB_FORCE_PARTUUID", detail)
+
+    def test_wrong_partuuid_without_force_is_still_a_mismatch(self):
+        refs = [("PARTUUID", "bd907978-e121-479a-9598-288628fcfd21")]
+        ok, detail = m.evaluate_root_identity(refs, [], self.TPU, self.TFU)
+        self.assertFalse(ok)
+        self.assertIn("INSTALLED_ROOT_IDENTITY_MISMATCH", detail)
+
+    def test_root_resolving_to_the_target_fs_uuid_is_ok(self):
+        refs = [("UUID", self.TFU)]
+        ok, _ = m.evaluate_root_identity(refs, [], self.TPU, self.TFU)
+        self.assertTrue(ok)
+
+    def test_root_resolving_to_the_target_partuuid_is_ok(self):
+        refs = [("PARTUUID", self.TPU)]
+        ok, _ = m.evaluate_root_identity(refs, [], self.TPU, self.TFU)
+        self.assertTrue(ok)
+
+    def test_no_root_reference_is_unknown_not_pass(self):
+        ok, detail = m.evaluate_root_identity([], [], self.TPU, self.TFU)
+        self.assertFalse(ok)
+        self.assertIn("INSTALLED_ROOT_IDENTITY_UNKNOWN", detail)
+
+    def test_empty_target_identity_never_passes(self):
+        # A blank target identity must not vacuously match a blank ref.
+        ok, _ = m.evaluate_root_identity([("UUID", "")], [], "", "")
+        self.assertFalse(ok)
+
+
 class StatusPredicate(unittest.TestCase):
     # B, H: the verdict is a pure function of the checks and the invalid reason.
     def test_pass_only_when_every_check_passed(self):

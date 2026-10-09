@@ -446,6 +446,32 @@ pub fn boot_packages(arch: &str) -> (Vec<&'static str>, Vec<&'static str>) {
     }
 }
 
+/// Fragments under `etc/default/grub.d` that pin `GRUB_FORCE_PARTUUID`. Ubuntu
+/// cloud images ship `40-force-partuuid.cfg` with the image's own root PARTUUID;
+/// if it survives into the metal rootfs the installed kernel command line keeps
+/// that stale build-time identity instead of the fresh target's, and the target
+/// cannot find its root. The metal rootfs must carry none.
+pub fn forced_partuuid_fragments(root: &Path) -> Vec<String> {
+    let dir = root.join("etc/default/grub.d");
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return vec![];
+    };
+    let mut hits = vec![];
+    for e in entries.flatten() {
+        let p = e.path();
+        if let Ok(text) = fs::read_to_string(&p) {
+            if text
+                .lines()
+                .any(|l| l.trim_start().starts_with("GRUB_FORCE_PARTUUID="))
+            {
+                hits.push(e.file_name().to_string_lossy().into_owned());
+            }
+        }
+    }
+    hits.sort();
+    hits
+}
+
 /// Packages marked `install ok installed` in a target's dpkg status file.
 fn installed_debs(status_path: &Path) -> std::collections::BTreeSet<String> {
     let mut set = std::collections::BTreeSet::new();
@@ -632,6 +658,15 @@ pub fn inspect(m: &Mounted, profile: &str, arch: &str, release_id: &str) -> Insp
             forbidden.is_empty(),
             (!forbidden.is_empty()).then(|| forbidden.join(",")),
         );
+        // A forced PARTUUID in the metal rootfs becomes the installed kernel's
+        // stale root= on every fresh disk. The installed root identity must be
+        // derived from the actual target, so no fragment may pin it.
+        let forced = forced_partuuid_fragments(r);
+        c(
+            "no_forced_partuuid",
+            forced.is_empty(),
+            (!forced.is_empty()).then(|| forced.join(",")),
+        );
     }
     c(
         "no_instance_state",
@@ -781,6 +816,30 @@ mod tests {
         let amd_with_bios = pkgset(&["grub-efi-amd64", "grub-pc"]);
         let (_m, forbidden) = boot_package_report("amd64", &amd_with_bios);
         assert_eq!(forbidden, vec!["grub-pc"]);
+    }
+
+    #[test]
+    fn force_partuuid_no_rootfs_e_detectado() {
+        let d = std::env::temp_dir().join(format!("ocinye-forcepu-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(d.join("etc/default/grub.d")).unwrap();
+        // A clean rootfs: nothing pins the identity.
+        fs::write(
+            d.join("etc/default/grub.d/90-ocinye.cfg"),
+            "GRUB_TIMEOUT=3\n",
+        )
+        .unwrap();
+        assert!(forced_partuuid_fragments(&d).is_empty());
+        // The cloud image's fragment is caught.
+        fs::write(
+            d.join("etc/default/grub.d/40-force-partuuid.cfg"),
+            "# comment\nGRUB_FORCE_PARTUUID=bd907978-e121-479a-9598-288628fcfd21\n",
+        )
+        .unwrap();
+        assert_eq!(
+            forced_partuuid_fragments(&d),
+            vec!["40-force-partuuid.cfg".to_string()]
+        );
     }
 
     #[test]

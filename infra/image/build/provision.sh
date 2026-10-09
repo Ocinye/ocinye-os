@@ -182,6 +182,20 @@ stage_metal() {
     mapfile -t bios_grub < <(dpkg-query -W -f='${Package}\n' grub-pc grub-pc-bin 2>/dev/null || true)
     if [ "${#bios_grub[@]}" -gt 0 ]; then "${APT[@]}" purge "${bios_grub[@]}"; fi
   fi
+  # Ubuntu cloud images ship /etc/default/grub.d/40-force-partuuid.cfg, which
+  # pins the CLOUD IMAGE's own root PARTUUID via GRUB_FORCE_PARTUUID for
+  # initrdless fast boot. On a fresh metal install curtin partitions a new disk
+  # with new PARTUUIDs and regenerates grub.cfg in-target; if that fragment
+  # survives, the installed kernel command line keeps the stale build-time
+  # PARTUUID (root=PARTUUID=<cloud image>) and the target cannot find its root
+  # ("Gave up waiting for root file system device"). Drop any fragment that
+  # pins GRUB_FORCE_PARTUUID so the installed grub.cfg derives root from the
+  # ACTUAL target filesystem. v1 installs a real initramfs, so initrdless fast
+  # boot is not needed.
+  for f in /etc/default/grub.d/*.cfg; do
+    [ -e "$f" ] || continue
+    if grep -q '^[[:space:]]*GRUB_FORCE_PARTUUID=' "$f"; then rm -f "$f"; fi
+  done
   purge_kvm_kernel
   policy_off
   touch /etc/cloud/cloud-init.disabled
