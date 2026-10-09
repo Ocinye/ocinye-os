@@ -203,6 +203,14 @@ LAST_CONNECT = {}
 # on 22/tcp while it is unclaimed (`ufw limit`): stay under it.
 MIN_GAP = 6.5
 
+# Confirming a claim enables the runtime at CLAIMED — `systemctl enable --now`
+# of containerd/docker/… runs synchronously inside the confirm command before
+# it returns (firstboot `on_claimed`). On an emulated amd64 guest (TCG on an
+# arm64 host) bringing docker up legitimately takes minutes, far past the
+# default 120 s SSH budget, so the step that triggers it waits longer. This is
+# test tolerance for emulation speed; the machine reaches CLAIMED either way.
+CLAIM_CONFIRM_TIMEOUT = 600
+
 
 def throttle(port):
     gap = time.time() - LAST_CONNECT.get(port, 0)
@@ -374,7 +382,7 @@ def claim_by_code(r, vm, key, other_key, label):
     r.check(f"{label}: replay of the consumed code refused", rc != 0 and not ev, err.strip())
     bad = ssh(vm.port, "ocinye", key, "sudo -n /usr/lib/ocinye/ocinye-firstboot confirm --claim " + "0" * 32)
     r.check(f"{label}: wrong claim id refused", b"CLAIM_ID_MISMATCH" in bad.stdout, bad.stdout)
-    ok = ssh(vm.port, "ocinye", key, "sudo -n /usr/lib/ocinye/ocinye-firstboot confirm --claim " + enrolled["claim_id"])
+    ok = ssh(vm.port, "ocinye", key, "sudo -n /usr/lib/ocinye/ocinye-firstboot confirm --claim " + enrolled["claim_id"], timeout=CLAIM_CONFIRM_TIMEOUT)
     confirmed = ok.returncode == 0 and b'"Confirmed"' in ok.stdout
     r.check(f"{label}: confirmed by the enrolled key", confirmed, ok.stdout + ok.stderr)
     r.check(f"{label}: confirm prints only the protocol JSON", ok.stdout.strip().count(b"\n") == 0 and ok.stdout.strip().startswith(b"{"), ok.stdout)
@@ -448,7 +456,7 @@ def scenario_virt(a):
             r.check("clones: different bootstrap ids", wa["bootstrap_id"] != wb["bootstrap_id"])
             r.check("clones: different host keys", {k["fingerprint"] for k in wa["host_keys"]}.isdisjoint({k["fingerprint"] for k in wb["host_keys"]}))
         fp = sh("ssh-keygen", "-l", "-E", "sha256", "-f", kp + ".pub").stdout.decode().split()[1]
-        p = ssh(b_vm.port, "ocinye", kp, f"sudo -n /usr/lib/ocinye/ocinye-firstboot claim --provisioned --key {fp}")
+        p = ssh(b_vm.port, "ocinye", kp, f"sudo -n /usr/lib/ocinye/ocinye-firstboot claim --provisioned --key {fp}", timeout=CLAIM_CONFIRM_TIMEOUT)
         r.check("B: claimed with the provisioned key", p.returncode == 0 and b'"Confirmed"' in p.stdout, p.stdout + p.stderr)
         fb = machine_facts(b_vm.port, kp)
         if fa:
@@ -540,6 +548,15 @@ class NbdAttach:
         # -r is mandatory: the target is evidence and must not be written to.
         self.run(["qemu-nbd", "--fork", "-r", "-c", self.dev, self.disk])
         self.run(["partprobe", self.dev], check=False)
+        # A freshly attached nbd device needs udev to settle before its
+        # partition nodes and blkid data exist; querying too soon returns empty
+        # (seen as a false identity mismatch) or an unmountable partition.
+        self.run(["udevadm", "settle"], check=False)
+        if self.run is _run_cmd:
+            for _ in range(40):
+                if os.path.exists(self.dev + "p2"):
+                    break
+                time.sleep(0.25)
         return self
 
     def __exit__(self, *exc):
@@ -696,6 +713,21 @@ def collect_target_diagnostics(disk, diag, run=None, pick_dev=None):
     return collected
 
 
+def _blkid_value(run, dev, field, tries=24):
+    """A blkid field (lowercased), retried while udev and the blkid cache
+    settle after a fresh nbd attach — an unsettled device answers empty, not an
+    error, so an empty read is retried rather than taken as a real mismatch.
+    With an injected (test) runner there is nothing to settle, so it is read
+    once."""
+    for i in range(tries):
+        v = run(["blkid", "-s", field, "-o", "value", dev], check=False).stdout.decode().strip().lower()
+        if v or run is not _run_cmd:
+            return v
+        run(["udevadm", "settle"], check=False)
+        time.sleep(0.25)
+    return ""
+
+
 def installed_root_identity(disk, run=None, pick_dev=None):
     """Attach the freshly installed disk READ-ONLY and prove that its generated
     boot config resolves root to this target's own root partition/filesystem,
@@ -713,12 +745,8 @@ def installed_root_identity(disk, run=None, pick_dev=None):
     try:
         with NbdAttach(disk, run=run, pick_dev=pick_dev) as nbd:
             p2 = f"{nbd.dev}p2"
-            facts["target_root_partuuid"] = run(
-                ["blkid", "-s", "PARTUUID", "-o", "value", p2], check=False
-            ).stdout.decode().strip().lower()
-            facts["target_root_fsuuid"] = run(
-                ["blkid", "-s", "UUID", "-o", "value", p2], check=False
-            ).stdout.decode().strip().lower()
+            facts["target_root_partuuid"] = _blkid_value(run, p2, "PARTUUID")
+            facts["target_root_fsuuid"] = _blkid_value(run, p2, "UUID")
             mnt = disk + ".idmnt"
             with RoMount(p2, mnt, run=run):
                 cfg = os.path.join(mnt, "boot/grub/grub.cfg")
@@ -879,7 +907,7 @@ def scenario_iso(a):
                     "arm64": ["EFI/grub/shimaa64.efi", "EFI/grub/grubaa64.efi", "EFI/BOOT/BOOTAA64.EFI"],
                 }[a.arch]
                 p = ssh(vm2.port, "ocinye", k1,
-                        "sudo -n find /boot/efi/EFI -maxdepth 3 -type f -printf '%P\\n' 2>/dev/null; "
+                        "sudo -n find /boot/efi -maxdepth 3 -type f -printf '%P\\n' 2>/dev/null; "
                         "echo '---LOG---'; "
                         "sudo -n grep -ciE "
                         "'no installation candidate|unable to locate package|temporary failure resolving|could not resolve host|installing packages on target system' "
