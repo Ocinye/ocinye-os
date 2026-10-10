@@ -45,3 +45,19 @@ grep -q -F -x '        ocinye_guard_skip "${devname}" && continue' "$casper" ||
 grep -q -F -x '. /scripts/ocinye-guard-functions' "$casper" ||
     fail "guard functions are not sourced"
 sh -n "$casper" || fail "patched casper does not parse"
+
+# casper activates every swap partition it finds on sd*, hd* and vd* disks
+# (casper-bottom/13swap), and the kernel accepts swap on a device whose
+# read-only flag is set: the flag does not stop it (observed, L0-S). With the
+# guard armed that step does nothing.
+swap="${DESTDIR}/scripts/casper-bottom/13swap"
+[ -f "$swap" ] || fail "no casper-bottom/13swap in this initramfs"
+[ "$(grep -c -F -x '. /scripts/casper-functions' "$swap")" = 1 ] ||
+    fail "casper's swap step is not where it was: review the guard"
+grep -q -w swapon "$swap" || fail "casper's swap step no longer calls swapon: review the guard"
+sed -i -e '/^\. \/scripts\/casper-functions$/a\[ -e /run/ocinye/guard ] \&\& exit 0' "$swap"
+grep -q -F -x '[ -e /run/ocinye/guard ] && exit 0' "$swap" || fail "casper's swap step was not restrained"
+sh -n "$swap" || fail "patched swap step does not parse"
+# Nothing else in the initramfs may turn swap on.
+others="$(grep -l -w swapon "${DESTDIR}"/scripts/*/* 2>/dev/null | grep -v '/casper-bottom/13swap$' || true)"
+[ -z "$others" ] || fail "another initramfs script calls swapon: $others"

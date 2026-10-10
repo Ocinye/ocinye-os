@@ -757,6 +757,9 @@ mod tests {
         let sweep =
             guard_file("usr/share/initramfs-tools/scripts/casper-premount/05ocinye_blockguard");
         let hook = guard_file("usr/share/initramfs-tools/hooks/ocinye-blockguard");
+        // casper's swap step is restrained by name: the read-only flag does
+        // not stop swapon.
+        assert!(hook.contains("casper-bottom/13swap") && hook.contains("&& exit 0"));
         for text in [&functions, &rule, &init, &sweep, &hook] {
             assert!(
                 !text.contains("--setrw"),

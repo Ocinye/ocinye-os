@@ -265,6 +265,7 @@ UNIT
   [ -x "$m/scripts/casper-premount/05ocinye_blockguard" ] || { echo "block guard: sweep missing from the initramfs" >&2; exit 1; }
   [ -f "$m/usr/lib/udev/rules.d/01-ocinye-blockguard.rules" ] || { echo "block guard: udev rule missing from the initramfs" >&2; exit 1; }
   grep -q -F 'ocinye_guard_skip "${devname}" && continue' "$m/scripts/casper" || { echo "block guard: casper is not restrained" >&2; exit 1; }
+  grep -q -F -x '[ -e /run/ocinye/guard ] && exit 0' "$m/scripts/casper-bottom/13swap" || { echo "block guard: casper's swap step is not restrained" >&2; exit 1; }
   local at_guard at_udev
   at_guard="$(grep -n 'init-top/ocinye-blockguard' "$m/scripts/init-top/ORDER" | head -1 | cut -d: -f1)"
   at_udev="$(grep -n 'init-top/udev' "$m/scripts/init-top/ORDER" | head -1 | cut -d: -f1)"

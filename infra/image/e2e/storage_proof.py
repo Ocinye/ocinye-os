@@ -519,11 +519,14 @@ def run(a):
     iso_digest, _ = sha256_file(a.iso)
     if a.media == "usb":
         # A stick larger than the image, as real ones are: the hybrid ISO at
-        # the start and free space after it. (casper may want that space.) The
-        # overlay's backing size is the stick's, so the ISO itself is only read.
+        # the start and free space after it (casper may want that space). The
+        # stick is a copy; the ISO file itself is only ever read.
+        base = os.path.join(work, "stick.raw")
+        sh("cp", "--sparse=always", a.iso, base)
+        sh("truncate", "-s", str(os.path.getsize(a.iso) + a.stick_free_mib * MIB), base)
+        os.chmod(base, 0o444)
         stick = os.path.join(work, "medium.overlay.qcow2")
-        size = os.path.getsize(a.iso) + a.stick_free_mib * MIB
-        sh("qemu-img", "create", "-q", "-f", "qcow2", "-F", "raw", "-b", a.iso, stick, str(size))
+        sh("qemu-img", "create", "-q", "-f", "qcow2", "-F", "raw", "-b", base, stick)
         medium = {"file": stick, "format": "qcow2"}
     else:
         medium = {"file": a.iso}
@@ -571,6 +574,9 @@ def run(a):
     if a.media == "usb":
         out["medium_written_bytes"] = overlay_writes(medium["file"])
     out["iso_sha256_after"] = sha256_file(a.iso)[0]
+    if a.media == "usb":
+        os.chmod(os.path.join(work, "stick.raw"), 0o644)
+        os.remove(os.path.join(work, "stick.raw"))
     out["changed"] = changed
     status = "INVALID" if invalid else ("FAIL" if changed or out.get("medium_written_bytes") else "PASS")
     out["status"] = status
