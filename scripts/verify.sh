@@ -98,6 +98,11 @@ step "Ligações da documentação"
 # que a documentação não é de confiança, e a partir daí ninguém a lê.
 python3 ./scripts/documentation_links.py
 
+step "Ficheiros incluídos na compilação"
+# Um `include_bytes!` sobre um ficheiro ignorado pelo git compila aqui e em mais
+# lado nenhum. Um clone novo tem de se bastar.
+python3 ./scripts/compile_time_fixtures.py
+
 step "Consumidores do esquema"
 # Uma tabela sem leitor é uma funcionalidade que saiu e deixou o esquema, ou um
 # esquema que promete o que não existe. As migrations são história e não se

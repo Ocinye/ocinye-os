@@ -79,6 +79,17 @@ publicação, sem chave de produção, sem deploy
   `scripts/image-e2e.sh`)**: B01–B17 numa VM descartável, base fixada e
   verificada por `gpgv`, limpeza e inspecção offline, ISO híbrido só UEFI, QCOW2,
   RAW, SBOM SPDX 2.3, proveniência, assinatura de desenvolvimento.
+### D011 — clone novo auto-suficiente e certificação externa preparada — 2026-10-11
+
+- Os três certificados públicos de teste que os testes de TLS do Installer
+  incluem na compilação passam a estar versionados, com três excepções nomeadas
+  no `.gitignore` (`*.pem` continua ignorado). Um clone novo não compilava.
+- Guarda novo, no `verify.sh` e na CI: um `include_bytes!`/`include_str!` sobre
+  um ficheiro que o git não segue falha (`scripts/compile_time_fixtures.py`).
+- Certificação final numa VM `amd64` externa: um comando
+  (`scripts/installer-certify-external.sh`) e o seu
+  [runbook](docs/runbooks/certify-installer-on-external-amd64-vm.md). `NOT_RUN`;
+  o D011 fica `D011_READY_FOR_FINAL_AMD64_CERTIFICATION`.
 
 ### D011 — Ocinye OS Installer — 2026-10-05 (ramo `feat/design-d011`)
 
