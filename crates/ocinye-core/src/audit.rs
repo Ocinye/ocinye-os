@@ -151,6 +151,12 @@ pub mod action {
     pub const ACCESS_ENDPOINT_CHANGED: &str = "access_endpoint_changed";
     /// D010 · The active context of a session changed.
     pub const CONTEXT_CHANGED: &str = "context_changed";
+    /// D011 · An Instance was created by a graphical installation, which this
+    /// records by its `installation_id` (actor `system:installer`).
+    pub const INSTANCE_INSTALLED: &str = "instance_installed";
+    /// D011 · A Distribution-bound access endpoint was seeded at installation,
+    /// before any member session existed (actor `system:installer`).
+    pub const ACCESS_ENDPOINT_SEEDED: &str = "access_endpoint_seeded";
     /// An authorization denial worth recording.
     pub const SECURITY_DENIAL: &str = "security_denial";
     /// A compute node was enrolled.
@@ -236,6 +242,9 @@ pub struct AuditEntry {
     /// attributable. Without this the identity trail would be anonymous exactly
     /// where it matters most (briefing §88).
     pub actor: Option<(Uuid, Uuid)>,
+    /// A system actor — a subject such as `system:installer` and the
+    /// organisation — for actions taken where no person exists yet.
+    pub system: Option<(&'static str, Uuid)>,
 }
 
 impl AuditEntry {
@@ -252,6 +261,7 @@ impl AuditEntry {
             outcome: Outcome::Success,
             metadata: Map::new(),
             actor: None,
+            system: None,
         }
     }
 
@@ -262,6 +272,16 @@ impl AuditEntry {
     #[must_use]
     pub const fn actor(mut self, person_id: Uuid, organisation_id: Uuid) -> Self {
         self.actor = Some((person_id, organisation_id));
+        self
+    }
+
+    /// Attribute the entry to a system actor (`system:installer`).
+    ///
+    /// Never a person: the subject says which part of the installation acted,
+    /// and the organisation scopes the row like any other.
+    #[must_use]
+    pub const fn system_actor(mut self, subject: &'static str, organisation_id: Uuid) -> Self {
+        self.system = Some((subject, organisation_id));
         self
     }
 
@@ -339,14 +359,19 @@ pub async fn record(
     .bind(
         principal
             .map(|p| p.organisation_id)
-            .or(entry.actor.map(|(_, organisation_id)| organisation_id)),
+            .or(entry.actor.map(|(_, organisation_id)| organisation_id))
+            .or(entry.system.map(|(_, organisation_id)| organisation_id)),
     )
     .bind(
         principal
             .map(|p| p.person_id)
             .or(entry.actor.map(|(person_id, _)| person_id)),
     )
-    .bind(principal.map(|p| p.subject.as_str()))
+    .bind(
+        principal
+            .map(|p| p.subject.as_str())
+            .or(entry.system.map(|(subject, _)| subject)),
+    )
     .bind(entry.action)
     .bind(entry.resource_type)
     .bind(entry.resource_id)

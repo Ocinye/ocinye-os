@@ -10,6 +10,12 @@
 # Secrets of any kind. Belt and braces alongside the rule that they are never
 # written into the repository in the first place (CLAUDE.md §39).
 *.pem
+# Three PUBLIC test certificates the Installer's TLS tests include at compile
+# time (a fixture CA and two deliberately weak leaves; no private key). Named
+# one by one: `*.pem` stays ignored everywhere else.
+!crates/ocinye-installer-controller/tests/fixtures/test-ca-sha256.pem
+!crates/ocinye-installer-controller/tests/fixtures/leaf-ecdsa-with-sha1.pem
+!crates/ocinye-installer-controller/tests/fixtures/leaf-ec-explicit-params.pem
 *.key
 *.p12
 *.pfx

@@ -1,142 +1,222 @@
 {
   "schema_version": 1,
-  "design_revision": "D010",
-  "package_revision": "D010B",
-  "supersedes": "every earlier D010 export (D010, D010 2): D010 2 was refused as not ready; D010B is the Phase-B certified package",
-  "based_on": "D009 (main @ b87d26f, merge of PR #192)",
-  "repository_head_before": "b87d26f",
-  "integrated_on": "2026-10-01",
-  "integration_branch": "feat/design-d010",
-  "integration_status": "INTEGRATED_FUNCTIONALLY_CERTIFIED_BROWSER_CERTIFIED; C9_PASSWORD_RECOVERY_NOT_IMPLEMENTED; D011_INSTALLER_OUT_OF_SCOPE",
+  "design_revision": "D011",
+  "package_revision": "D011",
+  "based_on": "main @ 9596bc4 (A001 merged; Design base, no drift)",
+  "integrated_on": "2026-10-05",
+  "integration_branch": "feat/design-d011",
+  "integration_status": "INTEGRATED_LOCAL_ARM64_CERTIFIED; CLOUD_AMD64_GATE_PENDING; NOT_MERGED; NOT_DEPLOYED",
   "package": {
-    "files": 848,
-    "checksums": "846/846 OK",
-    "reference_count": 132,
-    "manifest_defect": "top-level ready_for_code=false contradicts the phase_b block and D010_REPORT (PHASE_B=COMPLETE); start order followed",
-    "adr_0014_patch": "corrupt (\"corrupt patch at line 11\"); applied by hand, same text"
+    "path": "ocinye-design-complete-D011",
+    "files": 927,
+    "checksums": "926/926 OK (sha256; the sums file excluded)",
+    "ready_for_code": true,
+    "screens": 19,
+    "error_states": "24 (I20–I43)",
+    "references": 60,
+    "i18n_keys": "544 × pt/en/fr; strings.js == installer.json",
+    "expected_literals": "ui/screens/home paths; file:///etc/passwd in d008 hostile-page.html is a test fixture"
   },
-  "instance_model": "ONE_INSTANCE_PER_INSTALLATION; governing organisation = instance_identity.organisation_id; profile storage organisations.profile (mirror for one release)",
-  "migrations": {
-    "0060": "instance_distributions + member_distribution_access (+ Code: cascade-safe keep-one trigger, composite person FK, enable-on-create and single-Distribution grant triggers)",
-    "0061": "member_desktop_layouts and member_app_pins keyed by (person_id, distribution); wallpaper inside the layout",
-    "0062": "access_endpoints",
-    "0063": "Code: sessions.active_distribution, active_context_kind, active_context_id"
-  },
-  "migration_proof": "a populated D009-era database (0001–0059) upgraded through 0063: layout and pin md5 checksums identical, each member mapped to the Instance's own Distribution, empty pin lists kept, no copies to other Distributions; also exercised on the d001_preview copy used for browser certification",
-  "core": {
-    "modules": [
-      "organisation::distributions",
-      "organisation::endpoints",
-      "organisation::contexts"
-    ],
-    "routes": [
-      "GET /me/distributions",
-      "POST /me/distribution",
-      "GET /me/contexts",
-      "POST /me/context",
-      "GET /instance/distributions",
-      "POST /instance/distributions/{d}/enable|disable",
-      "GET /instance/distribution-access",
-      "PUT|DELETE /instance/distribution-access/{person}/{d}",
-      "GET /access/resolve (public, this Instance only)",
-      "GET|POST /access-endpoints",
-      "POST /access-endpoints/{id}/activate|binding|disable|observe",
-      "POST /auth/reauthenticate"
-    ],
-    "removed": [
-      "PUT /instance/profile"
-    ],
-    "revalidation": "active Distribution revalidated on every request; typed refusals distribution_not_enabled / distribution_no_access"
-  },
-  "workspace": {
-    "host_resolution": "access::layer: Host (X-Forwarded-Host only from OCINYE_TRUSTED_PROXIES), resolved in the Core, 5 s cache; unknown → S13 404, unverified → S14, Core down → S36, disabled endpoint → S40 410 once then S13",
-    "session": "per host (cookie without Domain); a session from another endpoint is dropped",
-    "origin": "expected origin per resolved endpoint",
-    "entry": "0 → S10, 1 → direct, many → S09; bound: S08, S11, S12",
-    "switch": "S15/S16 via the D002 dirty-close; Cancel aborts; windows close; context reset; bound endpoint → S17 hosts",
-    "context": "S19–S21",
-    "lock": "S22 (⌘L/Ctrl+L), unlock re-checked by the Core, 5 attempts",
-    "deep_link": "S34",
-    "administration": [
-      "S26/S38 Distributions",
-      "S37 access",
-      "S27–S32 endpoints",
-      "S33 defaults (Instance layer not available)"
-    ]
+  "product_decision": "Server target: Ubuntu Server 24.04 LTS minimal only (2026-10-04); Debian removed; DEBIAN12_FRESH_INSTALL_E2E = NOT_APPLICABLE",
+  "implementation": {
+    "window": "apps/installer (Tauri 2.12, outside the workspace; 40 commands; CSP as the Workspace)",
+    "renderer": "apps/installer/ui/app.js — the Design screens as class-only DOM; Code-owned texts in strings-code.js (x.*)",
+    "controller": "crates/ocinye-installer-controller (state machine, SSH with pinned host key, bundle/TLS validation, plan, operator-side verification, receipt)",
+    "contracts": "crates/ocinye-installer-contracts",
+    "bootstrap": "services/installer-bootstrap (static musl; closed protocol; detached executor; journal; resume)",
+    "release_manifest": "services/release-tool; MANIFEST.json + ocinye-bootstrap in the release bundle",
+    "core": "endpoint-seed; verify-schema, verify-instance, verify-endpoints, verify-admin-bootstrap (read-only)"
   },
   "code_owned_keys": [
-    "adm.ep.dns.here",
-    "adm.ep.dns.elsewhere",
-    "adm.ep.observe",
-    "adm.ep.activate"
+    "x.welcomeNeed2",
+    "x.preDockerInstall",
+    "x.distroBlocked",
+    "x.distroGui",
+    "x.dockerUnsupported",
+    "x.dockerOld",
+    "x.tlsWeak",
+    "x.tlsProvided",
+    "x.doneNext1",
+    "x.verLoginD",
+    "x.osD",
+    "x.archBlocked",
+    "x.timeBlocked",
+    "x.cpuBlocked",
+    "x.ramBlock",
+    "x.hwPartial"
   ],
-  "tests": {
-    "core_d010_distributions": 9,
-    "workspace_d010_journeys": 12,
-    "updated_for_d010": [
-      "d001_journeys (S07/S08 door)",
-      "d009_journeys (door on a bound endpoint)",
-      "d005_journeys (context chip lists the member's projects)",
-      "d002_d001_equivalence (lock is real, declared normalisation)",
-      "ui::shell lock test",
-      "routes router_tests (seeded host resolution)",
-      "instance_profiles, application_boundary_http, unauthenticated_sweep_http, member_app_pins, member_desktop_layouts"
-    ]
-  },
-  "reversion_proofs": {
-    "run": 11,
-    "caught": 11,
-    "cases": [
-      "unknown host",
-      "member access revalidation",
-      "last enabled (Core)",
-      "last enabled (database trigger)",
-      "cross-Instance access (database FK)",
-      "layout scope",
-      "pin scope",
-      "bound endpoint authorization",
-      "dirty-window cancel",
-      "context reset",
-      "open-redirect guard"
+  "ui_validation": {
+    "states": 60,
+    "locales": [
+      "pt",
+      "en",
+      "fr"
     ],
-    "note": "three first runs were INVALID and are recorded as such: two caught with a different signature than declared (defence in depth: the next guard refused), one exposed a test that passed for the wrong reason (a CHECK constraint, not the trigger) — the test was fixed and then caught the reversion"
+    "sizes": [
+      "960x640",
+      "1200x800",
+      "1600x1000"
+    ],
+    "checks_passed": "540/540"
   },
-  "browser_certification": {
-    "stack": "local Core + Workspace on a copy of the D009 preview test database migrated to 0063; endpoints 127.0.0.1 (canonical, generic) and business.d010.localhost (bound)",
-    "widths": "1440, 924, 900, 820, 760, 720, 390: 0 px horizontal overflow on the D010 surfaces; at 390 every D010 control ≥ 44 px",
-    "keyboard": "S09 Tab/Enter; S16 and governed confirmations: initial focus Cancel, Esc cancels, Tab trapped; ⌘L locks",
-    "locales": "pt, en, fr: no raw keys",
-    "findings_fixed": [
-      "oc-access.css was linked only on the Auth surface; now also on the Shell, after oc-apps.css as its header asks",
-      "admin action buttons lost their accessible name when the label hides at narrow widths (aria-label added)",
-      "S33 showed {distribution}/{version} placeholders",
-      "endpoint host links 17 px tall at 390",
-      "D010 confirmations had no initial focus or Esc (reuse of the D006 org-confirm hook)",
-      "the S16/S34 sheets opened on a bound endpoint"
-    ]
+  "local_certification": {
+    "engine": "Lima (vz)",
+    "image": "ubuntu-24.04-minimal-cloudimg-arm64 release-20261001",
+    "vm": "2 vCPU / 4 GiB / 40 GiB (test allocation)",
+    "bundle": "848a9249ac50 (server side identical to the final commit)",
+    "clean_journey": "through the real window (ui_bridge over App::dispatch), I01–I18; install 83 s; ACTIVATION_PENDING[DNS] → INSTALLED_TEST_MODE; first admin forced to change password then MFA; reboot survival",
+    "secret_audit": "10 secrets, 1078 targets, 3950 argv samples, 0 hits",
+    "app_bundle": "Ocinye OS Installer.app 14.93 MiB arm64, ad-hoc signature only"
   },
-  "not_implemented": {
-    "C9_S24_password_recovery": "MISSING_DESIGN_STATE (no completion screen) + NOT_CONFIGURED (no system mail transport)",
-    "S25_invite_link": "DEFERRED",
-    "S33_instance_layer": "DEFERRED (FG-014)",
-    "S35_maintenance": "DEFERRED",
-    "S01_S06_installer, certificates, proxy, DNS": "D011_REQUIRED / HONESTLY_UNAVAILABLE"
-  },
-  "adr": [
-    "0019 (Accepted)",
-    "0020 (Accepted)",
-    "0021 (Proposed — implementation is D011)",
-    "0625 (Accepted)",
-    "0624 (D010 amendment)",
-    "0014 (corrected: organisations.profile)",
-    "CLAUDE.md §34.3 (amended)"
+  "not_implemented": [
+    "ACME (DEFERRED)",
+    "RELEASE_SIGNING",
+    "PROVIDER_MODE",
+    "MACOS_SIGNING",
+    "MACOS_NOTARIZATION",
+    "Windows/Linux desktop certification",
+    "UBUNTU2404_CLOUD_AMD64_E2E (pending)"
   ],
-  "feedback": "docs/ui/CODE_FEEDBACK.md (D010 section on top)",
-  "verify_sh": "run on the exact commit that carries this record; the outcome is in the D010 report",
-  "deploy": "NOT_PERFORMED",
-  "deploy_authorization": "NOT_GIVEN",
-  "production_install": "NOT_PERFORMED",
   "history": [
+    {
+      "schema_version": 1,
+      "design_revision": "D010",
+      "package_revision": "D010B",
+      "supersedes": "every earlier D010 export (D010, D010 2): D010 2 was refused as not ready; D010B is the Phase-B certified package",
+      "based_on": "D009 (main @ b87d26f, merge of PR #192)",
+      "repository_head_before": "b87d26f",
+      "integrated_on": "2026-10-01",
+      "integration_branch": "feat/design-d010",
+      "integration_status": "INTEGRATED_FUNCTIONALLY_CERTIFIED_BROWSER_CERTIFIED; C9_PASSWORD_RECOVERY_NOT_IMPLEMENTED; D011_INSTALLER_OUT_OF_SCOPE",
+      "package": {
+        "files": 848,
+        "checksums": "846/846 OK",
+        "reference_count": 132,
+        "manifest_defect": "top-level ready_for_code=false contradicts the phase_b block and D010_REPORT (PHASE_B=COMPLETE); start order followed",
+        "adr_0014_patch": "corrupt (\"corrupt patch at line 11\"); applied by hand, same text"
+      },
+      "instance_model": "ONE_INSTANCE_PER_INSTALLATION; governing organisation = instance_identity.organisation_id; profile storage organisations.profile (mirror for one release)",
+      "migrations": {
+        "0060": "instance_distributions + member_distribution_access (+ Code: cascade-safe keep-one trigger, composite person FK, enable-on-create and single-Distribution grant triggers)",
+        "0061": "member_desktop_layouts and member_app_pins keyed by (person_id, distribution); wallpaper inside the layout",
+        "0062": "access_endpoints",
+        "0063": "Code: sessions.active_distribution, active_context_kind, active_context_id"
+      },
+      "migration_proof": "a populated D009-era database (0001–0059) upgraded through 0063: layout and pin md5 checksums identical, each member mapped to the Instance's own Distribution, empty pin lists kept, no copies to other Distributions; also exercised on the d001_preview copy used for browser certification",
+      "core": {
+        "modules": [
+          "organisation::distributions",
+          "organisation::endpoints",
+          "organisation::contexts"
+        ],
+        "routes": [
+          "GET /me/distributions",
+          "POST /me/distribution",
+          "GET /me/contexts",
+          "POST /me/context",
+          "GET /instance/distributions",
+          "POST /instance/distributions/{d}/enable|disable",
+          "GET /instance/distribution-access",
+          "PUT|DELETE /instance/distribution-access/{person}/{d}",
+          "GET /access/resolve (public, this Instance only)",
+          "GET|POST /access-endpoints",
+          "POST /access-endpoints/{id}/activate|binding|disable|observe",
+          "POST /auth/reauthenticate"
+        ],
+        "removed": [
+          "PUT /instance/profile"
+        ],
+        "revalidation": "active Distribution revalidated on every request; typed refusals distribution_not_enabled / distribution_no_access"
+      },
+      "workspace": {
+        "host_resolution": "access::layer: Host (X-Forwarded-Host only from OCINYE_TRUSTED_PROXIES), resolved in the Core, 5 s cache; unknown → S13 404, unverified → S14, Core down → S36, disabled endpoint → S40 410 once then S13",
+        "session": "per host (cookie without Domain); a session from another endpoint is dropped",
+        "origin": "expected origin per resolved endpoint",
+        "entry": "0 → S10, 1 → direct, many → S09; bound: S08, S11, S12",
+        "switch": "S15/S16 via the D002 dirty-close; Cancel aborts; windows close; context reset; bound endpoint → S17 hosts",
+        "context": "S19–S21",
+        "lock": "S22 (⌘L/Ctrl+L), unlock re-checked by the Core, 5 attempts",
+        "deep_link": "S34",
+        "administration": [
+          "S26/S38 Distributions",
+          "S37 access",
+          "S27–S32 endpoints",
+          "S33 defaults (Instance layer not available)"
+        ]
+      },
+      "code_owned_keys": [
+        "adm.ep.dns.here",
+        "adm.ep.dns.elsewhere",
+        "adm.ep.observe",
+        "adm.ep.activate"
+      ],
+      "tests": {
+        "core_d010_distributions": 9,
+        "workspace_d010_journeys": 12,
+        "updated_for_d010": [
+          "d001_journeys (S07/S08 door)",
+          "d009_journeys (door on a bound endpoint)",
+          "d005_journeys (context chip lists the member's projects)",
+          "d002_d001_equivalence (lock is real, declared normalisation)",
+          "ui::shell lock test",
+          "routes router_tests (seeded host resolution)",
+          "instance_profiles, application_boundary_http, unauthenticated_sweep_http, member_app_pins, member_desktop_layouts"
+        ]
+      },
+      "reversion_proofs": {
+        "run": 11,
+        "caught": 11,
+        "cases": [
+          "unknown host",
+          "member access revalidation",
+          "last enabled (Core)",
+          "last enabled (database trigger)",
+          "cross-Instance access (database FK)",
+          "layout scope",
+          "pin scope",
+          "bound endpoint authorization",
+          "dirty-window cancel",
+          "context reset",
+          "open-redirect guard"
+        ],
+        "note": "three first runs were INVALID and are recorded as such: two caught with a different signature than declared (defence in depth: the next guard refused), one exposed a test that passed for the wrong reason (a CHECK constraint, not the trigger) — the test was fixed and then caught the reversion"
+      },
+      "browser_certification": {
+        "stack": "local Core + Workspace on a copy of the D009 preview test database migrated to 0063; endpoints 127.0.0.1 (canonical, generic) and business.d010.localhost (bound)",
+        "widths": "1440, 924, 900, 820, 760, 720, 390: 0 px horizontal overflow on the D010 surfaces; at 390 every D010 control ≥ 44 px",
+        "keyboard": "S09 Tab/Enter; S16 and governed confirmations: initial focus Cancel, Esc cancels, Tab trapped; ⌘L locks",
+        "locales": "pt, en, fr: no raw keys",
+        "findings_fixed": [
+          "oc-access.css was linked only on the Auth surface; now also on the Shell, after oc-apps.css as its header asks",
+          "admin action buttons lost their accessible name when the label hides at narrow widths (aria-label added)",
+          "S33 showed {distribution}/{version} placeholders",
+          "endpoint host links 17 px tall at 390",
+          "D010 confirmations had no initial focus or Esc (reuse of the D006 org-confirm hook)",
+          "the S16/S34 sheets opened on a bound endpoint"
+        ]
+      },
+      "not_implemented": {
+        "C9_S24_password_recovery": "MISSING_DESIGN_STATE (no completion screen) + NOT_CONFIGURED (no system mail transport)",
+        "S25_invite_link": "DEFERRED",
+        "S33_instance_layer": "DEFERRED (FG-014)",
+        "S35_maintenance": "DEFERRED",
+        "S01_S06_installer, certificates, proxy, DNS": "D011_REQUIRED / HONESTLY_UNAVAILABLE"
+      },
+      "adr": [
+        "0019 (Accepted)",
+        "0020 (Accepted)",
+        "0021 (Proposed — implementation is D011)",
+        "0625 (Accepted)",
+        "0624 (D010 amendment)",
+        "0014 (corrected: organisations.profile)",
+        "CLAUDE.md §34.3 (amended)"
+      ],
+      "feedback": "docs/ui/CODE_FEEDBACK.md (D010 section on top)",
+      "verify_sh": "run on the exact commit that carries this record; the outcome is in the D010 report",
+      "deploy": "NOT_PERFORMED",
+      "deploy_authorization": "NOT_GIVEN",
+      "production_install": "NOT_PERFORMED"
+    },
     {
       "schema_version": 1,
       "design_revision": "D009",

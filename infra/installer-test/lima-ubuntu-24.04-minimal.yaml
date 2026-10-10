@@ -1,0 +1,52 @@
+# Uma VM descartável para provar o Ocinye OS Installer (D011) localmente.
+#
+# Ubuntu Server 24.04 LTS **minimal**, a imagem cloud oficial, fixada por data e
+# por soma. Sem Docker, sem containerd, sem pastas partilhadas com o Mac: o
+# servidor começa como um servidor novo, e o Installer tem de o levar até ao
+# Ocinye OS a partir daí.
+#
+# O que o Lima acrescenta (o seu utilizador, o agente `lima-guestagent` e o
+# cloud-init) é do banco de ensaio, não do produto, e o relatório de recursos
+# di-lo.
+#
+# Criada e destruída só por `scripts/installer-vm.sh`.
+vmType: vz
+arch: aarch64
+cpus: 2
+memory: 4GiB
+disk: 40GiB
+images:
+  - location: "https://cloud-images.ubuntu.com/minimal/releases/noble/release-20261001/ubuntu-24.04-minimal-cloudimg-arm64.img"
+    arch: aarch64
+    digest: "sha256:fbf6b15c50c474dc6dee5b3c74da212bb687a2625e877227828e6492d88dc151"
+mounts: []
+# O Lima encaminha para o Mac as portas que a VM abre. Aqui não: o Installer
+# alcança a VM pelo endereço dela, como alcançaria um servidor.
+portForwards:
+  - guestPortRange: [1, 65535]
+    ignore: true
+containerd:
+  system: false
+  user: false
+networks:
+  # Um endereço da VM alcançável do Mac: o Installer liga-se por SSH e verifica
+  # 80/443 de fora, como faria a um servidor real.
+  - vzNAT: true
+param:
+  OPERATOR_PUBKEY: ""
+  OPERATOR_PASSWORD: ""
+provision:
+  # O operador do servidor: um utilizador normal com sudo **por palavra-passe**,
+  # que é o caso que o Installer prefere e o mais exigente (I05).
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eu
+      id operador >/dev/null 2>&1 && exit 0
+      useradd --create-home --shell /bin/bash operador
+      echo 'operador:{{.Param.OPERATOR_PASSWORD}}' | chpasswd
+      usermod -aG sudo operador
+      install -d -m 700 -o operador -g operador /home/operador/.ssh
+      echo '{{.Param.OPERATOR_PUBKEY}}' > /home/operador/.ssh/authorized_keys
+      chown operador:operador /home/operador/.ssh/authorized_keys
+      chmod 600 /home/operador/.ssh/authorized_keys

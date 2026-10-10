@@ -99,6 +99,19 @@ NORMAIS = {
     # `ocinye-domain`, nem persistência. Acrescentar aqui qualquer um deles é
     # mover a autoridade institucional para dentro da apresentação.
     "ocinye-workspace": {"ocinye-contracts", "ocinye-observability"},
+    # O Ocinye OS Installer (D011, ADR-0022), desde 2026-10-05. Os contratos
+    # do instalador conhecem os contratos institucionais (Distribuição, nome de
+    # anfitrião) e mais nada. O controlador (no computador do operador), o
+    # bootstrap (no servidor) e a ferramenta do manifesto do release falam
+    # entre si **só** por esses contratos: nenhum deles conhece o Core, o
+    # domínio, a persistência ou o Workspace. O que o instalador pede ao Core
+    # pede-o pelos subcomandos do binário do Core, nunca por uma ligação de
+    # crates. Uma linha nova que dê `ocinye-core` a qualquer um destes é o
+    # instalador a decidir o que é do Core (ADR-0021).
+    "ocinye-installer-contracts": {"ocinye-contracts"},
+    "ocinye-installer-controller": {"ocinye-contracts", "ocinye-installer-contracts"},
+    "ocinye-bootstrap": {"ocinye-contracts", "ocinye-installer-contracts"},
+    "ocinye-release-tool": {"ocinye-contracts", "ocinye-installer-contracts"},
 }
 
 # Dependências de desenvolvimento. Um teste pode levantar o sistema todo; é
@@ -117,12 +130,17 @@ DEV = {
     # `ocinye-core` em produção, e isto é estritamente mais estreito — só os
     # alvos de teste, e só para uma função que o binário não contém. O portão
     # «Isolamento do fornecedor de teste» confirma-o em cada corrida.
-    "ocinye-core-server": {"ocinye-core"},
+    "ocinye-core-server": {"ocinye-core", "ocinye-installer-contracts"},
     # As viagens D001 (`apps/workspace/tests/d001_journeys.rs`) levantam um
     # Core em processo e o Workspace à frente dele, como o harness de browser
     # fazia antes do apagamento da UI (2026-09-28). As duas arestas voltaram com
     # elas — só em teste: o binário enviado não leva o Core consigo.
     "ocinye-workspace": {"ocinye-observability", "ocinye-core", "ocinye-core-server"},
+    # `ocinye-core-server` → `ocinye-installer-contracts` nos testes, desde
+    # 2026-10-05: o teste de contrato lê a saída dos subcomandos do instalador
+    # (`endpoint-seed`, `verify-*`) com os tipos que o bootstrap usa para a
+    # ler, para que as duas pontas não divirjam. Só em teste: o binário do
+    # Core não leva os contratos do instalador.
 }
 
 

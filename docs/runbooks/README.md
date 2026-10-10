@@ -54,6 +54,7 @@ atrás da Cloudflare, do mesmo SHA de `origin/main`
 | Runbook | Quando |
 |---|---|
 | [Reverter produção para um release anterior](rollback-production.md) | Um deploy deixou produção degradada e é preciso repor o release anterior depressa |
+| [Certificar o Installer numa VM `amd64` externa](certify-installer-on-external-amd64-vm.md) | Existe uma VM Ubuntu 24.04 Minimal `amd64` descartável; é o passo que falta à certificação do D011 (`NOT_RUN`) |
 
 O **deploy** em si corre por `scripts/deploy-production.sh` (empacota `origin/main`,
 constrói no host, troca o symlink `current`); um runbook dedicado do deploy e os

@@ -135,6 +135,27 @@ RUN apt-get update \
 COPY --from=builder /usr/local/bin/ocinye/ocinye-convert /usr/local/bin/ocinye-convert
 ENTRYPOINT ["/usr/local/bin/ocinye-convert"]
 
+# ── O executor temporário do Ocinye OS Installer (D011) ──────────────────
+#
+# `ocinye-bootstrap` corre no servidor de destino durante uma instalação, e só
+# durante ela: um binário **estático** (musl), sem dependências do anfitrião,
+# que o Installer envia, confere pela soma do manifesto e apaga no fim (P16).
+# Não é uma imagem: `release-bundle.sh` extrai o binário com
+# `--target bootstrap --output`. Fica antes do último stage de propósito — o
+# último é o alvo de um `docker build` sem `--target`, e esse continua a ser o
+# do Conversion Runner.
+FROM rust:1.98-alpine AS bootstrap-builder
+RUN apk add --no-cache musl-dev
+WORKDIR /build
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/build/target,id=ocinye-target-musl,sharing=locked \
+    cargo build --release --locked -p ocinye-bootstrap \
+ && cp target/release/ocinye-bootstrap /ocinye-bootstrap
+
+FROM scratch AS bootstrap
+COPY --from=bootstrap-builder /ocinye-bootstrap /ocinye-bootstrap
+
 # ── A imagem do Conversion Runner ─────────────────────────────────────────
 #
 # O sidecar que detém a autoridade de criar contentores. Traz **só o cliente**

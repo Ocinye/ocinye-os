@@ -115,6 +115,40 @@ pacote. Por isso o Compose, a CI e a imagem de backup usam a origem por digest;
 tornar os espelhos públicos é um gesto de quem administra a organização, e só
 então passam a ser consumíveis sem autenticação.
 
+## Imagens de execução: o digest é a identidade (D011, 2026-10-05)
+
+Uma etiqueta é um nome que alguém pode mover. `redis:7-alpine` numa instalação
+de hoje e noutra daqui a um mês podem ser bytes diferentes, e nenhum dos dois
+releases o diria. Por isso, **em produção, cada imagem de terceiros é fixada por
+digest** — `repositório:etiqueta@sha256:…`, em que a etiqueta fica só para se
+ler — e o `MANIFEST.json` do release regista repositório, etiqueta e digest de
+cada uma; o `release-tool` recusa escrever um manifesto com uma imagem sem
+digest, e um teste lê o Compose de produção do repositório e falha com uma
+etiqueta flutuante (provado por reversão). As imagens do próprio Ocinye
+(`ocinye/ocinye-*`) vêm no pacote e identificam-se pelo `image_id`.
+
+O retorno da D013 (fase A, F01) nomeou três referências flutuantes; a auditoria
+encontrou essas três e nenhuma outra em produção.
+
+| Imagem | Antes | Agora | Porquê esta |
+|---|---|---|---|
+| proxy | `nginx:1.27-alpine` (1.27.5, ramo *mainline* terminado em 2025-04, sem correcções há 17 meses) | `nginx:1.30.5-alpine@sha256:0985e772…7d94` | o ramo **estável** corrente do nginx (versão par); amd64 e arm64 no índice; a configuração do Ocinye passa `nginx -t` em 1.27.5 e 1.30.5 sem avisos. Muda os bytes: a prova local voltou a correr |
+| base de dados | `pgvector/pgvector:pg17` | `pgvector/pgvector:0.8.7-pg17-bookworm@sha256:ac08538c…a75d` | PostgreSQL 17 (produção, CI e o `pg_dump` do backup já são 17; não se desce de versão); pgvector 0.8.7, o último da série 0.8 — as migrations só pedem o tipo `VECTOR` e `pgcrypto`, sem índices HNSW/IVFFlat; Debian bookworm, como as imagens do Ocinye. É o digest que `pg17` já servia: os mesmos bytes da prova local |
+| realtime | `redis:7-alpine` | `redis:7.4.11-alpine@sha256:858f009f…3499` | **congelado no que a etiqueta já servia**, para a certificação funcional ser reprodutível; **não é uma escolha de versão nem de licença** — ver [`redis-runtime-dependency.md`](../architecture/redis-runtime-dependency.md). Os mesmos bytes da prova local |
+| armazenamento | `dxflrs/garage@sha256:4c9b34c1…cf6a` | `dxflrs/garage:v2.1.0@sha256:4c9b34c1…cf6a` | o mesmo digest; ganhou a etiqueta legível (o índice de `v2.1.0` é este digest) |
+| migração MinIO | `ghcr.io/ocinye/third-party/minio-server@sha256:55f2ff7d…a09` | igual | já fixada por digest (secção acima) |
+
+O Compose de desenvolvimento e a CI usam as mesmas referências de PostgreSQL,
+Redis e Garage. O `install/ocinye` não nomeia imagens: o certificado de teste
+gera-se com a imagem do proxy que o Compose do release fixa.
+
+**Fora desta regra, e registado:** as imagens de construção (`rust:1.98-*`,
+`debian:bookworm-slim`, `docker:27-cli`) são entradas do build, não identidade
+de execução — o resultado identifica-se pelo `image_id`; as de prova
+(`docker:27-dind`) são só de harness. E o certificado auto-assinado ainda corre
+`apk add openssl` dentro da imagem do proxy no momento da instalação: é um
+pacote descarregado da rede, sem versão fixada — por resolver.
+
 ## IBM Plex — fontes do Workspace
 
 Servidas pelo próprio Workspace (`apps/workspace/static/fonts/`), e não por uma

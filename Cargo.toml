@@ -6,10 +6,14 @@ members = [
     "crates/ocinye-observability",
     "crates/ocinye-core",
     "crates/ocinye-capabilities",
+    "crates/ocinye-installer-contracts",
+    "crates/ocinye-installer-controller",
     "services/core-server",
     "services/worker",
     "services/node-agent",
     "services/conversion-runner",
+    "services/installer-bootstrap",
+    "services/release-tool",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them
@@ -31,6 +35,7 @@ ocinye-observability = { path = "crates/ocinye-observability" }
 ocinye-core = { path = "crates/ocinye-core" }
 ocinye-core-server = { path = "services/core-server" }
 ocinye-capabilities = { path = "crates/ocinye-capabilities" }
+ocinye-installer-contracts = { path = "crates/ocinye-installer-contracts" }
 
 # --- runtime ----------------------------------------------------------------
 tokio = { version = "1.53", features = ["full"] }

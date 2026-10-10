@@ -291,7 +291,7 @@ jobs:
     services:
       postgres:
         # pgvector: exigido pela migration 0006.
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
         env:
           POSTGRES_USER: ocinye
           POSTGRES_PASSWORD: ocinye_ci_only
@@ -386,6 +386,11 @@ jobs:
       # Ligações internas partidas na documentação.
       - name: Ligações da documentação
         run: python3 ./scripts/documentation_links.py
+
+      # Um include de compilação sobre um ficheiro ignorado pelo git só compila
+      # na máquina que o tem.
+      - name: Ficheiros incluídos na compilação
+        run: python3 ./scripts/compile_time_fixtures.py
 
       # Levantado como passo e não como `services:`, de propósito: o Garage lê a
       # configuração de um ficheiro do repositório (`infra/garage/garage.toml`), e

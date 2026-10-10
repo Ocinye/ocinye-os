@@ -18,6 +18,7 @@ pub mod bootstrap;
 pub mod continuity;
 pub mod error;
 pub mod extract;
+pub mod installer;
 pub mod mail_check;
 pub mod middleware;
 pub mod provision;

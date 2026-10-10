@@ -39,6 +39,8 @@ struct Args {
     email: Option<String>,
     admin_name: Option<String>,
     admin_email: Option<String>,
+    /// D011: a instalação que cria a Instância (`inst-` e 16 hexadecimais).
+    installation_id: Option<String>,
 }
 
 fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
@@ -77,6 +79,10 @@ fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
                 args.admin_email = Some(value()?);
                 iter.next();
             }
+            "--installation-id" => {
+                args.installation_id = Some(value()?);
+                iter.next();
+            }
             "--help" | "-h" => {
                 print_usage();
                 std::process::exit(0);
@@ -95,7 +101,8 @@ fn print_usage() {
   --name        \"Nome Completo\" \\
   --email       pessoa@ocinye.com \\
   --admin-name  \"Nome Completo (Admin)\" \\
-  --admin-email pessoa.admin@ocinye.com
+  --admin-email pessoa.admin@ocinye.com \\
+  [--installation-id inst-0123456789abcdef]
 
 Numa base sem instância, cria-a primeiro: com o nome de --instance-name (ou de
 OCINYE_INSTANCE_NAME), e o slug de OCINYE_INSTANCE_SLUG ou derivado do nome.
@@ -210,6 +217,12 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         );
     }
 
+    if let Some(id) = &args.installation_id {
+        if !organisation::installation::is_installation_id(id) {
+            bail!("--installation-id tem a forma inst-<16 hexadecimais>");
+        }
+    }
+
     let config = CoreConfig::from_env().context("configuração")?;
 
     // Fail-closed antes de escrever seja o que for.
@@ -245,6 +258,11 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     db::migrate(&pool).await.context("migrations")?;
 
     let ids = CorrelationIds::generate();
+    // D011: só uma Instância que nasce agora fica ligada à instalação; uma
+    // adoptada já tinha história própria.
+    let born_here = !organisation::installation::instance_exists(&pool)
+        .await
+        .context("instância")?;
     // Idempotente: a instância é adoptada se já existir, e criada se não.
     // Correr o bootstrap outra vez não pode dar uma segunda instituição com o
     // mesmo nome — seria a mesma repartição de autoria, pertenças e histórico
@@ -271,6 +289,12 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         },
     }
     .context("instância")?;
+
+    if let (Some(id), true) = (&args.installation_id, born_here) {
+        organisation::installation::record_installation(&pool, organisation.id, id, &ids)
+            .await
+            .context("registo da instalação")?;
+    }
 
     if let (Some(first), false) = (profile, more.is_empty()) {
         organisation::distributions::initial(&pool, organisation.id, first, &more, &ids)
