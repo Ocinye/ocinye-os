@@ -150,13 +150,13 @@ cada entrada de arranque passa ao núcleo exactamente um `ocinye.mode=`
 | `live` | «Experimentar»: sessão temporária; não é uma instalação nem uma Instância | todos em só-leitura, nenhum montado |
 | `hardware-check` | relatório de hardware, sem tecla | idem |
 | `recovery` | diagnóstico em modo de texto | idem |
-| `install` | o OIE, como antes | o contrato do OIE: nada se escreve antes da confirmação escrita |
+| `install` | o OIE | todos em só-leitura até à confirmação escrita; depois, só o disco confirmado |
 
 Modo em falta ou desconhecido resolve para `live`, nunca para o instalador. Do
 Live para a instalação vai-se por um reinício normal e escolhendo «Instalar» no
 menu; nada é transportado. Os modos não destrutivos têm, por agora, só uma
-sessão de texto provisória. A evidência de que não escrevem em discos, e os
-achados em aberto sobre o ambiente de arranque do instalador, estão na
+sessão de texto provisória. A evidência de que não escrevem em discos, e a
+disposição dos achados sobre o ambiente de arranque do instalador, estão na
 [Prova de Segurança de Armazenamento do Live](live-storage-safety.md).
 
 ## Provas

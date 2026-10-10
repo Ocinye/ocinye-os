@@ -7,6 +7,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### D013 — Endurecimento do armazenamento na instalação (L0-H) — 2026-10-10 (ramo `feat/d013-image-builder-phase-a`)
+
+Não mergeado, não publicado; só construções de desenvolvimento
+([registo](docs/install/live-storage-safety.md)).
+
+- **A guarda de blocos arma também no arranque de instalação.** Antes da
+  confirmação escrita nenhum disco é gravável; depois, só o alvo confirmado
+  (`ConfirmedTarget`, `release_target`).
+- **Confiança no suporte**: identidade por construção no volume ISO 9660 e
+  ligação à entrada de arranque do firmware; uma cópia num disco interno nunca
+  é adoptada; ambiguidade recusa (`ocinye-oie select-medium`).
+- **D013-SF-01 a 04: `RESOLVED`; resíduo da cópia ISO 9660: `CLOSED`** — em
+  bancada virtual, onze ensaios e dois controlos positivos, zero escritas fora
+  do alvo confirmado.
+  Hardware físico por correr.
+- O OIE recusa mostrar a lista de discos se a política não se verificar; a
+  procura de chaves do operador fica restrita a discos removíveis.
+
 ### D013 — Modos de arranque do suporte e Prova de Segurança de Armazenamento do Live (L0, L0-S) — 2026-10-10 (ramo `feat/d013-image-builder-phase-a`)
 
 Não mergeado, não publicado; só construções de desenvolvimento

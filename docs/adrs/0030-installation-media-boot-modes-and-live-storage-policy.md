@@ -43,15 +43,16 @@ software.
 5. **Política de armazenamento por modo.** Em `live`, `hardware-check` e
    `recovery`: nenhum dispositivo de blocos interno é escrito; nenhum sistema de
    ficheiros interno é montado, nem em leitura; sem swap, sem montagem de RAID,
-   sem activação de LVM. Em `install`: o contrato do OIE, tal como verificado,
-   sem alterações.
+   sem activação de LVM. Em `install` (L0-H): o mesmo até à confirmação escrita
+   do OIE; depois dela, só o disco confirmado fica gravável.
 6. **A guarda fica abaixo da interface, em três partes**, só na raiz do OIE:
-   um guião `init-top` que decide antes do udev e arma em tudo o que não seja
-   exactamente `ocinye.mode=install` num arranque do suporte (`boot=casper`);
+   um guião `init-top` que decide antes do udev e arma em todos os arranques
+   do suporte (`boot=casper`), o de instalação incluído (L0-H);
    uma regra udev que põe cada dispositivo de blocos em só-leitura à medida que
    aparece, antes das regras que o sondam, montam ou activam; e uma varredura
    antes de o casper procurar o suporte. Com a guarda armada, o casper só
-   examina o suporte do Ocinye (ISO 9660 com a etiqueta `OCINYE_OS`): a procura
+   examina o suporte deste arranque — etiqueta `OCINYE_OS`, identidade da
+   construção e ligação à entrada de arranque do firmware —: a procura
    é contida por uma alteração feita ao guião do casper na construção do
    initramfs, que falha a construção se o guião já não for o esperado.
 7. **A guarda nunca chega a um sistema instalado.** Os ficheiros vivem em
@@ -78,10 +79,11 @@ software.
 - **Parâmetros do núcleo apenas** (`nopersistent`, `systemd.swap=0`, …) —
   úteis e mantidos, mas não cobrem a montagem feita pelo casper nem um modo em
   falta, que arrancaria sem eles.
-- **Armar a guarda em todos os modos e libertar o disco confirmado** — foi
-  desenhado e retirado por decisão do operador: não se converte uma sessão de
-  leitura numa de escrita, e não se redesenha a segurança do instalador à volta
-  do Live.
+- **Converter uma sessão Live numa de instalação, libertando um disco** —
+  retirado por decisão do operador: não se converte uma sessão de leitura numa
+  de escrita. O que o L0-H adoptou é diferente: a guarda arma também no
+  arranque `install`, e só o OIE, com a sua confirmação escrita, liberta o
+  alvo.
 - **kexec ou `BootNext` para chegar ao instalador sem menu** — fora de âmbito na
   v1: um segundo mecanismo de transição, e uma escrita no firmware que o Live
   não pode fazer.
@@ -90,9 +92,13 @@ software.
 
 ## Consequences
 
-O modo de instalação fica como estava e continua a ter as três condutas do
-casper observadas na auditoria; ficam registadas como achados de segurança da
-D013, separados, e não são corrigidas aqui. A sessão de texto dos modos não
+Com o L0-H, o modo de instalação deixa de ter as condutas do casper observadas
+na auditoria: os achados D013-SF-01 a 04 e o resíduo da cópia ISO 9660 estão
+resolvidos em bancada virtual
+([registo](../install/live-storage-safety.md)). A decisão continua `Proposed`
+porque a evidência é virtual, o hardware físico não correu, e a guarda ainda
+tem decisões em guiões de shell do initramfs que devem passar para um único
+ponto de entrada em Rust. A sessão de texto dos modos não
 destrutivos é uma superfície provisória de bancada, não a interface do produto.
 A alteração ao guião do casper acompanha a versão do casper da base fixada: uma
 actualização que o mude falha a construção, por desenho.

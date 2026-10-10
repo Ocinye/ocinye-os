@@ -246,15 +246,16 @@ sem que nada falhe.
   Só construções de desenvolvimento; canal estável bloqueado; nada publicado;
   hardware físico `NOT_RUN`. O suporte arranca num de quatro modos tipados
   (`ocinye.mode=`: `live`, `install`, `hardware-check`, `recovery`), com um menu
-  que espera pelo operador; só `install` alcança o código que escreve, e nos
-  outros uma guarda no initramfs põe todos os dispositivos de blocos em
-  só-leitura ([ADR-0030](docs/adrs/0030-installation-media-boot-modes-and-live-storage-policy.md),
-  `Proposed`). A [Prova de Segurança de Armazenamento do Live](docs/install/live-storage-safety.md)
-  correu em bancada virtual: zero escritas em quinze discos-sentinela nos modos
-  não destrutivos, e quatro achados de segurança **em aberto** no ambiente de
-  arranque do modo de instalação (o mais grave: um disco não escolhido com ext4
-  por recuperar é escrito antes do primeiro ecrã). A frase «nada é escrito nos
-  discos internos» **não** está certificada. Sem interface gráfica: os modos não
+  que espera pelo operador; só `install` alcança o código que escreve, e uma
+  guarda no initramfs põe todos os dispositivos de blocos em só-leitura em todos
+  os arranques do suporte; na instalação, só o disco confirmado por escrito no
+  OIE é libertado ([ADR-0030](docs/adrs/0030-installation-media-boot-modes-and-live-storage-policy.md),
+  `Proposed`). A [Prova de Segurança de Armazenamento](docs/install/live-storage-safety.md)
+  correu em bancada virtual: zero escritas nos discos-sentinela em todos os
+  modos, e os quatro achados de segurança do ambiente de arranque da instalação
+  (D013-SF-01 a 04) mais o da cópia do suporte num disco interno ficaram
+  resolvidos nessa bancada (L0-H). A frase «nada é escrito nos discos internos»
+  **não** está certificada: falta o hardware físico. Sem interface gráfica: os modos não
   destrutivos têm só uma sessão de texto provisória.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
