@@ -387,6 +387,11 @@ jobs:
       - name: Ligações da documentação
         run: python3 ./scripts/documentation_links.py
 
+      # Um include de compilação sobre um ficheiro ignorado pelo git só compila
+      # na máquina que o tem.
+      - name: Ficheiros incluídos na compilação
+        run: python3 ./scripts/compile_time_fixtures.py
+
       # Levantado como passo e não como `services:`, de propósito: o Garage lê a
       # configuração de um ficheiro do repositório (`infra/garage/garage.toml`), e
       # `services:` não monta ficheiros do checkout.
