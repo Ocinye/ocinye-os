@@ -587,6 +587,7 @@ def drive(vm, mode, boot_budget, checkpoints=lambda label: None):
             facts["policy"] = json.loads(m[-1])
         except ValueError:
             facts["policy_unparsed"] = m[-1][:400]
+    facts.update(medium_fact(vm))
     vm.send("p\r")
     vm.expect(r"OCINYE-POWEROFF", 120)
     try:
