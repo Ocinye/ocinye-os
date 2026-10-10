@@ -49,8 +49,12 @@ Anexe o ISO como CD e um disco em branco, firmware UEFI (OVMF).
 
 ## 3. O ambiente de instalação (OIE)
 
-O menu de arranque mostra «Instalar Ocinye OS · <imagem>» (e
-«DESENVOLVIMENTO» numa imagem de desenvolvimento). Depois, na consola:
+O menu de arranque **espera** — não há temporizador nem arranque por omissão — e
+mostra sete escolhas ([modos de arranque](images.md#modos-de-arranque-do-suporte)).
+Para instalar, escolha «Instalar o Ocinye OS» (tecla **I**); o foco inicial está
+em «Experimentar o Ocinye OS», que não instala nada. Uma imagem de
+desenvolvimento diz «DESENVOLVIMENTO» na última linha do menu. Depois, na
+consola:
 
 1. **Boas-vindas** — nada é escrito em nenhum disco antes da confirmação.
    **L** muda a língua.

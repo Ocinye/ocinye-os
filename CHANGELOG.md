@@ -7,6 +7,34 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### D013 — Modos de arranque do suporte e Prova de Segurança de Armazenamento do Live (L0, L0-S) — 2026-10-10 (ramo `feat/d013-image-builder-phase-a`)
+
+Não mergeado, não publicado; só construções de desenvolvimento
+([ADR-0030](docs/adrs/0030-installation-media-boot-modes-and-live-storage-policy.md),
+`Proposed`; [registo L0-S](docs/install/live-storage-safety.md)). Sem interface
+gráfica.
+
+- **Contrato (`ocinye_image_contracts::bootmode`)**: quatro modos (`live`,
+  `install`, `hardware-check`, `recovery`) por `ocinye.mode=`, fixos durante o
+  arranque; modo em falta, desconhecido ou contraditório resolve para a política
+  não destrutiva; `InstallAuthority` só existe num arranque `install` explícito.
+- **Menu de arranque**: gerado do contrato, sem temporizador nem arranque por
+  omissão (`timeout=-1`), sete escolhas, pt/en/fr. **Muda o comportamento
+  anterior**: a ISO já não entra sozinha no instalador ao fim de 10 s.
+- **OIE**: `flow::run` exige a autoridade de instalação; nos outros modos corre
+  uma sessão de texto provisória que só sabe inventariar, relatar e reiniciar;
+  `ocinye-oie policy` dá o veredicto da política de armazenamento.
+- **Guarda de blocos** (`infra/image/oie-rootfs`, só na raiz do OIE): tudo em
+  só-leitura antes do udev, RAID e LVM mascarados, a procura do casper contida
+  ao suporte do Ocinye e o seu passo de swap anulado. A inspecção offline recusa
+  uma raiz instalável que a traga.
+- **Bancada** (`infra/image/e2e/storage_proof.py`): quinze discos-sentinela e
+  três testemunhas. Nos modos não destrutivos: zero escritas. No ambiente de
+  arranque do instalador, existente e inalterado: **quatro achados de segurança
+  em aberto** (D013-SF-01 a 04).
+- A marca de só-leitura do núcleo **não impede `swapon`**: medido, e corrigido
+  na guarda.
+
 ### D013 — Imagens do Ocinye OS, fase A de código — 2026-10-05 (ramo `feat/d013-image-builder-phase-a`)
 
 `PROVISIONAL_PENDING_D011_CERTIFICATION` — assenta em `feat/design-d011`, ainda

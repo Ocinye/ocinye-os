@@ -137,6 +137,28 @@ Uma imagem de desenvolvimento verifica com a chave de desenvolvimento e
 **só** no canal `development`; uma chave de desenvolvimento nunca torna uma
 imagem «estável» (o verificador recusa, mesmo que a lista de chaves o permita).
 
+## Modos de arranque do suporte
+
+A ISO arranca para um menu que **espera**: não há temporizador nem arranque por
+omissão. Sete escolhas — Experimentar o Ocinye OS, Instalar o Ocinye OS,
+Verificar o hardware, Avançado / Recuperação, Idioma, Reiniciar, Desligar —, e
+cada entrada de arranque passa ao núcleo exactamente um `ocinye.mode=`
+([ADR-0030](../adrs/0030-installation-media-boot-modes-and-live-storage-policy.md)):
+
+| Modo | O que é | Discos |
+|---|---|---|
+| `live` | «Experimentar»: sessão temporária; não é uma instalação nem uma Instância | todos em só-leitura, nenhum montado |
+| `hardware-check` | relatório de hardware, sem tecla | idem |
+| `recovery` | diagnóstico em modo de texto | idem |
+| `install` | o OIE, como antes | o contrato do OIE: nada se escreve antes da confirmação escrita |
+
+Modo em falta ou desconhecido resolve para `live`, nunca para o instalador. Do
+Live para a instalação vai-se por um reinício normal e escolhendo «Instalar» no
+menu; nada é transportado. Os modos não destrutivos têm, por agora, só uma
+sessão de texto provisória. A evidência de que não escrevem em discos, e os
+achados em aberto sobre o ambiente de arranque do instalador, estão na
+[Prova de Segurança de Armazenamento do Live](live-storage-safety.md).
+
 ## Provas
 
 [`scripts/image-e2e.sh`](../../scripts/image-e2e.sh) arranca os artefactos em

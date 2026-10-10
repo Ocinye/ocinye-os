@@ -10,7 +10,8 @@ manifesto do release da D011 (`ocinye-installer-contracts`; PD-01/PD-02).
 decidem — validação dos manifestos (`manifest`), inventário e portões do
 construtor (`build`), identidade da máquina e factos do primeiro arranque
 (`firstboot`), as transições da reclamação como funções puras (`claim`), a
-elegibilidade dos discos e a confirmação escrita (`oie`), a gramática do
+elegibilidade dos discos e a confirmação escrita (`oie`), os modos de arranque
+do suporte, o menu e a autoridade de instalação (`bootmode`), a gramática do
 comentário assinado e a verificação de um release (`signing`), e o recibo da
 origem (`receipt`). Os programas que correm numa máquina só as executam.
 

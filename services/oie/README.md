@@ -12,7 +12,18 @@ factos embutidos na sua própria raiz, entrega ao curtin um esquema fixo (GPT,
 ESP 1 GiB, ext4, sem swap, sem rede), confere o que ficou escrito e deixa o
 diário em `/var/log/ocinye/oie-install.json`.
 
-`ocinye-oie probe` mostra a classificação dos discos, só de leitura.
+O instalador só corre num arranque `ocinye.mode=install`
+([ADR-0030](../../docs/adrs/0030-installation-media-boot-modes-and-live-storage-policy.md)):
+`flow::run` exige um `InstallAuthority`, que os outros modos não conseguem obter.
+Em `live`, `hardware-check`, `recovery` e em modo em falta ou desconhecido,
+`ocinye-oie run` é uma sessão de texto **provisória** (`session.rs`) que
+inventaria, relata e reinicia, e que não tem como escolher um disco. A política
+de armazenamento desses modos é verificada em `policy.rs` a partir do que o
+núcleo reporta; se não se cumprir, a sessão fica restrita a metadados de
+dispositivos.
+
+`ocinye-oie probe` mostra a classificação dos discos, só de leitura;
+`ocinye-oie policy` o veredicto da política de armazenamento deste arranque.
 
 Testes: `cargo test -p ocinye-oie` (o fluxo com entrada guionada: uma
 confirmação errada nunca chega a escrever).
