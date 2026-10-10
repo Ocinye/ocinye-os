@@ -10,8 +10,8 @@ use std::io::{BufRead, Write};
 use ocinye_image_contracts::bootmode::InstallAuthority;
 use ocinye_image_contracts::firstboot::PublicKeyLine;
 use ocinye_image_contracts::oie::{
-    classify, confirm, select, DiskProtection, InstallationTargetDisk, OieError, ProbedDisk,
-    MIN_DISK_BYTES,
+    authorize_installation, classify, select, ConfirmedTarget, DiskProtection, OieError,
+    ProbedDisk, MIN_DISK_BYTES,
 };
 
 use crate::strings::STRINGS;
@@ -27,15 +27,22 @@ pub trait Machine {
     fn arch_supported(&self) -> bool;
     fn memory(&self) -> u64;
     fn disks(&self) -> Vec<ProbedDisk>;
-    fn operator_key(&self) -> Option<PublicKeyLine>;
+    /// Look for an operator key on pluggable volumes, never on the target.
+    fn operator_key(&self, target: &ConfirmedTarget<'_>) -> Option<PublicKeyLine>;
     /// Everything that writes: only called after confirmation.
+    /// It takes a [`ConfirmedTarget`]: the write authority over one disk,
+    /// which only the typed confirmation produces.
     fn install(
         &self,
-        disk: &InstallationTargetDisk,
+        target: &ConfirmedTarget<'_>,
         key: Option<&PublicKeyLine>,
         say: &mut dyn FnMut(&str),
     ) -> Result<(), OieError>;
     fn reboot(&self);
+    /// Whether the installer's storage protection is in force: every block
+    /// device read-only, no swap, no array, no volume, nothing mounted from a
+    /// disk. `Err` carries a stable reason code.
+    fn storage_protected(&self) -> Result<(), String>;
 }
 
 pub struct Ui<'a> {
@@ -126,7 +133,7 @@ pub enum Outcome {
 /// The installer. It can only be entered with an [`InstallAuthority`], which
 /// exists only in a boot whose mode is `install`: a Live, Hardware Check or
 /// Recovery session has no value to pass here.
-pub fn run(ui: &mut Ui<'_>, m: &dyn Machine, _authority: &InstallAuthority<'_>) -> Outcome {
+pub fn run(ui: &mut Ui<'_>, m: &dyn Machine, authority: &InstallAuthority<'_>) -> Outcome {
     // WELCOME
     ui.title("c13.welcome.t");
     let b = ui.t("c13.welcome.b");
@@ -164,6 +171,13 @@ pub fn run(ui: &mut Ui<'_>, m: &dyn Machine, _authority: &InstallAuthority<'_>) 
     }
     let gpu = format!("  {}: {}", ui.t("c13.compat.gpu"), ui.t("c13.compat.gpuV"));
     ui.say(&gpu);
+    // Nothing is offered for installation unless every disk is protected.
+    if let Err(reason) = m.storage_protected() {
+        ui.say(&format!(
+            "Ocinye OS: a protecção dos discos não está em vigor ({reason}); nada é instalado · disk protection is not in force ({reason}); nothing is installed"
+        ));
+        return Outcome::Failed(OieError::StorageProtectionUnverified { reason });
+    }
     // DISK_SELECT (re-probed on every pass: a disk may be attached)
     let disk = loop {
         let disks = classify(&m.disks());
@@ -279,18 +293,20 @@ pub fn run(ui: &mut Ui<'_>, m: &dyn Machine, _authority: &InstallAuthority<'_>) 
     let Some(typed) = ui.ask(&prompt) else {
         return Outcome::Abandoned;
     };
-    if confirm(&disk, &typed).is_err() {
+    // The typed confirmation is what grants write authority over this disk,
+    // and over no other.
+    let Ok(target) = authorize_installation(authority, &disk, &typed) else {
         let e = ui.t("c13.err.disk");
         ui.say(&e);
         return Outcome::Failed(OieError::ConfirmationMismatch);
-    }
+    };
     // OPERATOR_KEY
     ui.title("c13.key.t");
     let b = ui.t("c13.key.b");
     ui.say(&b);
     let only = ui.t("c13.key.only");
     ui.say(&only);
-    let key = match m.operator_key() {
+    let key = match m.operator_key(&target) {
         Some(k) => {
             let f = ui.tf("c13.key.found", &[("fp", k.fingerprint().0)]);
             ui.say(&f);
@@ -309,7 +325,7 @@ pub fn run(ui: &mut Ui<'_>, m: &dyn Machine, _authority: &InstallAuthority<'_>) 
     let note = ui.t("c13.inst.note");
     ui.say(&note);
     let mut lines = vec![];
-    let r = m.install(&disk, key.as_ref(), &mut |s| lines.push(s.to_owned()));
+    let r = m.install(&target, key.as_ref(), &mut |s| lines.push(s.to_owned()));
     for l in lines {
         ui.say(&l);
     }
@@ -349,6 +365,7 @@ mod tests {
         mem: u64,
         uefi: bool,
         busy: bool,
+        unprotected: Option<&'static str>,
     }
 
     impl Machine for Fake {
@@ -367,20 +384,23 @@ mod tests {
         fn disks(&self) -> Vec<ProbedDisk> {
             self.disks.clone()
         }
-        fn operator_key(&self) -> Option<PublicKeyLine> {
+        fn operator_key(&self, _: &ConfirmedTarget<'_>) -> Option<PublicKeyLine> {
             None
         }
         fn install(
             &self,
-            disk: &InstallationTargetDisk,
+            target: &ConfirmedTarget<'_>,
             _: Option<&PublicKeyLine>,
             say: &mut dyn FnMut(&str),
         ) -> Result<(), OieError> {
-            self.installed.set(Some(disk.by_path.clone()));
+            self.installed.set(Some(target.disk().by_path.clone()));
             say("ok");
             Ok(())
         }
         fn reboot(&self) {}
+        fn storage_protected(&self) -> Result<(), String> {
+            self.unprotected.map_or(Ok(()), |r| Err(r.to_owned()))
+        }
     }
 
     fn d(dev: &str, path: &str, serial: Option<&str>, media: bool) -> ProbedDisk {
@@ -410,6 +430,7 @@ mod tests {
             mem: 4 << 30,
             uefi: true,
             busy: false,
+            unprotected: None,
         }
     }
 
@@ -453,6 +474,27 @@ mod tests {
         assert_eq!(m.installed.take().as_deref(), Some("p-b"));
         assert!(text.is_ascii(), "serial output is 7-bit");
         assert!(text.contains("ESTE SUPORTE - protegido"));
+    }
+
+    #[test]
+    fn sem_proteccao_dos_discos_nao_ha_lista_nem_instalacao() {
+        // A swap partition is active, a disk is writable, the guard did not
+        // arm: whatever the reason, no disk is offered and nothing is written,
+        // even with the right answers typed.
+        for reason in ["GUARD_NOT_ARMED", "DEVICE_WRITABLE", "SWAP_ACTIVE"] {
+            let mut m = fake();
+            m.unprotected = Some(reason);
+            let (o, text) = drive(&m, "\n2\nAAAA\n\n");
+            assert_eq!(
+                o,
+                Outcome::Failed(OieError::StorageProtectionUnverified {
+                    reason: reason.into()
+                })
+            );
+            assert!(text.contains(reason));
+            assert!(!text.contains("SER-AAAA"), "no disk list was shown");
+            assert_eq!(m.installed.take(), None);
+        }
     }
 
     #[test]

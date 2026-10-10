@@ -20,7 +20,7 @@ for sys in /sys/class/block/*; do
     loop* | ram* | zram*) continue ;;
     esac
     [ -b "/dev/$name" ] || continue
-    blockdev --setro "/dev/$name" 2>/dev/null
+    /usr/lib/ocinye/guard/blockguard-apply "$name" 2>/dev/null
     if [ "$(cat "$sys/ro" 2>/dev/null)" != 1 ]; then
         echo "$name" >>/run/ocinye/guard-unprotected
     fi

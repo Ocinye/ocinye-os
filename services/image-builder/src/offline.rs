@@ -631,7 +631,8 @@ pub fn inspect(m: &Mounted, profile: &str, arch: &str, release_id: &str) -> Insp
     // The block guard of the medium arms in every boot that is not, exactly,
     // the installer. It belongs in the OIE root and nowhere else: in an
     // installed system's initramfs it would be a liability.
-    const GUARD_FILES: [&str; 5] = [
+    const GUARD_FILES: [&str; 6] = [
+        "usr/lib/ocinye/guard/blockguard-apply",
         "usr/share/initramfs-tools/hooks/ocinye-blockguard",
         "usr/share/initramfs-tools/scripts/init-top/ocinye-blockguard",
         "usr/share/initramfs-tools/scripts/casper-premount/05ocinye_blockguard",

@@ -246,7 +246,14 @@ UNIT
   tar -C / --no-same-owner -xf "$B/oie-rootfs.tar"
   chmod 0755 /usr/share/initramfs-tools/hooks/ocinye-blockguard \
     /usr/share/initramfs-tools/scripts/init-top/ocinye-blockguard \
-    /usr/share/initramfs-tools/scripts/casper-premount/05ocinye_blockguard
+    /usr/share/initramfs-tools/scripts/casper-premount/05ocinye_blockguard \
+    /usr/lib/ocinye/guard/blockguard-apply
+  # This build's media identity (D013 L0-H): generated here, carried by the
+  # initramfs, and written by the builder into the ISO's volume descriptor. A
+  # device is this build's medium only if it carries both the label and this.
+  install -d -m 0755 /usr/lib/ocinye/guard
+  tr -d '-' < /proc/sys/kernel/random/uuid > /usr/lib/ocinye/guard/media-id
+  grep -q -x '[0-9a-f]\{32\}' /usr/lib/ocinye/guard/media-id || { echo "media identity was not generated" >&2; exit 1; }
   # How live storage safety may be described. CERTIFIED is set only by a
   # certification record of the Live Storage Safety Proof, never by a build.
   install -d -m 0755 /usr/lib/ocinye/oie
@@ -270,6 +277,9 @@ UNIT
   at_guard="$(grep -n 'init-top/ocinye-blockguard' "$m/scripts/init-top/ORDER" | head -1 | cut -d: -f1)"
   at_udev="$(grep -n 'init-top/udev' "$m/scripts/init-top/ORDER" | head -1 | cut -d: -f1)"
   [ -n "$at_guard" ] && [ -n "$at_udev" ] && [ "$at_guard" -lt "$at_udev" ] || { echo "block guard: does not run before udev (ORDER: guard=$at_guard udev=$at_udev)" >&2; exit 1; }
+  [ -x "$m/usr/lib/ocinye/guard/blockguard-apply" ] || { echo "block guard: blockguard-apply missing from the initramfs" >&2; exit 1; }
+  [ -x "$m/usr/lib/ocinye/ocinye-oie" ] || { echo "block guard: ocinye-oie missing from the initramfs" >&2; exit 1; }
+  cmp -s "$m/conf/ocinye-media-id" /usr/lib/ocinye/guard/media-id || { echo "block guard: the initramfs carries another media identity" >&2; exit 1; }
   [ "$(head -1 "$m/scripts/casper-premount/ORDER" | grep -c 05ocinye_blockguard)" = 1 ] || { echo "block guard: the sweep is not first in casper-premount" >&2; exit 1; }
   find "$check" -mindepth 1 -delete; rmdir "$check"
   log "block guard verified in initrd.img-$kv"

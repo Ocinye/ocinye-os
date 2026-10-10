@@ -113,6 +113,11 @@ pub struct Context {
     pub media_label: Option<String>,
     /// Stable paths by kernel name (`/dev/disk/by-path`, else `by-id`, else `by-diskseq`).
     pub stable_paths: BTreeMap<String, String>,
+    /// The block guard is armed: the kernel's read-only flag is set on every
+    /// disk and says nothing about the disk itself.
+    pub guard_armed: bool,
+    /// Disks that were read-only before the guard touched them (as it recorded).
+    pub hardware_read_only: Vec<String>,
 }
 
 /// Disks the OIE considers: whole disks and optical drives, never loop, zram
@@ -148,7 +153,12 @@ pub fn disks(ls: &Lsblk, ctx: &Context) -> Vec<ProbedDisk> {
                 boot_media,
                 mounted: walk_mounted(n),
                 // An optical drive is never a target, whatever it holds.
-                read_only: n.ro || n.kind == "rom" || !ctx.stable_paths.contains_key(&n.name),
+                read_only: if ctx.guard_armed {
+                    ctx.hardware_read_only.contains(&n.name)
+                } else {
+                    n.ro
+                } || n.kind == "rom"
+                    || !ctx.stable_paths.contains_key(&n.name),
             }
         })
         .collect()
@@ -227,6 +237,8 @@ mod tests {
             boot_sources: vec!["sr0".into()],
             media_label: Some("OCINYE_OS".into()),
             stable_paths: stable,
+            guard_armed: false,
+            hardware_read_only: vec![],
         }
     }
 
@@ -288,5 +300,33 @@ mod tests {
             4_028_232 * 1024
         );
         assert_eq!(mem_total(""), 0);
+    }
+
+    #[test]
+    fn sob_a_guarda_so_o_que_ja_era_so_de_leitura_fica_protegido_como_tal() {
+        // With the guard armed every disk reports ro=1. A blank target must
+        // stay selectable; a disk that was write-protected before the guard
+        // touched it must not.
+        let ls: Lsblk = serde_json::from_str(
+            r#"{"blockdevices":[
+              {"name":"vda","size":42949672960,"serial":"OCY-TARGET-7F3A","type":"disk","ro":true,"mountpoints":[null]},
+              {"name":"vdb","size":42949672960,"serial":"LOCKED-0001","type":"disk","ro":true,"mountpoints":[null]}]}"#,
+        )
+        .unwrap();
+        let mut c = Context {
+            guard_armed: true,
+            hardware_read_only: vec!["vdb".into()],
+            ..Context::default()
+        };
+        c.stable_paths.insert("vda".into(), "p-a".into());
+        c.stable_paths.insert("vdb".into(), "p-b".into());
+        let d = disks(&ls, &c);
+        assert!(!d[0].read_only);
+        assert!(d[1].read_only);
+        // Without the guard the kernel's flag is the disk's own.
+        c.guard_armed = false;
+        c.hardware_read_only.clear();
+        let d = disks(&ls, &c);
+        assert!(d[0].read_only && d[1].read_only);
     }
 }

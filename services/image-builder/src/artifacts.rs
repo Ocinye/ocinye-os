@@ -22,8 +22,21 @@ fn art(format: ImageFormat) -> impl Fn() -> ImageBuildError {
     move || ImageBuildError::ArtifactAssemblyFailed { format }
 }
 
-/// The ISO volume label (≤ 32, upper case): protects the medium in the OIE.
-pub const MEDIA_LABEL: &str = "OCINYE_OS";
+pub use ocinye_image_contracts::medium::MEDIA_LABEL;
+
+/// This build's media identity, as provisioning wrote it into the OIE root
+/// (the initramfs carries the same value). It goes into the ISO's volume
+/// descriptor: that pair is what makes a device this build's medium.
+pub fn media_id(oie_root: &Path) -> Result<String, ImageBuildError> {
+    let id = fs::read_to_string(oie_root.join("usr/lib/ocinye/guard/media-id"))
+        .map(|s| s.trim().to_owned())
+        .map_err(|_| art(ImageFormat::Iso)())?;
+    if ocinye_image_contracts::medium::is_media_id(&id) {
+        Ok(id)
+    } else {
+        Err(art(ImageFormat::Iso)())
+    }
+}
 
 pub fn virtual_size(step: &str, disk: &Path) -> Result<u64, ImageBuildError> {
     let out = cmd::output(
@@ -459,6 +472,8 @@ pub fn iso(
             "-r",
             "-V",
             MEDIA_LABEL,
+            "-volset",
+            &ocinye_image_contracts::medium::volume_set_id(&media_id(&oie.mnt)?),
             "-J",
             "-joliet-long",
             "-l",
@@ -728,38 +743,59 @@ mod tests {
         }
         // Both outcomes were exercised: a script that always or never armed
         // would not pass by agreeing with itself.
-        assert!(
-            armed_count >= 9 && armed_count <= cases.len() - 4,
-            "{armed_count}"
-        );
-        // Exactly the explicit installer on the medium is left unarmed.
-        assert!(!guard_must_arm(&cases[1]));
+        assert_eq!(armed_count, cases.len() - 3, "{armed_count}");
+        // Every boot of the medium arms, the installer included; an installed
+        // system never does.
+        assert!(guard_must_arm(&cases[1]));
         assert!(guard_must_arm(&cases[4]));
+        assert!(!guard_must_arm(&cases[15]));
+        assert!(!guard_must_arm(&cases[16]));
     }
 
     #[test]
     fn a_guarda_fala_do_mesmo_suporte_e_da_mesma_marca() {
-        use ocinye_image_contracts::bootmode::{GUARD_ARMED, GUARD_MARKER};
+        use ocinye_image_contracts::bootmode::{GUARD_ARMED, GUARD_MARKER, GUARD_RELEASED_DIR};
         let functions = guard_file("usr/lib/ocinye/guard/casper-guard-functions");
-        assert!(
-            functions.contains(&format!("= \"{MEDIA_LABEL}\"")),
-            "{functions}"
-        );
-        assert!(functions.contains("= \"iso9660\""));
+        // casper is given one device, chosen by the OIE's rules; it does not
+        // pick by label, by content or by order.
+        assert!(functions.contains("/usr/lib/ocinye/ocinye-oie select-medium"));
+        let code: String = functions
+            .lines()
+            .filter(|l| !l.trim_start().starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!code.contains("blkid") && !code.contains("mount"), "{code}");
         assert!(functions.contains(&format!("[ -e {GUARD_MARKER} ]")));
+        assert!(functions.contains("NOPERSISTENT=\"Yes\""));
         let rule = guard_file("usr/lib/udev/rules.d/01-ocinye-blockguard.rules");
         assert!(rule.contains(&format!("TEST!=\"{GUARD_MARKER}\"")));
-        assert!(rule.contains("blockdev --setro $devnode"));
+        assert!(rule.contains("PROGRAM=\"/usr/lib/ocinye/guard/blockguard-apply %k\""));
+        let apply = guard_file("usr/lib/ocinye/guard/blockguard-apply");
+        assert!(apply.contains("exec blockdev --setro \"/dev/$n\""));
+        // The only device it leaves writable is a stack built entirely on the
+        // released target.
+        assert!(apply.contains(&format!("[ -e \"{GUARD_RELEASED_DIR}/$_d\" ]")));
+        assert!(!apply.contains("--setrw"));
+        // The only exemption is the disk the installer released, and its
+        // partitions, by the directory the contract names.
+        assert!(rule.contains(&format!("TEST==\"{GUARD_RELEASED_DIR}/%k\"")));
+        assert!(rule.contains(&format!("TEST==\"{GUARD_RELEASED_DIR}/$parent\"")));
+        assert_eq!(rule.matches("GOTO=\"ocinye_blockguard_end\"").count(), 6);
         // The rule never makes anything writable, and nothing in the medium's
         // fragments does.
         let init = guard_file("usr/share/initramfs-tools/scripts/init-top/ocinye-blockguard");
         assert!(init.contains(&format!("echo {GUARD_ARMED} >{GUARD_MARKER}")));
+        assert!(guard_file(
+            "usr/share/initramfs-tools/scripts/casper-premount/05ocinye_blockguard"
+        )
+        .contains("blockguard-apply \"$name\""));
         let sweep =
             guard_file("usr/share/initramfs-tools/scripts/casper-premount/05ocinye_blockguard");
         let hook = guard_file("usr/share/initramfs-tools/hooks/ocinye-blockguard");
         // casper's swap step is restrained by name: the read-only flag does
         // not stop swapon.
         assert!(hook.contains("casper-bottom/13swap") && hook.contains("&& exit 0"));
+        assert!(hook.contains("/conf/ocinye-media-id") && hook.contains("ocinye-oie"));
         for text in [&functions, &rule, &init, &sweep, &hook] {
             assert!(
                 !text.contains("--setrw"),

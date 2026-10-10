@@ -1,0 +1,54 @@
+#!/bin/sh
+# Ocinye block guard: make one block device read-only (D013 L0-S, L0-H).
+# Called by the udev rule for each device as it appears and by the sweep
+# before casper's search:  blockguard-apply <kernel name>
+#
+# The first time a device is seen, whether it was ALREADY read-only is
+# recorded (a write-protected card, a CD): the installer must still tell a
+# disk nobody can write from one the guard is merely holding.
+#
+# A stacked device (an LVM volume, a RAID array) is left writable only when
+# everything underneath it belongs to the disk the installer released: the
+# installation has to clear stale volumes and arrays off its own target. A
+# stack over any other disk is read-only like the disk itself. The kernel does
+# not stop a stacked device from writing through a member that is merely
+# flagged read-only, so the flag goes on the stacked device too.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+n="$1"
+[ -n "$n" ] && [ -b "/dev/$n" ] || exit 1
+
+# 0 when the device is the released target, a partition of it, or a stack
+# built only from those.
+on_released_target() {
+    _d="$1"
+    _depth="${2:-0}"
+    [ "$_depth" -lt 8 ] || return 1
+    if [ -d "/sys/class/block/$_d/slaves" ] && [ -n "$(ls "/sys/class/block/$_d/slaves" 2>/dev/null)" ]; then
+        for _s in $(ls "/sys/class/block/$_d/slaves"); do
+            on_released_target "$_s" $((_depth + 1)) || return 1
+        done
+        return 0
+    fi
+    if [ -e "/sys/class/block/$_d/partition" ]; then
+        _d="$(basename "$(readlink -f "/sys/class/block/$_d/..")")"
+    fi
+    [ -e "/run/ocinye/released/$_d" ]
+}
+
+case "$n" in
+dm-* | md*)
+    # No table or no members yet: there is nothing it could write to. The
+    # event that follows, when it is set up, decides.
+    [ -n "$(ls "/sys/class/block/$n/slaves" 2>/dev/null)" ] || exit 0
+    on_released_target "$n" && exit 0
+    ;;
+esac
+
+if [ ! -e "/run/ocinye/seen/$n" ]; then
+    mkdir -p /run/ocinye/seen /run/ocinye/hardware-ro
+    if [ "$(cat "/sys/class/block/$n/ro" 2>/dev/null)" = 1 ]; then
+        : >"/run/ocinye/hardware-ro/$n"
+    fi
+    : >"/run/ocinye/seen/$n"
+fi
+exec blockdev --setro "/dev/$n"

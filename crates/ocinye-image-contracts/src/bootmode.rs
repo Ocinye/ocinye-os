@@ -33,19 +33,26 @@ pub const GUARD_MARKER: &str = "/run/ocinye/guard";
 /// Content of [`GUARD_MARKER`] when the guard armed.
 pub const GUARD_ARMED: &str = "armed";
 
-/// Whether the initramfs block guard must arm for a kernel command line: on
-/// the medium, in every boot that is not explicitly the installer. The shell
-/// script in the initramfs implements exactly this, and a test runs it
-/// against this function.
+/// Whether the initramfs block guard must arm for a kernel command line: in
+/// every boot of the medium, the installer included (D013 L0-H). In `install`
+/// the OIE releases exactly one disk after its typed confirmation; in every
+/// other mode nothing is ever released. The shell script in the initramfs
+/// implements exactly this, and a test runs it against this function.
+///
+/// It never arms outside the medium: an installed system that somehow carried
+/// the guard must not lose its own disks.
 #[must_use]
 pub fn guard_must_arm(cmdline: &str) -> bool {
-    let on_medium = cmdline
+    cmdline
         .split_ascii_whitespace()
         .take_while(|a| *a != "--" && *a != "---")
-        .any(|a| a == CASPER_PARAM);
-    let boot = ResolvedMode::from_cmdline(cmdline);
-    on_medium && InstallAuthority::from_mode(&boot).is_none()
+        .any(|a| a == CASPER_PARAM)
 }
+
+/// Where the installer records the one disk it released from the guard: a
+/// file named after the disk's kernel name. The udev rule leaves that disk
+/// and its partitions writable; nothing else may create a file here.
+pub const GUARD_RELEASED_DIR: &str = "/run/ocinye/released";
 
 /// A boot mode of the medium.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -78,9 +85,10 @@ pub enum StoragePolicy {
     /// interface, no internal filesystem mounted, no swap, no RAID assembly,
     /// no LVM activation.
     InternalReadOnly,
-    /// The verified OIE contract (`crate::oie`): the medium and non-selected
-    /// disks are protected by the engine's rules; nothing is written before
-    /// the typed confirmation; only the confirmed target is written.
+    /// The OIE contract (`crate::oie`), enforced below the installer: every
+    /// block device is read-only from the initramfs; nothing is mounted,
+    /// swapped on, assembled or activated; after the typed destructive
+    /// confirmation the confirmed target, and only it, is made writable.
     OieInstallContract,
 }
 

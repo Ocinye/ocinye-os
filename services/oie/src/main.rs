@@ -6,6 +6,7 @@
 //!                                    `ocinye.mode=install` (one console at a time), the
 //!                                    non-destructive session in every other mode
 //! ocinye-oie policy                  the storage-policy verdict of this boot, JSON
+//! ocinye-oie select-medium           (initramfs) which device this system booted from
 //! ocinye-oie probe                   disks as the OIE classifies them, JSON (read-only)
 //! ocinye-oie --version
 //! ```
@@ -17,6 +18,7 @@
 
 mod flow;
 mod install;
+mod origin;
 mod policy;
 mod probe;
 mod session;
@@ -28,12 +30,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
+use ocinye_image_contracts::bootmode::GUARD_RELEASED_DIR;
 use ocinye_image_contracts::bootmode::{
     InstallAuthority, ResolvedMode, StorageSafetyEvidence, LANG_PARAM,
 };
 use ocinye_image_contracts::firstboot::PublicKeyLine;
+use ocinye_image_contracts::medium::{MediumDecision, MEDIA_LABEL};
 use ocinye_image_contracts::oie::{
-    InstallationTargetDisk, OieError, OieInstallJournal, OiePayload, OieStep, ProbedDisk,
+    ConfirmedTarget, OieError, OieInstallJournal, OiePayload, OieStep, ProbedDisk,
 };
 
 struct Real {
@@ -44,6 +48,12 @@ struct Real {
     /// failure (it can only restrict a session).
     fault_injected: bool,
 }
+
+/// This build's media identity, in the live root (the initramfs has its own
+/// copy at /conf/ocinye-media-id).
+const MEDIA_ID_FILE: &str = "/usr/lib/ocinye/guard/media-id";
+/// What `select-medium` decided in the initramfs.
+const MEDIUM_FILE: &str = "/run/ocinye/medium.json";
 
 /// Where the image says how live storage safety may be described. Absent or
 /// unreadable means the weaker statement.
@@ -220,12 +230,70 @@ fn lsblk() -> Option<probe::Lsblk> {
     serde_json::from_slice(&o.stdout).ok()
 }
 
-/// Removable volumes mounted read-only under /run/ocinye-oie/keys for the
-/// operator-key search (vfat, exfat, iso9660 only; never the target).
-fn key_roots() -> Vec<PathBuf> {
+#[derive(serde::Deserialize)]
+struct LsblkTransport {
+    name: String,
+    #[serde(default)]
+    tran: Option<String>,
+    #[serde(default)]
+    rm: Option<serde_json::Value>,
+    #[serde(default)]
+    hotplug: Option<serde_json::Value>,
+}
+
+#[derive(serde::Deserialize)]
+struct LsblkTransports {
+    blockdevices: Vec<LsblkTransport>,
+}
+
+fn truthy(v: Option<&serde_json::Value>) -> bool {
+    match v {
+        Some(serde_json::Value::Bool(b)) => *b,
+        Some(serde_json::Value::String(s)) => s == "1",
+        Some(serde_json::Value::Number(n)) => n.as_u64() == Some(1),
+        _ => false,
+    }
+}
+
+/// Whether a disk is the kind an operator plugs in to hand over a key: USB,
+/// removable or hot-pluggable. An internal disk never is.
+fn pluggable(tran: Option<&str>, rm: bool, hotplug: bool) -> bool {
+    tran == Some("usb") || rm || hotplug
+}
+
+/// Kernel names of the disks an operator key may be searched on.
+fn pluggable_disks() -> Vec<String> {
+    Command::new("lsblk")
+        .args(["--json", "--nodeps", "--output", "NAME,TRAN,RM,HOTPLUG"])
+        .output()
+        .ok()
+        .and_then(|o| serde_json::from_slice::<LsblkTransports>(&o.stdout).ok())
+        .map(|l| l.blockdevices)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|d| {
+            pluggable(
+                d.tran.as_deref(),
+                truthy(d.rm.as_ref()),
+                truthy(d.hotplug.as_ref()),
+            )
+        })
+        .map(|d| d.name)
+        .collect()
+}
+
+/// Volumes on pluggable devices, mounted read-only under /run/ocinye-oie/keys
+/// for the operator-key search (vfat, exfat, iso9660 only). Never the target,
+/// and never a filesystem on an internal disk: not even its EFI partition.
+fn key_roots(target: &str) -> Vec<PathBuf> {
     let mut roots = vec![];
     let Some(ls) = lsblk() else { return roots };
-    let mut stack: Vec<&probe::LsblkNode> = ls.blockdevices.iter().collect();
+    let allowed = pluggable_disks();
+    let mut stack: Vec<&probe::LsblkNode> = ls
+        .blockdevices
+        .iter()
+        .filter(|d| d.name != target && allowed.contains(&d.name))
+        .collect();
     while let Some(n) = stack.pop() {
         stack.extend(n.children.iter());
         let fs = n.fstype.as_deref().unwrap_or_default();
@@ -249,6 +317,75 @@ fn key_roots() -> Vec<PathBuf> {
         }
     }
     roots
+}
+
+/// The key-search mounts, undone: nothing from another disk stays mounted
+/// while the target is written.
+fn release_key_roots() {
+    if let Ok(dir) = fs::read_dir("/run/ocinye-oie/keys") {
+        for e in dir.flatten() {
+            let _ = Command::new("umount").arg(e.path()).status();
+        }
+    }
+}
+
+/// Partitions of a disk, by kernel name.
+fn partitions_of(disk: &str) -> Vec<String> {
+    fs::read_dir(format!("/sys/block/{disk}"))
+        .map(|d| {
+            d.flatten()
+                .filter(|e| e.path().join("partition").exists())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+impl Real {
+    /// Make the confirmed target, and only it, writable. Everything else
+    /// stays under the block guard for the whole installation.
+    fn release_target(&self, target: &ConfirmedTarget<'_>) -> Result<(), OieError> {
+        let confirmed = target.disk();
+        // The disk at that stable path must still be the disk that was
+        // confirmed: a name alone grants nothing.
+        let now = ocinye_image_contracts::oie::classify(&flow::Machine::disks(self));
+        let same = now
+            .iter()
+            .find(|d| d.by_path == confirmed.by_path)
+            .is_some_and(|d| ocinye_image_contracts::oie::same_target(confirmed, d));
+        if !same {
+            return Err(OieError::TargetChanged);
+        }
+        let failed = || OieError::TargetReleaseFailed {
+            device: confirmed.device.clone(),
+        };
+        // Before the release nothing at all may be writable.
+        if policy::verify(&policy::read_system(false)).restricted() {
+            return Err(failed());
+        }
+        // The udev rule leaves this disk and its partitions alone from now on
+        // (the partitions curtin is about to create included).
+        fs::create_dir_all(GUARD_RELEASED_DIR).map_err(|_| failed())?;
+        fs::write(Path::new(GUARD_RELEASED_DIR).join(&confirmed.device), "")
+            .map_err(|_| failed())?;
+        let mut devices = vec![confirmed.device.clone()];
+        devices.extend(partitions_of(&confirmed.device));
+        for d in &devices {
+            let ok = Command::new("blockdev")
+                .arg("--setrw")
+                .arg(format!("/dev/{d}"))
+                .status()
+                .is_ok_and(|s| s.success());
+            if !ok {
+                return Err(failed());
+            }
+        }
+        // And nothing but the target is writable now.
+        if policy::verify_released(&policy::read_system(false), &confirmed.device).restricted() {
+            return Err(failed());
+        }
+        Ok(())
+    }
 }
 
 impl flow::Machine for Real {
@@ -292,18 +429,34 @@ impl flow::Machine for Real {
             boot_sources,
             media_label: self.facts.as_ref().map(|f| f.media_label.clone()),
             stable_paths: probe::stable_paths(Path::new("/dev")),
+            guard_armed: fs::read_to_string(policy::GUARD_MARKER)
+                .is_ok_and(|s| s.trim() == policy::GUARD_ARMED),
+            hardware_read_only: fs::read_dir("/run/ocinye/hardware-ro")
+                .map(|d| {
+                    d.flatten()
+                        .map(|e| e.file_name().to_string_lossy().into_owned())
+                        .collect()
+                })
+                .unwrap_or_default(),
         };
         probe::disks(&ls, &ctx)
     }
-    fn operator_key(&self) -> Option<PublicKeyLine> {
-        install::find_operator_key(&key_roots()).map(|(_, k)| k)
+    fn operator_key(&self, target: &ConfirmedTarget<'_>) -> Option<PublicKeyLine> {
+        let key = install::find_operator_key(&key_roots(&target.disk().device)).map(|(_, k)| k);
+        release_key_roots();
+        key
+    }
+    fn storage_protected(&self) -> Result<(), String> {
+        let v = policy::verify(&policy::read_system(self.fault_injected));
+        policy::first_reason(&v).map_or(Ok(()), Err)
     }
     fn install(
         &self,
-        disk: &InstallationTargetDisk,
+        target: &ConfirmedTarget<'_>,
         key: Option<&PublicKeyLine>,
         say: &mut dyn FnMut(&str),
     ) -> Result<(), OieError> {
+        let disk = target.disk();
         let facts = self.facts.as_ref().ok_or(OieError::ImageManifestInvalid {
             field: "payload.json".into(),
         })?;
@@ -335,6 +488,9 @@ impl flow::Machine for Real {
             say,
         );
         let content = checked?;
+        // The one transition from read-only to writable, for the one disk
+        // whose typed confirmation was accepted.
+        self.release_target(target)?;
         fs::create_dir_all("/run/ocinye-oie").map_err(|_| OieError::DiskWriteFailed {
             device: "run".into(),
         })?;
@@ -426,6 +582,10 @@ fn main() {
                 input: &mut stdin,
                 out: &mut stdout,
             };
+            // Which device this system booted from, and why it is trusted.
+            if let Ok(medium) = fs::read_to_string(MEDIUM_FILE) {
+                ui.say(&format!("OCINYE-MEDIUM {}", medium.trim()));
+            }
             match InstallAuthority::from_mode(&boot) {
                 // Only `ocinye.mode=install` reaches the installer.
                 Some(authority) => match flow::run(&mut ui, &machine, &authority) {
@@ -452,6 +612,36 @@ fn main() {
                 },
             }
         }
+        ["select-medium"] => {
+            // Runs in the initramfs, before casper looks for anything: which
+            // block device is the medium this system booted from. Mounts
+            // nothing. Exit 0 and the kernel name on stdout when decided, 3 to
+            // wait for devices, 4 when it refuses to guess.
+            let id = ["/conf/ocinye-media-id", MEDIA_ID_FILE]
+                .iter()
+                .find_map(|p| fs::read_to_string(p).ok())
+                .map(|s| s.trim().to_owned())
+                .unwrap_or_default();
+            let sel = origin::select(&origin::Roots::system(), MEDIA_LABEL, &id);
+            let json = serde_json::to_string(&sel).unwrap_or_default();
+            let _ = fs::create_dir_all("/run/ocinye");
+            let _ = fs::write("/run/ocinye/medium-last.json", &json);
+            match &sel.decision {
+                MediumDecision::Medium { name, .. } => {
+                    let _ = fs::write(MEDIUM_FILE, &json);
+                    println!("{name}");
+                    0
+                }
+                MediumDecision::Wait => 3,
+                MediumDecision::RefuseAmbiguous { candidates } => {
+                    eprintln!(
+                        "Ocinye OS: more than one installation medium is connected ({}) and the firmware does not say which one started this computer. Remove the extra one and restart.",
+                        candidates.join(", ")
+                    );
+                    4
+                }
+            }
+        }
         ["policy"] => {
             let cmdline = fs::read_to_string("/proc/cmdline").unwrap_or_default();
             let boot = ResolvedMode::from_cmdline(&cmdline);
@@ -474,7 +664,9 @@ fn main() {
             0
         }
         _ => {
-            eprintln!("uso: ocinye-oie run --vt|--serial | probe | policy | --version");
+            eprintln!(
+                "uso: ocinye-oie run --vt|--serial | probe | policy | select-medium | --version"
+            );
             2
         }
     };

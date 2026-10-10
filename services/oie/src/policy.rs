@@ -171,9 +171,18 @@ pub fn swap_devices(swaps: &str) -> Vec<String> {
         .collect()
 }
 
-/// Check the policy. Every violation is reported, not just the first.
-#[must_use]
-pub fn verify(i: &PolicyInputs) -> PolicyVerdict {
+/// Whether a block device is `disk` or one of its partitions (`sda1`,
+/// `nvme0n1p2`, `mmcblk0p1`).
+fn belongs_to(name: &str, disk: &str) -> bool {
+    name == disk
+        || name.strip_prefix(disk).is_some_and(|rest| {
+            let digits = rest.strip_prefix('p').unwrap_or(rest);
+            !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+fn check(i: &PolicyInputs, released: Option<&str>) -> PolicyVerdict {
+    let mine = |name: &str| released.is_some_and(|d| belongs_to(name, d));
     let mut v = vec![];
     if i.guard_marker.as_deref().map(str::trim) != Some(GUARD_ARMED) {
         v.push(PolicyViolation::GuardNotArmed);
@@ -184,13 +193,22 @@ pub fn verify(i: &PolicyInputs) -> PolicyVerdict {
             continue;
         }
         if mapper(&b.name) {
-            v.push(PolicyViolation::MapperActive {
-                device: b.name.clone(),
-            });
+            // During an installation curtin may look at volumes and arrays to
+            // clear the target's holders; they are legitimate only once a
+            // target was released, and they must be read-only like any disk.
+            if released.is_none() {
+                v.push(PolicyViolation::MapperActive {
+                    device: b.name.clone(),
+                });
+            } else if !b.read_only {
+                v.push(PolicyViolation::DeviceWritable {
+                    device: b.name.clone(),
+                });
+            }
             continue;
         }
         checked += 1;
-        if !b.read_only {
+        if !b.read_only && !mine(&b.name) {
             v.push(PolicyViolation::DeviceWritable {
                 device: b.name.clone(),
             });
@@ -199,10 +217,16 @@ pub fn verify(i: &PolicyInputs) -> PolicyVerdict {
     for d in swap_devices(&i.swaps) {
         v.push(PolicyViolation::SwapActive { device: d });
     }
-    for a in raid_arrays(&i.mdstat) {
-        v.push(PolicyViolation::RaidAssembled { array: a });
+    if released.is_none() {
+        for a in raid_arrays(&i.mdstat) {
+            v.push(PolicyViolation::RaidAssembled { array: a });
+        }
     }
     for (source, target, fstype) in internal_mounts(&i.mountinfo) {
+        let dev = source.rsplit('/').next().unwrap_or(&source);
+        if mine(dev) {
+            continue;
+        }
         v.push(PolicyViolation::InternalMount {
             source,
             target,
@@ -217,6 +241,33 @@ pub fn verify(i: &PolicyInputs) -> PolicyVerdict {
     } else {
         PolicyVerdict::Restricted { violations: v }
     }
+}
+
+/// Check the policy of a non-destructive boot, and of the installer before
+/// any target is confirmed: nothing at all is writable. Every violation is
+/// reported, not just the first.
+#[must_use]
+pub fn verify(i: &PolicyInputs) -> PolicyVerdict {
+    check(i, None)
+}
+
+/// Check the installer's policy once it released `target` (a kernel disk
+/// name): that disk and its partitions may be writable and mounted; nothing
+/// else may.
+#[must_use]
+pub fn verify_released(i: &PolicyInputs, target: &str) -> PolicyVerdict {
+    check(i, Some(target))
+}
+
+/// A stable code for the first violation.
+#[must_use]
+pub fn first_reason(v: &PolicyVerdict) -> Option<String> {
+    let PolicyVerdict::Restricted { violations } = v else {
+        return None;
+    };
+    serde_json::to_value(violations.first()?)
+        .ok()
+        .and_then(|j| j["code"].as_str().map(str::to_owned))
 }
 
 /// Read the inputs from the running system.
@@ -444,5 +495,87 @@ mod tests {
         assert!(internal_mounts(MOUNTS_OK).is_empty());
         // The medium as a USB stick, mounted from a partition.
         assert!(internal_mounts("30 24 8:33 / /cdrom ro - iso9660 /dev/sdc1 ro\n").is_empty());
+    }
+
+    #[test]
+    fn depois_da_confirmacao_so_o_alvo_pode_ser_gravavel() {
+        let mut i = ok();
+        // The target and its partitions are writable; everything else is not.
+        for b in &mut i.block {
+            if b.name == "sda" || b.name == "sda1" {
+                b.read_only = false;
+            }
+        }
+        assert!(
+            verify(&i).restricted(),
+            "before a release nothing is writable"
+        );
+        assert_eq!(
+            verify_released(&i, "sda"),
+            PolicyVerdict::Verified { devices: 6 }
+        );
+        // Another disk writable as well: refused, and named.
+        i.block
+            .iter_mut()
+            .find(|b| b.name == "nvme0n1p1")
+            .unwrap()
+            .read_only = false;
+        assert_eq!(
+            violations_of(&verify_released(&i, "sda")),
+            vec![PolicyViolation::DeviceWritable {
+                device: "nvme0n1p1".into()
+            }]
+        );
+        // The wrong disk named as the target does not excuse the right one.
+        assert!(verify_released(&i, "sdb").restricted());
+    }
+
+    #[test]
+    fn o_alvo_libertado_nao_desculpa_discos_de_nome_parecido() {
+        assert!(belongs_to("sda", "sda"));
+        assert!(belongs_to("sda1", "sda"));
+        assert!(belongs_to("nvme0n1p2", "nvme0n1"));
+        assert!(belongs_to("mmcblk0p1", "mmcblk0"));
+        // `sdaa` is another disk, not a partition of `sda`.
+        assert!(!belongs_to("sdaa", "sda"));
+        assert!(!belongs_to("sdab1", "sda"));
+        assert!(!belongs_to("sdb1", "sda"));
+        assert!(!belongs_to("nvme0n10", "nvme0n1p"));
+        assert!(!belongs_to("sdap", "sda"));
+    }
+
+    #[test]
+    fn durante_a_instalacao_o_alvo_montado_e_aceite_e_o_resto_nao() {
+        let mut i = ok();
+        i.block.iter_mut().for_each(|b| {
+            if b.name.starts_with("sda") {
+                b.read_only = false;
+            }
+        });
+        i.mountinfo = format!(
+            "{MOUNTS_OK}50 24 8:1 / /target rw - ext4 /dev/sda1 rw\n51 24 259:1 / /mnt ro - ext4 /dev/nvme0n1p1 ro\n"
+        );
+        assert_eq!(
+            violations_of(&verify_released(&i, "sda")),
+            vec![PolicyViolation::InternalMount {
+                source: "/dev/nvme0n1p1".into(),
+                target: "/mnt".into(),
+                fstype: "ext4".into()
+            }]
+        );
+        // Swap is never acceptable, target or not.
+        i.mountinfo = MOUNTS_OK.into();
+        i.swaps = format!("{SWAPS_EMPTY}/dev/sda2 partition 1 0 -2\n");
+        assert_eq!(
+            first_reason(&verify_released(&i, "sda")).as_deref(),
+            Some("SWAP_ACTIVE")
+        );
+    }
+
+    fn violations_of(v: &PolicyVerdict) -> Vec<PolicyViolation> {
+        match v {
+            PolicyVerdict::Restricted { violations } => violations.clone(),
+            PolicyVerdict::Verified { .. } => vec![],
+        }
     }
 }

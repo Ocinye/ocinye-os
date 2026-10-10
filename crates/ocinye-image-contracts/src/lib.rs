@@ -19,6 +19,7 @@ pub mod build;
 pub mod claim;
 pub mod firstboot;
 pub mod manifest;
+pub mod medium;
 pub mod oie;
 pub mod receipt;
 pub mod signing;

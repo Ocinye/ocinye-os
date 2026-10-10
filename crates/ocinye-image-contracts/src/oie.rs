@@ -135,6 +135,22 @@ pub enum OieError {
     },
     /// The boot loader did not install.
     BootloaderInstallFailed,
+    /// The installer's storage protection is not in force: some disk other
+    /// than a confirmed target is writable, swap is active, or an array or
+    /// volume is assembled. Nothing is offered for installation.
+    StorageProtectionUnverified {
+        /// The first reason, as a stable code.
+        reason: String,
+    },
+    /// The disk at the confirmed stable path is no longer the disk that was
+    /// confirmed (another serial, size or name). Nothing was made writable.
+    TargetChanged,
+    /// The confirmed target could not be made writable, or more than the
+    /// confirmed target is.
+    TargetReleaseFailed {
+        /// Device.
+        device: String,
+    },
 }
 
 fn tail4(s: &str) -> Option<String> {
@@ -245,6 +261,60 @@ pub fn confirm(disk: &InstallationTargetDisk, typed: &str) -> Result<(), OieErro
     } else {
         Err(OieError::ConfirmationMismatch)
     }
+}
+
+/// The authority to write one disk: this disk, in an `install` boot, after its
+/// typed destructive confirmation was accepted.
+///
+/// It is the only thing the installation step takes, it can only be made by
+/// [`authorize_installation`], and it is neither `Clone` nor serialisable. A
+/// device name alone never makes a disk writable: the installer releases the
+/// block guard for what this value names, and for nothing else.
+#[derive(Debug)]
+pub struct ConfirmedTarget<'a> {
+    disk: &'a InstallationTargetDisk,
+    _authority: &'a crate::bootmode::InstallAuthority<'a>,
+}
+
+impl<'a> ConfirmedTarget<'a> {
+    /// The confirmed disk.
+    #[must_use]
+    pub const fn disk(&self) -> &'a InstallationTargetDisk {
+        self.disk
+    }
+}
+
+/// The destructive confirmation, as the one step that grants write authority
+/// over a disk. Same rule as [`confirm`]; it additionally requires the boot to
+/// be the installer.
+///
+/// # Errors
+/// `ConfirmationMismatch`.
+pub fn authorize_installation<'a>(
+    authority: &'a crate::bootmode::InstallAuthority<'a>,
+    disk: &'a InstallationTargetDisk,
+    typed: &str,
+) -> Result<ConfirmedTarget<'a>, OieError> {
+    confirm(disk, typed)?;
+    Ok(ConfirmedTarget {
+        disk,
+        _authority: authority,
+    })
+}
+
+/// Whether a freshly probed disk is still the one that was confirmed: same
+/// stable path, same kernel name, same size, same serial and WWN, and still
+/// selectable.
+#[must_use]
+pub fn same_target(confirmed: &InstallationTargetDisk, now: &InstallationTargetDisk) -> bool {
+    !confirmed.by_path.is_empty()
+        && confirmed.by_path == now.by_path
+        && confirmed.device == now.device
+        && confirmed.bytes == now.bytes
+        && confirmed.serial == now.serial
+        && confirmed.wwn == now.wwn
+        && confirmed.confirmation_token == now.confirmation_token
+        && now.protection.selectable()
 }
 
 /// What the OIE was built to install, embedded in its own live root
@@ -404,6 +474,56 @@ mod tests {
         assert_eq!(chosen.confirmation_token, "vdc");
         assert_eq!(confirm(chosen, "vdb"), Err(OieError::ConfirmationMismatch));
         assert_eq!(confirm(chosen, "vdc"), Ok(()));
+    }
+
+    #[test]
+    fn so_a_confirmacao_escrita_num_arranque_de_instalacao_da_autoridade_sobre_o_disco() {
+        use crate::bootmode::{InstallAuthority, ResolvedMode};
+        let all = classify(&[disk("vda", G40, Some("SN-ab12"))]);
+        let d = &all[0];
+        let boot = ResolvedMode::from_cmdline("boot=casper ocinye.mode=install");
+        let authority = InstallAuthority::from_mode(&boot).unwrap();
+        for wrong in ["", "yes", "vda", "AB1", "AB123"] {
+            assert_eq!(
+                authorize_installation(&authority, d, wrong).err(),
+                Some(OieError::ConfirmationMismatch),
+                "{wrong:?}"
+            );
+        }
+        let target = authorize_installation(&authority, d, "ab12").unwrap();
+        assert_eq!(target.disk().device, "vda");
+        // No other boot mode has an authority to pass, so none can obtain a
+        // confirmed target, whatever is typed.
+        for other in ["live", "hardware-check", "recovery", "bogus"] {
+            let boot = ResolvedMode::from_cmdline(&format!("boot=casper ocinye.mode={other}"));
+            assert!(InstallAuthority::from_mode(&boot).is_none(), "{other}");
+        }
+        // A protected disk is never confirmed, even with its own token.
+        let mut media = disk("sr0", G40, Some("QM00003"));
+        media.boot_media = true;
+        let all = classify(&[media]);
+        assert!(authorize_installation(&authority, &all[0], "0003").is_err());
+    }
+
+    #[test]
+    fn o_disco_confirmado_tem_de_continuar_a_ser_o_mesmo() {
+        let confirmed = classify(&[disk("vda", G40, Some("SN-ab12"))]).remove(0);
+        assert!(same_target(&confirmed, &confirmed.clone()));
+        let change = |f: &dyn Fn(&mut InstallationTargetDisk)| {
+            let mut now = confirmed.clone();
+            f(&mut now);
+            same_target(&confirmed, &now)
+        };
+        assert!(!change(&|d| d.device = "vdb".into()));
+        assert!(!change(&|d| d.by_path = "/dev/disk/by-path/other".into()));
+        assert!(!change(&|d| d.bytes += 512));
+        assert!(!change(&|d| d.serial = Some("SN-zz99".into())));
+        assert!(!change(&|d| d.wwn = Some("0x5000".into())));
+        assert!(!change(&|d| d.protection = DiskProtection::Mounted));
+        // A disk with no stable path was never selectable and is never "the same".
+        let mut nopath = confirmed.clone();
+        nopath.by_path = String::new();
+        assert!(!same_target(&nopath, &nopath.clone()));
     }
 
     #[test]

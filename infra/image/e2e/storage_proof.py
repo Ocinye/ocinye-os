@@ -36,7 +36,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from image_e2e import Vm, firmware, log, native, sh  # noqa: E402
+from image_e2e import (DONE_OR_FAIL_RX, Vm, base_installed, firmware, installed_root_identity, log, native,  # noqa: E402
+                       sh)
 
 MIB = 1 << 20
 
@@ -62,6 +63,11 @@ TRAPS = {
     "K-fake-medium": (96, "K: ext4 partition labelled OCINYE_OS holding casper/fake.squashfs"),
     "L-wholedisk-ext4": (96, "L: ext4 directly on the disk, no partition table"),
 }
+
+
+# The installation target of the install scenarios: 22 GB, sparse.
+TARGET_MIB = 22 * 1024
+TARGET_SERIAL = "OCY-TARGET-7F3A"
 
 
 def sha256_stream(cmd):
@@ -286,6 +292,38 @@ def build_sentinels(work):
     return d
 
 
+def ensure_target(sdir):
+    """T: an installation target that is not blank: a stale RAID member and a
+    stale LVM volume group. Installing onto it must still work, and only after
+    the confirmation. Sparse; never hashed (it is meant to be written)."""
+    path = os.path.join(sdir, "T-stale-target.raw")
+    if os.path.exists(path):
+        return path
+    p = lambda n: os.path.join(sdir, n + ".raw")  # noqa: E731
+    _raw(p("T-stale-target"), TARGET_MIB)
+    sh("sgdisk", "-n", "1:1MiB:+512MiB", "-t", "1:fd00", "-n", "2:0:+1024MiB", "-t", "2:8e00", p("T-stale-target"))
+    with Loop(p("T-stale-target")) as dev:
+        md = "/dev/md/ocinye-stale"
+        try:
+            sh("mdadm", "--create", md, "--run", "--quiet", "--force", "--level=1", "--raid-devices=1",
+               "--metadata=1.2", "--name=ocinye-stale", "--homehost=any", dev + "p1")
+            sh("mkfs.ext4", "-q", "-L", "STALE_MD", md)
+        finally:
+            sh("mdadm", "--stop", md, check=False)
+        try:
+            sh("pvcreate", "-q", "-ff", "-y", dev + "p2")
+            sh("vgcreate", "-q", "stalevg", dev + "p2")
+            sh("lvcreate", "-q", "-y", "-L", "512M", "-n", "stalelv", "stalevg")
+            sh("udevadm", "settle", check=False)
+            sh("mkfs.ext4", "-q", "-L", "STALE_LV", "/dev/stalevg/stalelv")
+        finally:
+            sh("vgchange", "-an", "stalevg", check=False)
+            sh("udevadm", "settle", check=False)
+    os.chmod(p("T-stale-target"), 0o444)
+
+    return path
+
+
 def _ext(dev):
     out = sh("dumpe2fs", "-h", dev, check=False).stdout.decode(errors="replace")
     keep = ("Filesystem state", "Mount count", "Last mount time", "Last write time", "Filesystem features",
@@ -359,7 +397,7 @@ def overlay_writes(overlay):
     """Bytes of guest data the overlay holds: 0 means no write ever reached the
     sentinel. (`qemu-img map` reports each extent with the layer it comes from:
     depth 0 is the overlay itself.)"""
-    m = json.loads(sh("qemu-img", "map", "--output=json", overlay).stdout)
+    m = json.loads(sh("qemu-img", "map", "-U", "--output=json", overlay).stdout)
     return sum(e["length"] for e in m if e.get("depth") == 0 and e.get("data"))
 
 
@@ -376,6 +414,7 @@ class Machine(Vm):
     medium, with the medium as a virtual CD or as a USB stick."""
 
     def start_bench(self, disks, medium, media="cdrom", net=True):
+        # scsi-id 0.. in the order given: that is the order the kernel names them.
         kvm = native(self.arch)
         code, _ = firmware(self.arch)
         if self.arch == "amd64":
@@ -433,13 +472,74 @@ class Machine(Vm):
 
 
 # GRUB hotkeys of the normative menu (ocinye_image_contracts::bootmode::BOOT_MENU).
-MENU_KEYS = {"live": "t", "install": "i", "hardware-check": "h", "recovery": "ad", "restricted": "as", "menu": ""}
+MENU_KEYS = {"live": "t", "install": "i", "install-full": "i", "hardware-check": "h", "recovery": "ad",
+             "restricted": "as", "menu": ""}
 MENU_RX = r"(Experimentar o Ocinye OS|Try Ocinye OS)"
 SESSION_RX = r"OCINYE-SESSION-READY"
 LEGACY_RX = r"Instalar o Ocinye OS neste computador"
 
 
-def drive(vm, mode, boot_budget):
+def medium_fact(vm):
+    m = re.findall(r"OCINYE-MEDIUM (\{.*\})", vm.text())
+    if not m:
+        return {}
+    try:
+        return {"medium": json.loads(m[-1])}
+    except ValueError:
+        return {"medium_unparsed": m[-1][:300]}
+
+
+def drive_install(vm, boot_budget, facts, checkpoints):
+    """The installer, as an operator: look, choose the target, mistype the
+    confirmation, then confirm. `checkpoints(label)` records what has been
+    written to every disk at that moment."""
+    vm.expect(LEGACY_RX, boot_budget)
+    facts.update(medium_fact(vm))
+    time.sleep(30)
+    checkpoints("first screen, nothing selected")
+    vm.send("\r")
+    vm.expect(r"Escolher \(1", 300)
+    rows = {}
+    for line in vm.text().splitlines()[-80:]:
+        mm = re.match(r"^(\[\d+\]\??| - )\s+(\S+)\s", line)
+        if mm:
+            rows[mm.group(2)] = (mm.group(1), line.strip())
+    facts["rows"] = {k: v[1][:110] for k, v in rows.items()}
+    target = [(st, dev) for dev, (st, line) in rows.items() if "7F3A" in line]
+    selectable = [dev for dev, (st, _) in rows.items() if st.startswith("[")]
+    facts["selectable"] = selectable
+    if len(target) != 1 or not target[0][0].startswith("["):
+        raise RuntimeError(f"target row not found or not selectable: {target}")
+    num = target[0][0].strip("[]?")
+    time.sleep(20)
+    checkpoints("disk list shown, nothing selected")
+    vm.send(num + "\r")
+    vm.expect(r"(4 caracteres|4 characters)", 120)
+    time.sleep(20)
+    checkpoints("target selected, not confirmed")
+    vm.send("0000\r")
+    vm.expect(r"(n[aã]o foi alterado|not changed)", 120)
+    time.sleep(20)
+    checkpoints("wrong confirmation")
+    vm.send("\r")
+    vm.expect(LEGACY_RX, 300)
+    vm.send("\r")
+    vm.expect(r"Escolher \(1", 300)
+    vm.send(num + "\r")
+    vm.expect(r"(4 caracteres|4 characters)", 120)
+    vm.send("7F3A\r")
+    vm.expect(r"(Chave SSH do operador|Operator SSH key)", 300)
+    vm.expect(DONE_OR_FAIL_RX, 5400)
+    facts["installed"] = base_installed(vm.text())
+    time.sleep(20)
+    checkpoints("installation finished")
+    vm.send("\r")
+    time.sleep(60)
+    vm.stop()
+    return ("installed" if facts["installed"] else "INSTALL DID NOT COMPLETE"), facts
+
+
+def drive(vm, mode, boot_budget, checkpoints=lambda label: None):
     """Bring the guest to its first screen, use it, and stop it. Returns
     (how it stopped, facts the guest printed about itself)."""
     facts = {}
@@ -466,8 +566,11 @@ def drive(vm, mode, boot_budget):
     if mode == "install":
         vm.expect(LEGACY_RX, boot_budget)
         time.sleep(90)
+        facts.update(medium_fact(vm))
         vm.stop()
         return "stopped at the installer's first screen after 90 s", facts
+    if mode == "install-full":
+        return drive_install(vm, boot_budget, facts, checkpoints)
     vm.expect(SESSION_RX, boot_budget)
     # Normal flows of the session: inventory again, the report, the install
     # action (which must only explain a restart) and its refusal.
@@ -516,6 +619,23 @@ def run(a):
             disks.append({"file": ov, "format": "qcow2", "serial": name[:20]})
         else:
             disks.append({"file": base, "format": "raw", "serial": name[:20], "readonly": True})
+    target = None
+    if a.mode == "install-full":
+        target = os.path.join(work, "target.overlay.qcow2")
+        sh("qemu-img", "create", "-q", "-f", "qcow2", "-F", "raw", "-b",
+           ensure_target(sdir), target)
+    copy = None
+    if a.iso_copy:
+        # An exact copy of the medium on an "internal" disk, attached FIRST so
+        # the kernel enumerates it before every other disk and before the
+        # medium. It must not become the medium.
+        copy = os.path.join(work, "iso-copy.overlay.qcow2")
+        sh("qemu-img", "create", "-q", "-f", "qcow2", "-F", "raw", "-b", a.iso, copy)
+        disks.insert(0, {"file": copy, "format": "qcow2", "serial": "M-ISO-COPY"})
+        names.insert(0, None)
+    if target:
+        disks.append({"file": target, "format": "qcow2", "serial": TARGET_SERIAL})
+        names.append(None)
     iso_digest, _ = sha256_file(a.iso)
     if a.media == "usb":
         # A stick larger than the image, as real ones are: the hybrid ISO at
@@ -533,9 +653,23 @@ def run(a):
     vm = Machine(a.name, a.arch, work, memory=3072)
     vars_before = sha256_file(vm.vars)[0]
     invalid, how, facts = None, "", {}
+    progress = []
+
+    def checkpoints(label):
+        progress.append({
+            "at": label,
+            "sentinels_written_bytes": sum(overlay_writes(d["file"]) for n, d in zip(names, disks)
+                                           if n and d["format"] == "qcow2"),
+            "target_written_bytes": overlay_writes(target) if target else None,
+            "iso_copy_written_bytes": overlay_writes(copy) if copy else None,
+        })
+        log(f"{a.name}: {progress[-1]}")
+
     try:
-        vm.start_bench(disks, medium, media=a.media)
-        how, facts = drive(vm, a.mode, a.boot_budget)
+        vm.start_bench(disks, medium, media=a.media, net=a.mode != "install-full")
+        how, facts = drive(vm, a.mode, a.boot_budget, checkpoints)
+        if how.startswith("INSTALL DID NOT"):
+            invalid = None
         if how.startswith("INVALID"):
             invalid = how
     except Exception as e:  # bench failure, not a finding
@@ -549,6 +683,8 @@ def run(a):
            "kernel_log_storage_lines": kernel, "sentinels": {}, "invalid": invalid}
     changed = []
     for name, d in zip(names, disks):
+        if name is None:
+            continue
         base = os.path.join(sdir, name + ".raw")
         item = {"what": {**SENTINELS, **TRAPS}[name][1], "before_sha256": before[name]["sha256"]}
         if a.attach == "overlay":
@@ -578,11 +714,47 @@ def run(a):
         os.chmod(os.path.join(work, "stick.raw"), 0o644)
         os.remove(os.path.join(work, "stick.raw"))
     out["changed"] = changed
-    status = "INVALID" if invalid else ("FAIL" if changed or out.get("medium_written_bytes") else "PASS")
+    out["checkpoints"] = progress
+    failures = list(changed)
+    if out.get("medium_written_bytes"):
+        failures.append("medium written")
+    med = (facts.get("medium") or {}).get("decision") or {}
+    out["medium"] = med
+    if copy:
+        out["iso_copy_written_bytes"] = overlay_writes(copy)
+        if out["iso_copy_written_bytes"]:
+            failures.append("iso copy written")
+        # The copy is a SCSI disk; the medium is the CD drive or the USB stick
+        # the firmware started from, and only the firmware's word tells them apart.
+        if a.mode not in ("menu", "legacy"):
+            name = med.get("name") or ""
+            booted = name.startswith("sr") if a.media == "cdrom" else bool(name)
+            if med.get("decision") != "MEDIUM" or med.get("binding") != "FIRMWARE_BOOT_ENTRY" or not booted:
+                failures.append(f"medium is not bound to the booted device: {med}")
+    if a.mode not in ("menu", "legacy") and a.expect_binding and med.get("binding") != a.expect_binding:
+        failures.append(f"binding {med.get('binding')} != {a.expect_binding}")
+    if target:
+        out["target_written_bytes"] = overlay_writes(target)
+        early = [c for c in progress if c["at"] != "installation finished"]
+        if any(c["target_written_bytes"] or c["sentinels_written_bytes"] or c["iso_copy_written_bytes"] for c in early):
+            failures.append("a disk was written before the confirmation was accepted")
+        if len(early) != 4:
+            failures.append(f"only {len(early)} of 4 pre-confirmation checkpoints were taken")
+        if not facts.get("installed"):
+            failures.append("installation did not complete")
+        elif not out["target_written_bytes"]:
+            failures.append("installed, but the target shows no writes")
+        else:
+            ident = installed_root_identity(target)
+            out["installed_root_identity"] = ident
+            if not ident.get("ok"):
+                failures.append("installed root identity mismatch")
+    out["failures"] = failures
+    status = "INVALID" if invalid else ("FAIL" if failures else "PASS")
     out["status"] = status
     with open(os.path.join(work, "result.json"), "w") as f:
         json.dump(out, f, indent=1, sort_keys=True)
-    print(f"RESULT {a.name} {status} changed={changed} medium_written={out.get('medium_written_bytes')} "
+    print(f"RESULT {a.name} {status} failures={failures} medium={med.get('name')}/{med.get('binding')} "
           f"invalid={invalid}", flush=True)
     return {"PASS": 0, "FAIL": 1, "INVALID": 2}[status]
 
@@ -602,6 +774,8 @@ def main():
     r.add_argument("--media", default="cdrom", choices=["cdrom", "usb"])
     r.add_argument("--traps", action="store_true")
     r.add_argument("--stick-free-mib", type=int, default=0)
+    r.add_argument("--iso-copy", action="store_true")
+    r.add_argument("--expect-binding", default="")
     r.add_argument("--boot-budget", type=int, default=2400)
     a = p.parse_args()
     os.makedirs(a.work, exist_ok=True)

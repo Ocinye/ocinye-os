@@ -19,7 +19,20 @@ fail() {
 }
 
 copy_exec /usr/sbin/blockdev /usr/sbin
-copy_exec /usr/sbin/blkid /usr/sbin
+mkdir -p "${DESTDIR}/usr/lib/ocinye/guard"
+cp /usr/lib/ocinye/guard/blockguard-apply "${DESTDIR}/usr/lib/ocinye/guard/blockguard-apply" ||
+    fail "blockguard-apply missing"
+chmod 0755 "${DESTDIR}/usr/lib/ocinye/guard/blockguard-apply"
+
+# The medium is chosen by the OIE's own rules, in the initramfs.
+[ -x /usr/lib/ocinye/ocinye-oie ] || fail "ocinye-oie is not in this root"
+mkdir -p "${DESTDIR}/usr/lib/ocinye" "${DESTDIR}/conf"
+cp /usr/lib/ocinye/ocinye-oie "${DESTDIR}/usr/lib/ocinye/ocinye-oie" || fail "cannot copy ocinye-oie"
+chmod 0755 "${DESTDIR}/usr/lib/ocinye/ocinye-oie"
+# This build's media identity: the same value is in the medium's volume
+# descriptor. Without it nothing can be recognised as the medium.
+grep -q -x '[0-9a-f]\{32\}' /usr/lib/ocinye/guard/media-id || fail "no media identity in this root"
+cp /usr/lib/ocinye/guard/media-id "${DESTDIR}/conf/ocinye-media-id" || fail "cannot copy the media identity"
 
 mkdir -p "${DESTDIR}/usr/lib/udev/rules.d" "${DESTDIR}/scripts"
 cp /usr/lib/udev/rules.d/01-ocinye-blockguard.rules "${DESTDIR}/usr/lib/udev/rules.d/" ||
@@ -28,7 +41,8 @@ cp /usr/lib/ocinye/guard/casper-guard-functions "${DESTDIR}/scripts/ocinye-guard
     fail "guard functions missing"
 
 # casper's search for its medium walks every block device and mounts what it
-# finds. Restrain it at the one place every branch passes through.
+# finds. Restrain it at the one place every branch passes through: with the
+# guard armed, only the device select-medium named is examined.
 casper="${DESTDIR}/scripts/casper"
 [ -f "$casper" ] || fail "no /scripts/casper in this initramfs"
 anchor='        devname=$(sys2dev "${sysblock}")'
