@@ -223,8 +223,8 @@ sem que nada falhe.
   serviços e confirma de fora que o Workspace responde. O resultado tem o layout
   da produção da Ocinye. `scripts/install-e2e.sh` prova-o num anfitrião
   descartável, duas vezes, de raiz.
-- **Ocinye OS Installer (D011): `IMPLEMENTED` em `feat/design-d011`, não
-  mergeado** ([ADR-0022](docs/adrs/0022-graphical-remote-installer.md) a
+- **Ocinye OS Installer (D011): `IMPLEMENTED`, em `main`,
+  `D011_READY_FOR_FINAL_AMD64_CERTIFICATION` — não certificado** ([ADR-0022](docs/adrs/0022-graphical-remote-installer.md) a
   [ADR-0025](docs/adrs/0025-hardware-discovery-and-compute-boundary.md),
   `Proposed`; [installer](docs/install/installer.md)). Uma janela no computador
   do operador instala um release num **Ubuntu Server 24.04 LTS** novo por SSH,
@@ -233,7 +233,8 @@ sem que nada falhe.
   chave conferida, TLS do operador ou auto-assinado de teste, pontos de acesso
   por Distribuição e a credencial temporária do primeiro administrador mostrada
   uma vez. Provado em VMs Ubuntu 24.04 mínimas `arm64` locais; a certificação
-  final exige ainda uma VM `amd64` na cloud. ACME `DEFERRED`; assinatura do
+  final exige ainda uma VM `amd64` externa, e é um comando
+  ([runbook](docs/runbooks/certify-installer-on-external-amd64-vm.md), `NOT_RUN`). ACME `DEFERRED`; assinatura do
   release `NOT_IMPLEMENTED`; modo fornecedor de computação não existe.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
@@ -629,7 +630,7 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **111 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **111 ADRs** em `docs/adrs/`, **13 runbooks** em `docs/runbooks/`,
   **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.

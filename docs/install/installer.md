@@ -141,4 +141,8 @@ bootstrap e a sua pasta temporária desaparecem no fim.
 
 ### Cloud `amd64`
 
-Por fazer: é o portão final da certificação D011.
+Por fazer: é o portão final da certificação D011, e o único. Estado:
+**`D011_READY_FOR_FINAL_AMD64_CERTIFICATION`** — o código está em `main`, os
+portões do repositório passam, e a certificação é um comando, descrito no
+[runbook](../runbooks/certify-installer-on-external-amd64-vm.md). O D011 **não**
+está certificado: nenhuma VM `amd64` externa correu ainda.
