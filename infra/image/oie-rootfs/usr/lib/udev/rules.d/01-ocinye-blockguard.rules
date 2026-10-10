@@ -1,0 +1,15 @@
+# Ocinye block guard, part 2 of 3 (D013 Live Mode, L0-S).
+#
+# When the guard is armed (/run/ocinye/guard, written by the initramfs before
+# udev starts), every block device is set read-only as it appears, before any
+# later rule probes it, assembles it or activates anything on it. PROGRAM runs
+# while the rules are being read, so the flag is set before rule 60 and up.
+#
+# Loop, ram and zram devices are not storage anyone owns: the medium's own
+# SquashFS sits on a loop device.
+ACTION=="remove", GOTO="ocinye_blockguard_end"
+SUBSYSTEM!="block", GOTO="ocinye_blockguard_end"
+KERNEL=="loop*|ram*|zram*", GOTO="ocinye_blockguard_end"
+TEST!="/run/ocinye/guard", GOTO="ocinye_blockguard_end"
+PROGRAM="/bin/sh -c 'PATH=/usr/sbin:/usr/bin:/sbin:/bin; exec blockdev --setro $devnode'"
+LABEL="ocinye_blockguard_end"

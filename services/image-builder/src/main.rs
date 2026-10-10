@@ -263,6 +263,21 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
                 0o755,
             )?;
         }
+        // The medium's own fragments (the block guard): OIE root only.
+        cmd::run(
+            "B04",
+            "tar",
+            &[
+                "-C",
+                cmd::p(&a.image_dir.join("oie-rootfs")),
+                "--owner=0",
+                "--group=0",
+                "-cf",
+                cmd::p(&stage.join("oie-rootfs.tar")),
+                ".",
+            ],
+            || asm("oie-rootfs"),
+        )?;
         cmd::run(
             "B04",
             "tar",
@@ -286,6 +301,7 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         "build.env",
         "curtin.tar",
         "rootfs.tar",
+        "oie-rootfs.tar",
         "bin/ocinye-firstboot",
         "bin/ocinye-oie",
     ] {

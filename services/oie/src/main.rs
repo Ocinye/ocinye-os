@@ -2,7 +2,10 @@
 //! PROVISIONAL_PENDING_D011_CERTIFICATION.
 //!
 //! ```text
-//! ocinye-oie run --vt | --serial     the installer on this terminal (one console at a time)
+//! ocinye-oie run --vt | --serial     this boot's mode on this terminal: the installer in
+//!                                    `ocinye.mode=install` (one console at a time), the
+//!                                    non-destructive session in every other mode
+//! ocinye-oie policy                  the storage-policy verdict of this boot, JSON
 //! ocinye-oie probe                   disks as the OIE classifies them, JSON (read-only)
 //! ocinye-oie --version
 //! ```
@@ -14,7 +17,9 @@
 
 mod flow;
 mod install;
+mod policy;
 mod probe;
+mod session;
 mod strings;
 
 use std::fs;
@@ -23,6 +28,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
+use ocinye_image_contracts::bootmode::{
+    InstallAuthority, ResolvedMode, StorageSafetyEvidence, LANG_PARAM,
+};
 use ocinye_image_contracts::firstboot::PublicKeyLine;
 use ocinye_image_contracts::oie::{
     InstallationTargetDisk, OieError, OieInstallJournal, OiePayload, OieStep, ProbedDisk,
@@ -32,6 +40,167 @@ struct Real {
     facts: Option<OiePayload>,
     /// The console lock, once this console has taken the installation.
     console: std::cell::RefCell<Option<fs::File>>,
+    /// `ocinye.selftest=policy-fail`: the storage-policy verifier reports
+    /// failure (it can only restrict a session).
+    fault_injected: bool,
+}
+
+/// Where the image says how live storage safety may be described. Absent or
+/// unreadable means the weaker statement.
+const STORAGE_SAFETY_FILE: &str = "/usr/lib/ocinye/oie/storage-safety";
+
+fn storage_safety_evidence() -> StorageSafetyEvidence {
+    match fs::read_to_string(STORAGE_SAFETY_FILE)
+        .as_deref()
+        .map(str::trim)
+    {
+        Ok("CERTIFIED") => StorageSafetyEvidence::Certified,
+        _ => StorageSafetyEvidence::Intended,
+    }
+}
+
+/// `ocinye.lang=pt|en|fr` from the boot menu; Portuguese otherwise.
+fn initial_lang(cmdline: &str) -> usize {
+    let prefix = format!("{LANG_PARAM}=");
+    cmdline
+        .split_ascii_whitespace()
+        .take_while(|a| *a != "--" && *a != "---")
+        .find_map(|a| a.strip_prefix(prefix.as_str()))
+        .map_or(0, |v| match v {
+            "en" => 1,
+            "fr" => 2,
+            _ => 0,
+        })
+}
+
+#[derive(serde::Deserialize)]
+struct LsblkDisk {
+    name: String,
+    #[serde(default)]
+    size: Option<u64>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    tran: Option<String>,
+    #[serde(rename = "type", default)]
+    kind: String,
+}
+
+#[derive(serde::Deserialize)]
+struct LsblkDisks {
+    blockdevices: Vec<LsblkDisk>,
+}
+
+/// Whole disks from what the kernel already exposes: `lsblk -d` with no
+/// filesystem column reads sysfs and opens no device.
+fn disks_metadata_only() -> Vec<LsblkDisk> {
+    Command::new("lsblk")
+        .args([
+            "--json",
+            "--bytes",
+            "--nodeps",
+            "--output",
+            "NAME,SIZE,MODEL,TRAN,TYPE",
+        ])
+        .output()
+        .ok()
+        .and_then(|o| serde_json::from_slice::<LsblkDisks>(&o.stdout).ok())
+        .map(|l| l.blockdevices)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|d| matches!(d.kind.as_str(), "disk" | "rom"))
+        .filter(|d| {
+            !["loop", "ram", "zram"]
+                .iter()
+                .any(|p| d.name.starts_with(p))
+        })
+        .collect()
+}
+
+fn partition_count(disk: &str) -> u32 {
+    fs::read_dir(format!("/sys/block/{disk}"))
+        .map(|d| {
+            d.flatten()
+                .filter(|e| e.path().join("partition").exists())
+                .count()
+        })
+        .map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX))
+}
+
+impl session::SessionMachine for Real {
+    fn policy(&self) -> policy::PolicyVerdict {
+        policy::verify(&policy::read_system(self.fault_injected))
+    }
+    fn disks(&self, probe_signatures: bool) -> Vec<session::DiskLine> {
+        let probed: Vec<ProbedDisk> = if probe_signatures {
+            flow::Machine::disks(self)
+        } else {
+            vec![]
+        };
+        disks_metadata_only()
+            .into_iter()
+            .map(|d| {
+                let p = probed.iter().find(|p| p.device == d.name);
+                session::DiskLine {
+                    partitions: p.map_or_else(|| partition_count(&d.name), |p| p.partitions),
+                    filesystems: p.map(|p| p.filesystems.clone()),
+                    boot_media: p.is_some_and(|p| p.boot_media),
+                    bytes: d.size.unwrap_or(0),
+                    model: d.model.unwrap_or_default().trim().to_owned(),
+                    connection: d.tran.unwrap_or_default(),
+                    device: d.name,
+                }
+            })
+            .collect()
+    }
+    fn hardware(&self) -> session::HardwareFacts {
+        let cpus = fs::read_to_string("/proc/cpuinfo")
+            .map(|c| c.lines().filter(|l| l.starts_with("processor")).count())
+            .map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX));
+        let mut nics = vec![];
+        if let Ok(dir) = fs::read_dir("/sys/class/net") {
+            for e in dir.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if name == "lo" {
+                    continue;
+                }
+                let up =
+                    fs::read_to_string(e.path().join("carrier")).is_ok_and(|s| s.trim() == "1");
+                nics.push((name, up));
+            }
+        }
+        nics.sort();
+        session::HardwareFacts {
+            arch: std::env::consts::ARCH.to_owned(),
+            uefi: probe::is_uefi(Path::new("/sys")),
+            memory_bytes: probe::mem_total(
+                &fs::read_to_string("/proc/meminfo").unwrap_or_default(),
+            ),
+            cpus,
+            nics,
+        }
+    }
+    fn network(&self) -> Vec<String> {
+        Command::new("ip")
+            .args(["-brief", "address"])
+            .output()
+            .map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .filter(|l| !l.starts_with("lo "))
+                    .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    fn restart(&self) {
+        // A normal firmware restart. Nothing is written anywhere to steer the
+        // next boot: no firmware variable, no file on the medium.
+        let _ = Command::new("systemctl").arg("reboot").status();
+    }
+    fn poweroff(&self) {
+        let _ = Command::new("systemctl").arg("poweroff").status();
+    }
 }
 
 fn findmnt_source(target: &str) -> Option<String> {
@@ -239,39 +408,62 @@ fn main() {
         .collect::<Vec<_>>()
         .as_slice()
     {
-        ["run", mode @ ("--vt" | "--serial")] => {
+        ["run", console @ ("--vt" | "--serial")] => {
             let _ = fs::create_dir_all("/run/ocinye-oie");
             let mut stdin = BufReader::new(std::io::stdin());
             let mut stdout = std::io::stdout();
+            // The mode of this boot: read once, never changed.
+            let cmdline = fs::read_to_string("/proc/cmdline").unwrap_or_default();
+            let boot = ResolvedMode::from_cmdline(&cmdline);
             let machine = Real {
                 facts: load_facts(),
                 console: std::cell::RefCell::new(None),
+                fault_injected: boot.verifier_fault_injected(),
             };
             let mut ui = flow::Ui {
-                lang: 0,
-                serial: *mode == "--serial",
+                lang: initial_lang(&cmdline),
+                serial: *console == "--serial",
                 input: &mut stdin,
                 out: &mut stdout,
             };
-            match flow::run(&mut ui, &machine) {
-                flow::Outcome::Installed => 0,
-                flow::Outcome::Abandoned => 3,
-                flow::Outcome::Failed(e) => {
-                    let _ = fs::write(
-                        "/run/ocinye-oie/failed.json",
-                        serde_json::to_string(&e).unwrap_or_default(),
-                    );
-                    // Keep the failure on screen until someone acts.
-                    let mut line = String::new();
-                    let _ = std::io::BufRead::read_line(&mut stdin, &mut line);
-                    1
-                }
+            match InstallAuthority::from_mode(&boot) {
+                // Only `ocinye.mode=install` reaches the installer.
+                Some(authority) => match flow::run(&mut ui, &machine, &authority) {
+                    flow::Outcome::Installed => 0,
+                    flow::Outcome::Abandoned => 3,
+                    flow::Outcome::Failed(e) => {
+                        let _ = fs::write(
+                            "/run/ocinye-oie/failed.json",
+                            serde_json::to_string(&e).unwrap_or_default(),
+                        );
+                        // Keep the failure on screen until someone acts.
+                        let mut line = String::new();
+                        let _ = std::io::BufRead::read_line(&mut stdin, &mut line);
+                        1
+                    }
+                },
+                None => match session::run(&mut ui, &machine, &boot, storage_safety_evidence()) {
+                    session::SessionOutcome::Abandoned => 3,
+                    session::SessionOutcome::Restarting | session::SessionOutcome::PoweringOff => {
+                        // Leave the screen as it is until the machine goes.
+                        std::thread::sleep(std::time::Duration::from_secs(600));
+                        0
+                    }
+                },
             }
+        }
+        ["policy"] => {
+            let cmdline = fs::read_to_string("/proc/cmdline").unwrap_or_default();
+            let boot = ResolvedMode::from_cmdline(&cmdline);
+            let v = policy::verify(&policy::read_system(boot.verifier_fault_injected()));
+            println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+            i32::from(v.restricted())
         }
         ["probe"] => {
             let m = Real {
                 facts: load_facts(),
                 console: std::cell::RefCell::new(None),
+                fault_injected: false,
             };
             let d = ocinye_image_contracts::oie::classify(&flow::Machine::disks(&m));
             println!("{}", serde_json::to_string_pretty(&d).unwrap_or_default());
@@ -282,7 +474,7 @@ fn main() {
             0
         }
         _ => {
-            eprintln!("uso: ocinye-oie run --vt|--serial | probe | --version");
+            eprintln!("uso: ocinye-oie run --vt|--serial | probe | policy | --version");
             2
         }
     };

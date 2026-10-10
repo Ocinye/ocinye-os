@@ -7,6 +7,7 @@
 
 use std::io::{BufRead, Write};
 
+use ocinye_image_contracts::bootmode::InstallAuthority;
 use ocinye_image_contracts::firstboot::PublicKeyLine;
 use ocinye_image_contracts::oie::{
     classify, confirm, select, DiskProtection, InstallationTargetDisk, OieError, ProbedDisk,
@@ -93,7 +94,7 @@ impl Ui<'_> {
     }
 
     /// One line of input; `None` at end of input.
-    fn ask(&mut self, prompt: &str) -> Option<String> {
+    pub fn ask(&mut self, prompt: &str) -> Option<String> {
         let p = if self.serial {
             fold(prompt)
         } else {
@@ -122,7 +123,10 @@ pub enum Outcome {
     Abandoned,
 }
 
-pub fn run(ui: &mut Ui<'_>, m: &dyn Machine) -> Outcome {
+/// The installer. It can only be entered with an [`InstallAuthority`], which
+/// exists only in a boot whose mode is `install`: a Live, Hardware Check or
+/// Recovery session has no value to pass here.
+pub fn run(ui: &mut Ui<'_>, m: &dyn Machine, _authority: &InstallAuthority<'_>) -> Outcome {
     // WELCOME
     ui.title("c13.welcome.t");
     let b = ui.t("c13.welcome.b");
@@ -418,7 +422,11 @@ mod tests {
             input: &mut input,
             out: &mut out,
         };
-        let o = run(&mut ui, m);
+        let mode = ocinye_image_contracts::bootmode::ResolvedMode::from_cmdline(
+            "boot=casper ocinye.mode=install",
+        );
+        let authority = InstallAuthority::from_mode(&mode).unwrap();
+        let o = run(&mut ui, m, &authority);
         (o, String::from_utf8(out).unwrap())
     }
 

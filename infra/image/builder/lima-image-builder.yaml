@@ -44,7 +44,9 @@ provision:
       apt-get install -y --no-install-recommends \
         qemu-system-x86 qemu-system-arm qemu-efi-aarch64 ovmf qemu-utils \
         cloud-image-utils gpgv xorriso squashfs-tools mtools dosfstools \
-        zstd minisign parted openssh-client curl ca-certificates git
+        zstd minisign parted openssh-client curl ca-certificates git \
+        initramfs-tools-core cpio gdisk lvm2 mdadm e2fsprogs xfsprogs ntfs-3g \
+        cryptsetup-bin python3-virt-firmware
       modprobe nbd max_part=16 || true
       echo nbd > /etc/modules-load.d/nbd.conf
       echo "options nbd max_part=16" > /etc/modprobe.d/nbd.conf

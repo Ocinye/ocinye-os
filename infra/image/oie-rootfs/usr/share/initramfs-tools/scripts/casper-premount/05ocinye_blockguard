@@ -1,0 +1,28 @@
+#!/bin/sh
+# Ocinye block guard, part 3 of 3: before casper looks for its medium, make
+# sure every block device already there is read-only. The udev rule does this
+# as each device appears; this sweep covers anything that appeared before the
+# rule could run, and records what it could not protect.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+[ -e /run/ocinye/guard ] || exit 0
+: >/run/ocinye/guard-unprotected
+for sys in /sys/class/block/*; do
+    name="${sys##*/}"
+    case "$name" in
+    loop* | ram* | zram*) continue ;;
+    esac
+    [ -b "/dev/$name" ] || continue
+    blockdev --setro "/dev/$name" 2>/dev/null
+    if [ "$(cat "$sys/ro" 2>/dev/null)" != 1 ]; then
+        echo "$name" >>/run/ocinye/guard-unprotected
+    fi
+done
+exit 0

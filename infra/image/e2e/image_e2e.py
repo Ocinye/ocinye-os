@@ -829,6 +829,14 @@ def scenario_iso(a):
         # No network at all: the base install is offline.
         vm.start([{"file": target, "serial": "OCY-TARGET-7F3A"}, {"file": data, "format": "raw", "serial": "DATA0001"},
                   {"file": small, "format": "raw", "serial": "SMALL01"}], cdrom=a.iso, net=False)
+        # The boot menu waits for the operator: nothing may start on its own,
+        # least of all the installer. Then Install is chosen explicitly.
+        vm.expect(r"Experimentar o Ocinye OS", 600)
+        time.sleep(40)
+        early = open(vm.transcript.name, encoding="utf-8", errors="replace").read()
+        r.check("ISO: the boot menu waits (no mode starts without a key)",
+                not re.search(r"(Linux version|EFI stub|neste computador|OCINYE-SESSION-READY)", early))
+        vm.send("i")
         vm.expect(r"Instalar o Ocinye OS neste computador", 1800)
         vm.send("\r")
         vm.expect(r"Escolher \(1", 300)

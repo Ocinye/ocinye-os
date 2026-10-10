@@ -239,8 +239,39 @@ RestartSec=2
 [Install]
 WantedBy=getty.target
 UNIT
+  # The block guard of the medium (D013 Live Mode, L0-S): every mode but the
+  # installer boots with all block devices read-only. OIE root ONLY — it must
+  # never reach the initramfs of an installed system (offline inspection
+  # refuses a virt or metal root that carries it).
+  tar -C / --no-same-owner -xf "$B/oie-rootfs.tar"
+  chmod 0755 /usr/share/initramfs-tools/hooks/ocinye-blockguard \
+    /usr/share/initramfs-tools/scripts/init-top/ocinye-blockguard \
+    /usr/share/initramfs-tools/scripts/casper-premount/05ocinye_blockguard
+  # How live storage safety may be described. CERTIFIED is set only by a
+  # certification record of the Live Storage Safety Proof, never by a build.
+  install -d -m 0755 /usr/lib/ocinye/oie
+  printf 'INTENDED\n' > /usr/lib/ocinye/oie/storage-safety
   # casper's initramfs, built from this root.
   update-initramfs -u -k all
+  # The guard is in the initramfs that was just built, or there is no image:
+  # armed before udev, casper restrained, the sweep before casper's search.
+  local kv check
+  kv="$(ls /lib/modules | sort -V | tail -1)"
+  check="$(mktemp -d)"
+  unmkinitramfs "/boot/initrd.img-$kv" "$check"
+  local m="$check/main"
+  [ -d "$m" ] || m="$check"
+  [ -x "$m/scripts/init-top/ocinye-blockguard" ] || { echo "block guard: init-top script missing from the initramfs" >&2; exit 1; }
+  [ -x "$m/scripts/casper-premount/05ocinye_blockguard" ] || { echo "block guard: sweep missing from the initramfs" >&2; exit 1; }
+  [ -f "$m/usr/lib/udev/rules.d/01-ocinye-blockguard.rules" ] || { echo "block guard: udev rule missing from the initramfs" >&2; exit 1; }
+  grep -q -F 'ocinye_guard_skip "${devname}" && continue' "$m/scripts/casper" || { echo "block guard: casper is not restrained" >&2; exit 1; }
+  local at_guard at_udev
+  at_guard="$(grep -n 'init-top/ocinye-blockguard' "$m/scripts/init-top/ORDER" | head -1 | cut -d: -f1)"
+  at_udev="$(grep -n 'init-top/udev' "$m/scripts/init-top/ORDER" | head -1 | cut -d: -f1)"
+  [ -n "$at_guard" ] && [ -n "$at_udev" ] && [ "$at_guard" -lt "$at_udev" ] || { echo "block guard: does not run before udev (ORDER: guard=$at_guard udev=$at_udev)" >&2; exit 1; }
+  [ "$(head -1 "$m/scripts/casper-premount/ORDER" | grep -c 05ocinye_blockguard)" = 1 ] || { echo "block guard: the sweep is not first in casper-premount" >&2; exit 1; }
+  find "$check" -mindepth 1 -delete; rmdir "$check"
+  log "block guard verified in initrd.img-$kv"
 }
 
 stage_finalize() {

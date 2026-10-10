@@ -1,0 +1,19 @@
+# Sourced by the patched /scripts/casper (see the ocinye-blockguard hook).
+#
+# With the guard armed casper may examine only the Ocinye medium: a device
+# that carries an ISO 9660 filesystem labelled OCINYE_OS. Every other block
+# device is skipped before casper probes, mounts or adopts it, so no internal
+# filesystem is mounted, not even read-only (a read-only mount of a journalled
+# filesystem replays its journal).
+#
+# Returns 0 (skip) or 1 (examine).
+ocinye_guard_skip() {
+    [ -e /run/ocinye/guard ] || return 1
+    _ocinye_type="$(/sbin/blkid -s TYPE -o value "$1" 2>/dev/null)"
+    _ocinye_label="$(/sbin/blkid -s LABEL -o value "$1" 2>/dev/null)"
+    if [ "$_ocinye_type" = "iso9660" ] && [ "$_ocinye_label" = "OCINYE_OS" ]; then
+        return 1
+    fi
+    echo "$1" >>/run/ocinye/guard-skipped
+    return 0
+}

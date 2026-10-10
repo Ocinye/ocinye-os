@@ -1,0 +1,47 @@
+#!/bin/sh
+# Builds the Ocinye block guard into the installation medium's initramfs
+# (D013 Live Mode, L0-S). Fails the build rather than produce an initramfs in
+# which the guard is absent or casper is not restrained.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+fail() {
+    echo "ocinye-blockguard: $*" >&2
+    exit 1
+}
+
+copy_exec /usr/sbin/blockdev /usr/sbin
+copy_exec /usr/sbin/blkid /usr/sbin
+
+mkdir -p "${DESTDIR}/usr/lib/udev/rules.d" "${DESTDIR}/scripts"
+cp /usr/lib/udev/rules.d/01-ocinye-blockguard.rules "${DESTDIR}/usr/lib/udev/rules.d/" ||
+    fail "udev rule missing"
+cp /usr/lib/ocinye/guard/casper-guard-functions "${DESTDIR}/scripts/ocinye-guard-functions" ||
+    fail "guard functions missing"
+
+# casper's search for its medium walks every block device and mounts what it
+# finds. Restrain it at the one place every branch passes through.
+casper="${DESTDIR}/scripts/casper"
+[ -f "$casper" ] || fail "no /scripts/casper in this initramfs"
+anchor='        devname=$(sys2dev "${sysblock}")'
+[ "$(grep -c -F -x "$anchor" "$casper")" = 1 ] ||
+    fail "casper's find_livefs loop is not where it was: review the guard"
+[ "$(grep -c -x 'find_livefs() {' "$casper")" = 1 ] ||
+    fail "casper's find_livefs is not where it was: review the guard"
+sed -i \
+    -e '/^find_livefs() {$/i . /scripts/ocinye-guard-functions\n' \
+    -e '/^        devname=\$(sys2dev "\${sysblock}")$/a\        ocinye_guard_skip "${devname}" \&\& continue' \
+    "$casper"
+grep -q -F -x '        ocinye_guard_skip "${devname}" && continue' "$casper" ||
+    fail "casper was not patched"
+grep -q -F -x '. /scripts/ocinye-guard-functions' "$casper" ||
+    fail "guard functions are not sourced"
+sh -n "$casper" || fail "patched casper does not parse"

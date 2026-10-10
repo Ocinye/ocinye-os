@@ -628,6 +628,46 @@ pub fn inspect(m: &Mounted, profile: &str, arch: &str, release_id: &str) -> Insp
         !wants("docker.service") && !wants("docker.socket") && !wants("containerd.service"),
         None,
     );
+    // The block guard of the medium arms in every boot that is not, exactly,
+    // the installer. It belongs in the OIE root and nowhere else: in an
+    // installed system's initramfs it would be a liability.
+    const GUARD_FILES: [&str; 5] = [
+        "usr/share/initramfs-tools/hooks/ocinye-blockguard",
+        "usr/share/initramfs-tools/scripts/init-top/ocinye-blockguard",
+        "usr/share/initramfs-tools/scripts/casper-premount/05ocinye_blockguard",
+        "usr/lib/udev/rules.d/01-ocinye-blockguard.rules",
+        "usr/lib/ocinye/guard/casper-guard-functions",
+    ];
+    let guard_present: Vec<&str> = GUARD_FILES
+        .iter()
+        .copied()
+        .filter(|f| r.join(f).exists())
+        .collect();
+    if profile == "oie" {
+        c(
+            "block_guard_installed",
+            guard_present.len() == GUARD_FILES.len(),
+            (guard_present.len() != GUARD_FILES.len()).then(|| guard_present.join(",")),
+        );
+        c(
+            "storage_safety_not_overclaimed",
+            // CERTIFIED is set by a certification record, never by a build.
+            fs::read_to_string(r.join("usr/lib/ocinye/oie/storage-safety"))
+                .is_ok_and(|s| s.trim() == "INTENDED"),
+            None,
+        );
+        c(
+            "no_automounter",
+            !r.join("usr/lib/udisks2").exists() && !r.join("usr/sbin/automount").exists(),
+            None,
+        );
+    } else {
+        c(
+            "block_guard_absent_from_installed_system",
+            guard_present.is_empty(),
+            (!guard_present.is_empty()).then(|| guard_present.join(",")),
+        );
+    }
     match profile {
         "oie" => c(
             "oie_enabled",
