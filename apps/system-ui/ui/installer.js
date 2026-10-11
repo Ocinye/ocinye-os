@@ -195,7 +195,7 @@
         return `<li class="oi-stage-row" data-at="${state}"><span class="oi-stage-row__dot"></span><span>${t('st.' + n)}${state === 'run' ? `<span class="oi-stage-row__s">${t('st.' + n + '.s')}</span>` : ''}</span></li>`;
       }).join('');
       return { center: true, body: `${kicker()}<h1 class="oi-h" id="oi-h" tabindex="-1" data-af>${t('i.h')}</h1><p class="oi-d">${t('i.d')}</p>
-        <div class="oi-progress"><progress max="${ORDER.length}" value="${done.length}" aria-labelledby="oi-h"></progress></div>
+        <div class="oi-progress"><progress max="${ORDER.length * 4}" value="${done.length * 4 + (next ? 1 : 0)}" aria-labelledby="oi-h"></progress></div>
         <ul class="oi-stages">${rows}</ul>${detailsBlock()}` };
     },
     INSTALLED() {

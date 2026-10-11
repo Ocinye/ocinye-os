@@ -1371,23 +1371,37 @@ def scenario_window(a):
         need("window: the installation started", reached(vm, "step=INSTALLING", 120))
         time.sleep(60)
         vm.screenshot(os.path.join(shots, "10-installing.png"))
-        r.check("window: the installation is writing the chosen disk", size() > (64 << 20), size())
         done = reached(vm, "step=INSTALLED", 5400)
+        r.check("window: the installation wrote the chosen disk", size() > (64 << 20), size())
         r.check("window: the engine finished and the window was told", done)
         time.sleep(6)
         vm.screenshot(os.path.join(shots, "11-installed.png"))
-        # Restart is the focused control; the machine restarts from the
-        # installed disk, whose console says it is unclaimed.
-        booted = False
+        # Restart is the focused control: the machine goes down and its
+        # firmware starts again. The window says to remove the medium when it
+        # does; the bench removes it, and the installed disk starts on its own,
+        # its console saying it is unclaimed.
+        restarted = False
         if done:
             vm.press("ret")
             try:
-                vm.expect(UNCLAIMED_RX, 1800)
+                vm.expect(r"(Stopped target graphical\.target|Reached target reboot\.target|reboot: Restarting system)", 600)
+                vm.expect(r"(GNU GRUB|BdsDxe|UEFI firmware|EFI stub)", 900)
+                restarted = True
+            except TimeoutError:
+                restarted = False
+        r.check("window: Restart was pressed in the window, and the machine restarted", restarted)
+        vm.stop()
+        booted = False
+        if restarted:
+            vm2 = Vm("window", a.arch, work, memory=2048)
+            vm2.start([{"file": target, "serial": "OCY-TARGET-7F3A", "boot": True}])
+            try:
+                vm2.expect(UNCLAIMED_RX, BOOT_BUDGET)
                 booted = True
             except TimeoutError:
                 booted = False
-        r.check("window: Restart was pressed in the window, and the installed system started", booted)
-        vm.stop()
+            vm2.stop()
+        r.check("window: with the medium removed, the installed system started", booted)
         if booted:
             ident = installed_root_identity(target)
             r.check("window: the installed boot configuration resolves to the target's own root", ident["ok"], ident["detail"])
