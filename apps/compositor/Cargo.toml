@@ -22,6 +22,10 @@ smithay = { version = "0.7.0", default-features = false, features = [
     "backend_session_libseat", "backend_udev", "renderer_gl",
     "wayland_frontend", "desktop",
 ] }
+# The Session Service is asked whether a session is active: without a yes,
+# only the trusted system surface is shown.
+ocinye-system-client = { path = "../../crates/ocinye-system-client" }
+ocinye-system-contracts = { path = "../../crates/ocinye-system-contracts" }
 
 [profile.release]
 lto = "thin"

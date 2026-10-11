@@ -35,6 +35,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   e pelo MFA existentes do Core — não há um segundo caminho de autenticação.
 - Dependências novas: `ts-rs` (geração das ligações) e `rustix` (credenciais do
   par do socket, só em Linux).
+- **`apps/compositor`**: superfície de confiança (a janela do processo que o
+  compositor arrancou, reconhecida pelo PID), barra no topo com a janela do
+  Workspace por baixo, ecrã inteiro para a interface sempre que não há sessão
+  activa — perguntado ao Session Service, e sem resposta não há sim —, bloqueio
+  por inactividade pedido ao Session Service, e ponteiro desenhado pelo
+  compositor. O desenho é concluído antes de cada troca de página (sem isso um
+  renderizador por software deixava no ecrã a imagem a meio).
+- **`apps/system-ui`**: a interface nativa do sistema (Tauri): entrar com
+  segundo factor, bloqueio, barra, definições rápidas e Sistema (15 páginas),
+  pedido de confiança para prova fresca, em pt/en/fr. Cinco comandos tipados e
+  mais nada; a janela do Workspace é outro processo, sem comandos.
+- `network.status` passa a dar os endereços de cada interface (lidos de
+  `ip -json` pelo executor endurecido); antes vinham sempre vazios.
+- Bancada gráfica (`infra/system-ui/bench/`): entrada de teclado e ponteiro e
+  capturas pelo monitor do QEMU, um Core de substituição e um posto completo
+  dentro da VM.
 
 ### Integração em `main` — 2026-10-11
 

@@ -141,6 +141,32 @@ fn property<'a>(text: &'a str, key: &str) -> Option<&'a str> {
         .find_map(|l| l.strip_prefix(key).and_then(|r| r.strip_prefix('=')))
 }
 
+/// The usable addresses of each interface, from `ip -json address show`:
+/// CIDR notation, without the link-local ones nobody can be reached at.
+fn addresses(json: &str) -> std::collections::BTreeMap<String, Vec<String>> {
+    let mut out = std::collections::BTreeMap::new();
+    let Ok(serde_json::Value::Array(links)) = serde_json::from_str(json) else {
+        return out;
+    };
+    for link in &links {
+        let Some(name) = link["ifname"].as_str() else {
+            continue;
+        };
+        let found = link["addr_info"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|a| {
+                let local = a["local"].as_str()?;
+                let prefix = a["prefixlen"].as_u64()?;
+                (a["scope"].as_str() == Some("global") && local.parse::<std::net::IpAddr>().is_ok())
+                    .then(|| format!("{local}/{prefix}"))
+            });
+        out.insert(name.to_owned(), found.collect());
+    }
+    out
+}
+
 impl Linux {
     /// The platform over a set of roots.
     #[must_use]
@@ -172,6 +198,11 @@ impl Linux {
 
     fn interfaces(&self) -> Vec<NetworkInterface> {
         let net = self.roots.sys.join("class/net");
+        // The kernel does not publish addresses under /sys: `ip` is asked,
+        // as JSON. Without an answer an interface is listed with none.
+        let mut addressed = tool::run(Tool::Ip, &["-json", "address", "show"])
+            .map(|out| addresses(&out))
+            .unwrap_or_default();
         entries(&net)
             .into_iter()
             .filter(|n| n != "lo")
@@ -193,7 +224,7 @@ impl Linux {
                     speed_mbps: read(&d.join("speed"))
                         .and_then(|s| s.parse::<u32>().ok())
                         .filter(|s| *s > 0),
-                    addresses: Vec::new(),
+                    addresses: addressed.remove(&name).unwrap_or_default(),
                     name,
                     kind,
                 }
@@ -1050,5 +1081,24 @@ mod tests {
         let inv = l.inventory();
         assert!(!inv.implemented.contains(&CapabilityId::WifiScan));
         assert!(inv.implemented.contains(&CapabilityId::PowerRestart));
+    }
+
+    #[test]
+    fn os_enderecos_vem_do_ip_em_json_e_so_os_que_servem() {
+        let json = r#"[
+          {"ifname":"lo","addr_info":[{"family":"inet","local":"127.0.0.1","prefixlen":8,"scope":"host"}]},
+          {"ifname":"enp1s0","addr_info":[
+            {"family":"inet","local":"192.168.1.84","prefixlen":24,"scope":"global"},
+            {"family":"inet6","local":"fe80::5054:ff:fe12:3456","prefixlen":64,"scope":"link"},
+            {"family":"inet6","local":"2001:db8::84","prefixlen":64,"scope":"global"},
+            {"family":"inet","local":"not-an-address","prefixlen":24,"scope":"global"}]},
+          {"ifname":"wlan0","addr_info":[]}
+        ]"#;
+        let found = addresses(json);
+        assert_eq!(found["enp1s0"], ["192.168.1.84/24", "2001:db8::84/64"]);
+        assert!(found["lo"].is_empty() && found["wlan0"].is_empty());
+        // Anything that is not the expected JSON is no addresses, not a panic.
+        assert!(addresses("ip: command failed").is_empty());
+        assert!(addresses("{}").is_empty());
     }
 }

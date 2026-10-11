@@ -9,6 +9,7 @@ does the compositor take the screen and show a client?
   graphics_bench.py prepare --arch A --base IMAGE --work D
         build the guest disk (packages installed once, from the network)
   graphics_bench.py run --arch A --work D --copy SRC:DST … --exec COMMAND --shot OUT.png [--wait S]
+        [--step wait:S|shot:NAME|click:X,Y|type:TEXT|key:QCODE|sh:COMMAND …]
 
 Runs inside the builder VM, as root. Nothing here ships.
 """
@@ -103,6 +104,67 @@ def qmp(work, *commands):
     return out[1:]
 
 
+QCODES = {" ": "spc", "-": "minus", ".": "dot", ",": "comma", "/": "slash", "=": "equal", ";": "semicolon",
+          "\n": "ret", "\t": "tab"}
+SHIFTED = {"@": "2", "_": "minus", "!": "1", "#": "3", "$": "4", "%": "5", ":": "semicolon", "?": "slash", "+": "equal"}
+
+
+def key_events(qcode, shift=False):
+    k = lambda code, down: {"type": "key", "data": {"down": down, "key": {"type": "qcode", "data": code}}}
+    events = [k(qcode, True), k(qcode, False)]
+    return [k("shift", True)] + events + [k("shift", False)] if shift else events
+
+
+def send(work, events):
+    r = qmp(work, {"execute": "input-send-event", "arguments": {"events": events}})
+    if any("error" in x for x in r):
+        raise SystemExit(f"INVALID: the guest refused input: {r}")
+
+
+def step(a, text):
+    """One step of a scripted session with the guest's screen, keyboard and pointer.
+
+    wait:S · shot:NAME · click:X,Y (pixels of a WxH screen) · type:TEXT · key:QCODE · sh:COMMAND
+    """
+    kind, _, arg = text.partition(":")
+    if kind == "wait":
+        time.sleep(float(arg))
+    elif kind == "shot":
+        shot = os.path.join(a.work, "shot.png")
+        if os.path.exists(shot):
+            os.remove(shot)
+        qmp(a.work, {"execute": "screendump", "arguments": {"filename": shot, "format": "png"}})
+        shutil.copy(shot, os.path.join(os.path.dirname(a.shot), arg + ".png"))
+        print("SHOT", arg)
+    elif kind == "click":
+        x, y = (int(v) for v in arg.split(","))
+        w, h = (int(v) for v in a.screen.split("x"))
+        at = [{"type": "abs", "data": {"axis": "x", "value": x * 32767 // w}},
+              {"type": "abs", "data": {"axis": "y", "value": y * 32767 // h}}]
+        send(a.work, at)
+        time.sleep(0.2)
+        send(a.work, [{"type": "btn", "data": {"down": True, "button": "left"}}])
+        time.sleep(0.1)
+        send(a.work, [{"type": "btn", "data": {"down": False, "button": "left"}}])
+    elif kind == "type":
+        for ch in arg:
+            if ch in SHIFTED:
+                send(a.work, key_events(SHIFTED[ch], shift=True))
+            elif ch.isupper():
+                send(a.work, key_events(ch.lower(), shift=True))
+            else:
+                send(a.work, key_events(QCODES.get(ch, ch)))
+            time.sleep(0.03)
+    elif kind == "key":
+        send(a.work, key_events(arg))
+    elif kind == "sh":
+        r = ssh(a.work, arg, check=False)
+        print("SH", arg, "->", r.returncode)
+        print((r.stdout + r.stderr)[-2500:])
+    else:
+        raise SystemExit(f"unknown step: {text}")
+
+
 def prepare(a):
     os.makedirs(a.work, exist_ok=True)
     disk = os.path.join(a.work, "guest.qcow2")
@@ -141,6 +203,8 @@ def run(a):
         # The command runs detached; its output stays in the guest for reading back.
         ssh(a.work, f"nohup sh -c {json.dumps(a.exec)} > /root/bench.log 2>&1 &")
         time.sleep(a.wait)
+        for text in a.step or []:
+            step(a, text)
         shot = os.path.join(a.work, "shot.png")
         r = qmp(a.work, {"execute": "screendump", "arguments": {"filename": shot, "format": "png"}})
         print("SCREENDUMP", json.dumps(r))
@@ -172,6 +236,8 @@ def main():
     rn.add_argument("--exec", required=True)
     rn.add_argument("--shot", required=True)
     rn.add_argument("--wait", type=int, default=25)
+    rn.add_argument("--step", action="append", help=step.__doc__)
+    rn.add_argument("--screen", default="1280x800")
     a = ap.parse_args()
     {"prepare": prepare, "run": run}[a.cmd](a)
 

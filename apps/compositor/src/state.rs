@@ -60,6 +60,22 @@ pub struct State {
     pub backend: Option<Backend>,
     /// The interface process.
     pub client: Option<std::process::Child>,
+
+    /// The trusted system surface: the window of the process this compositor
+    /// started itself. Identified by the kernel's word about the client, never
+    /// by anything the client says about itself.
+    pub trusted: Option<Window>,
+    /// Whether the trusted surface asked for the whole screen.
+    pub trusted_full: bool,
+    /// Every other window, oldest first. Only the newest is shown.
+    pub apps: Vec<Window>,
+    /// Whether the Session Service says a session is active. Without a yes,
+    /// only the trusted surface is on the screen.
+    pub session_active: bool,
+    /// Idle seconds after which the session must be locked; zero for never.
+    pub idle_lock_secs: u32,
+    /// When the person last touched the keyboard or the pointer.
+    pub last_input: std::time::Instant,
 }
 
 impl State {
@@ -73,7 +89,8 @@ impl State {
         let mut seat_state = SeatState::new();
         let data_device_state = DataDeviceState::new::<Self>(&dh);
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "seat0");
-        seat.add_keyboard(Default::default(), 300, 30).expect("the default keymap compiles");
+        seat.add_keyboard(Default::default(), 300, 30)
+            .expect("the default keymap compiles");
         seat.add_pointer();
 
         let socket_name = Self::listen(display, event_loop);
@@ -95,6 +112,12 @@ impl State {
             seat,
             backend: None,
             client: None,
+            trusted: None,
+            trusted_full: true,
+            apps: Vec::new(),
+            session_active: false,
+            idle_lock_secs: 0,
+            last_input: std::time::Instant::now(),
         }
     }
 
@@ -104,29 +127,39 @@ impl State {
         let handle = event_loop.handle();
         handle
             .insert_source(socket, move |stream, (), state| {
-                let _ = state.display_handle.insert_client(stream, Arc::new(ClientState::default()));
+                let _ = state
+                    .display_handle
+                    .insert_client(stream, Arc::new(ClientState::default()));
             })
             .expect("the socket source registers");
         handle
-            .insert_source(Generic::new(display, Interest::READ, Mode::Level), |_, display, state| {
-                // SAFETY: the display is owned by this source and never dropped
-                // while the loop runs.
-                unsafe {
-                    let _ = display.get_mut().dispatch_clients(state);
-                }
-                Ok(PostAction::Continue)
-            })
+            .insert_source(
+                Generic::new(display, Interest::READ, Mode::Level),
+                |_, display, state| {
+                    // SAFETY: the display is owned by this source and never dropped
+                    // while the loop runs.
+                    unsafe {
+                        let _ = display.get_mut().dispatch_clients(state);
+                    }
+                    Ok(PostAction::Continue)
+                },
+            )
             .expect("the display source registers");
         name
     }
 
     /// The surface under a point, with its origin.
-    pub fn surface_under(&self, pos: Point<f64, Logical>) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.space.element_under(pos).and_then(|(window, location)| {
-            window
-                .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
-                .map(|(s, p)| (s, (p + location).to_f64()))
-        })
+    pub fn surface_under(
+        &self,
+        pos: Point<f64, Logical>,
+    ) -> Option<(WlSurface, Point<f64, Logical>)> {
+        self.space
+            .element_under(pos)
+            .and_then(|(window, location)| {
+                window
+                    .surface_under(pos - location.to_f64(), WindowSurfaceType::ALL)
+                    .map(|(s, p)| (s, (p + location).to_f64()))
+            })
     }
 }
 

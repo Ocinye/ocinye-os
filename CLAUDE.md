@@ -97,7 +97,9 @@ sem que nada falhe.
   11 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`,
   `installer-bootstrap`, `release-tool`, `firstboot`, `oie`, `image-builder`,
   `system-service`, `session-service`) e 1 aplicação (`apps/workspace`). Fora
-  da workspace do host: a janela do Installer (`apps/installer`, Tauri) e uma
+  da workspace do host: a janela do Installer (`apps/installer`, Tauri), o
+  compositor (`apps/compositor`), a interface do sistema (`apps/system-ui`,
+  Tauri) e uma
   capacidade WASM (`wasm/capabilities/bibtex-import`).
 - **Ocinye Core: `IMPLEMENTED` e em produção.** 256 caminhos e 304 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
@@ -278,9 +280,15 @@ sem que nada falhe.
   login e pelo segundo factor do próprio Core e pede-lhe a política em
   `POST /auth/machine-session`, assinada com uma chave Ed25519 derivada da raiz
   de selagem (`GET /auth/machine-session/key` publica a parte pública).
-  **Não existem ainda** a resposta do Core ao System Service sobre permissão
-  institucional (capacidades de operador respondem `AUTHORITY_UNAVAILABLE`), o compositor, a interface gráfica do sistema nem a integração na imagem:
-  nada disto correu ainda numa máquina.
+  O **compositor** (`apps/compositor`, Smithay) e a **interface nativa do
+  sistema** (`apps/system-ui`, Tauri) estão `IMPLEMENTED` e provados numa VM
+  `arm64` com placa gráfica virtual: entrar, a barra com o Workspace por baixo,
+  definições rápidas e Sistema, com teclado e ponteiro; a janela que o
+  compositor arrancou é a única superfície de confiança, e sem sessão activa
+  mais nenhuma é mostrada. **Não existem ainda** a resposta do Core ao System
+  Service sobre permissão institucional (capacidades de operador respondem
+  `AUTHORITY_UNAVAILABLE`) nem a integração na imagem; nada disto correu em
+  `amd64` nem em hardware físico.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
   `ocinye upgrade` faz checkpoint da base, troca o release, passa um portão de
@@ -676,7 +684,7 @@ sem que nada falhe.
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
 - **117 ADRs** em `docs/adrs/`, **13 runbooks** em `docs/runbooks/`,
-  **64 READMEs**, `docs/` povoado — incluindo
+  **65 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -692,7 +700,7 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **2206 funções de teste** escritas na árvore, e **zero falhas** na última
+- **2207 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
@@ -1346,6 +1354,7 @@ services/oie                    services/image-builder
 crates/ocinye-system-contracts  crates/ocinye-system-client
 services/system-service         services/session-service
 apps/installer (fora da workspace)
+apps/compositor · apps/system-ui (fora da workspace)
 wasm/capabilities/bibtex-import
 docs    infra    migrations    scripts
 ```

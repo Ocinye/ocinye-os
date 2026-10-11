@@ -21,7 +21,13 @@ member_name: string,
 /**
  * The Core link.
  */
-core: CoreLink, } | { "state": "LOCKED",
+core: CoreLink,
+/**
+ * Idle seconds after which the session must lock itself; zero when
+ * the Instance sets no idle lock. The compositor, which sees the
+ * input, asks for the lock.
+ */
+idle_lock_secs: number, } | { "state": "LOCKED",
 /**
  * The member's name: the lock screen shows whose session it is.
  */

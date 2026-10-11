@@ -1,0 +1,32 @@
+# The Ocinye OS native system interface (ADR-0031): sign-in, lock, the top
+# bar, Quick Settings and Settings.
+#
+# Outside the main Cargo workspace on purpose, like the Installer: it links the
+# system webview (WebKitGTK), and the host workspace builds on machines that
+# have no desktop libraries. It decides nothing: it presents what the System
+# Service and the Session Service say, and sends them typed requests.
+[workspace]
+
+[package]
+name = "ocinye-system-ui"
+description = "Ocinye OS system interface"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+license = "UNLICENSED"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+ocinye-system-contracts = { path = "../../crates/ocinye-system-contracts" }
+ocinye-system-client = { path = "../../crates/ocinye-system-client" }
+tauri = { version = "2.12", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

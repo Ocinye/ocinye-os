@@ -2,11 +2,12 @@
 //!
 //!   ocinye-compositor -- PROGRAM [ARGS…]
 //!
-//! It owns the screen and the input devices of one seat, and shows the windows
-//! of the program it starts — the native system interface — full screen. It is
-//! not a desktop: there is no panel, no launcher and no window list here. The
-//! Workspace's own window manager manages the Workspace's windows, inside the
-//! surface this compositor shows.
+//! It owns the screen and the input devices of one seat. The program it
+//! starts — the native system interface — is the trusted surface: it has the
+//! whole screen, or the bar along the top while a session is active, and any
+//! other window has the rest. It is not a desktop: there is no panel, no
+//! launcher and no window list here. The Workspace's own window manager
+//! manages the Workspace's windows, inside the surface this compositor shows.
 //!
 //! The program to run is fixed by the unit that starts the compositor. Nothing
 //! at run time can ask it to start another.
@@ -14,6 +15,7 @@
 mod drm;
 mod handlers;
 mod input;
+mod session;
 mod state;
 
 use std::process::ExitCode;
@@ -54,7 +56,10 @@ fn main() -> ExitCode {
         eprintln!("ocinye-compositor: cannot take the screen: {e}");
         return ExitCode::FAILURE;
     }
-    println!("OCINYE-COMPOSITOR-READY {}", state.socket_name.to_string_lossy());
+    println!(
+        "OCINYE-COMPOSITOR-READY {}",
+        state.socket_name.to_string_lossy()
+    );
 
     match std::process::Command::new(&program)
         .args(&program_args)
@@ -65,7 +70,10 @@ fn main() -> ExitCode {
     {
         Ok(child) => state.client = Some(child),
         Err(e) => {
-            eprintln!("ocinye-compositor: cannot start the interface: {}", e.kind());
+            eprintln!(
+                "ocinye-compositor: cannot start the interface: {}",
+                e.kind()
+            );
             return ExitCode::FAILURE;
         }
     }

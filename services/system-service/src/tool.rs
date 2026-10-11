@@ -34,6 +34,8 @@ pub enum Tool {
     Hostnamectl,
     /// `rfkill`: radio switches, read and set.
     Rfkill,
+    /// `ip`: only read, and only as JSON.
+    Ip,
 }
 
 impl Tool {
@@ -46,6 +48,7 @@ impl Tool {
             Self::Localectl => "/usr/bin/localectl",
             Self::Hostnamectl => "/usr/bin/hostnamectl",
             Self::Rfkill => "/usr/sbin/rfkill",
+            Self::Ip => "/usr/sbin/ip",
         }
     }
 }
