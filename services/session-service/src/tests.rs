@@ -13,7 +13,7 @@ use ocinye_system_contracts::session::{
 };
 
 use crate::engine::{
-    backoff_secs, Clock, Config, Core, CoreRefusal, Engine, Refresh, GRANT_TTL_SECS,
+    backoff_secs, Clock, Config, Core, CoreRefusal, Engine, InstanceKey, Refresh, GRANT_TTL_SECS,
 };
 use crate::policy::tests::{key, policy, sign};
 use crate::verifier::Cost;
@@ -112,7 +112,7 @@ fn config(path: &std::path::Path, boot: &str) -> Config {
         path: path.to_path_buf(),
         boot_id: boot.to_owned(),
         machine_id: "machine-a".to_owned(),
-        instance_key: key(),
+        instance_key: InstanceKey::Fixed(key()),
         cost: FAST,
     }
 }
@@ -698,6 +698,23 @@ fn a_chave_do_autenticador_so_se_pede_sem_sessao_aberta() {
     }
     b.sign_in();
     assert_eq!(reason(&b.ask(begin())), SessionReason::AlreadySignedIn);
+}
+
+#[test]
+fn a_chave_da_instancia_le_se_do_ficheiro_de_cada_vez() {
+    // The service starts before the seat is linked: no key, no session. Once
+    // the link writes the key, sign-in works with no restart in between.
+    let mut b = bench();
+    let file = b.path.with_file_name("instance-session.pub");
+    let mut config = config(&b.path, "boot-1");
+    config.instance_key = InstanceKey::File(file.clone());
+    b.engine = Engine::new(b.core.clone(), b.clock.clone(), config);
+    assert_eq!(reason(&b.sign_in()), SessionReason::PolicyInvalid);
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, "not a key\n").unwrap();
+    assert_eq!(reason(&b.sign_in()), SessionReason::PolicyInvalid);
+    std::fs::write(&file, format!("{}\n", hex::encode(key()))).unwrap();
+    assert!(matches!(state(&b.sign_in()), SessionState::Active { .. }));
 }
 
 mod socket {

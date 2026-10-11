@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use ocinye_session_service::core_link::HttpCore;
-use ocinye_session_service::engine::{Clock, Config, Engine};
+use ocinye_session_service::engine::{Clock, Config, Engine, InstanceKey};
 use ocinye_session_service::link;
 use ocinye_session_service::server::{serve, Peer};
 use ocinye_session_service::verifier::Cost;
@@ -98,16 +98,11 @@ fn main() -> ExitCode {
     };
     // The Instance's public key is written when the machine is claimed.
     // Without it no policy can verify, so no session can open: fail closed.
-    let instance_key: [u8; 32] =
-        hex::decode(read(&format!("{}/instance-session.pub", link::SEAT_DIR)))
-            .ok()
-            .and_then(|b| b.try_into().ok())
-            .unwrap_or([0; 32]);
     let config = Config {
         path: "/var/lib/ocinye/session/session.json".into(),
         boot_id: read("/proc/sys/kernel/random/boot_id"),
         machine_id: read("/etc/machine-id"),
-        instance_key,
+        instance_key: InstanceKey::File(format!("{}/instance-session.pub", link::SEAT_DIR).into()),
         cost: Cost::calibrate(Duration::from_millis(250)),
     };
     let base = core_api();

@@ -16,7 +16,5 @@ RemainAfterExit=yes
 # retried until the Core answers; with a key from an earlier boot it succeeds
 # even while the Core is down.
 ExecStart=/usr/lib/ocinye/ocinye-session-service link-instance
-# The Session Service reads the key when it starts.
-ExecStartPost=/usr/bin/systemctl try-restart ocinye-session.service
 Restart=on-failure
 RestartSec=15

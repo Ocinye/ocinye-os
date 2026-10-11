@@ -87,6 +87,31 @@ pub trait Core {
     fn sign_out(&self, session_id: &str);
 }
 
+/// The Instance's public session key: what every policy is verified with.
+#[derive(Debug, Clone)]
+pub enum InstanceKey {
+    /// A key in hand.
+    Fixed([u8; 32]),
+    /// The file the seat's link writes it to, hexadecimal. Read each time a
+    /// policy is verified: the link learns the key after this service has
+    /// started, and learns it again at every boot. A file that is missing or
+    /// is not a key verifies nothing.
+    File(std::path::PathBuf),
+}
+
+impl InstanceKey {
+    fn get(&self) -> [u8; 32] {
+        match self {
+            Self::Fixed(key) => *key,
+            Self::File(path) => std::fs::read_to_string(path)
+                .ok()
+                .and_then(|text| hex::decode(text.trim()).ok())
+                .and_then(|bytes| bytes.try_into().ok())
+                .unwrap_or([0; 32]),
+        }
+    }
+}
+
 /// Time, injected so the rules can be tested.
 pub trait Clock {
     /// Seconds from an arbitrary origin that never goes backwards.
@@ -142,7 +167,7 @@ pub struct Engine<C: Core, K: Clock> {
     path: PathBuf,
     boot_id: String,
     machine_id: String,
-    instance_key: [u8; 32],
+    instance_key: InstanceKey,
     cost: Cost,
     record: Option<Record>,
     locked: bool,
@@ -164,7 +189,7 @@ pub struct Config {
     /// This machine's identifier.
     pub machine_id: String,
     /// The Instance's public key.
-    pub instance_key: [u8; 32],
+    pub instance_key: InstanceKey,
     /// The verifier cost, calibrated for this machine.
     pub cost: Cost,
 }
@@ -197,8 +222,12 @@ impl<C: Core, K: Clock> Engine<C, K> {
         match stored {
             Some(r)
                 if r.boot_id == engine.boot_id
-                    && policy::verify(&r.policy, &engine.instance_key, &engine.machine_id)
-                        .is_some() =>
+                    && policy::verify(
+                        &r.policy,
+                        &engine.instance_key.get(),
+                        &engine.machine_id,
+                    )
+                    .is_some() =>
             {
                 engine.retry_at = now + r.backoff_secs;
                 engine.record = Some(r);
@@ -309,7 +338,7 @@ impl<C: Core, K: Clock> Engine<C, K> {
             Ok(p) => p,
             Err(refusal) => return Self::refused(Self::reason_of(refusal)),
         };
-        if policy::verify(&signed, &self.instance_key, &self.machine_id).is_none() {
+        if policy::verify(&signed, &self.instance_key.get(), &self.machine_id).is_none() {
             self.core.sign_out(&signed.policy.session_id);
             return Self::refused(SessionReason::PolicyInvalid);
         }
@@ -385,7 +414,7 @@ impl<C: Core, K: Clock> Engine<C, K> {
         };
         match self.core.refresh(&r.policy.policy.session_id) {
             Refresh::Current(signed) => {
-                let valid = policy::verify(&signed, &self.instance_key, &self.machine_id)
+                let valid = policy::verify(&signed, &self.instance_key.get(), &self.machine_id)
                     .is_some_and(|p| {
                         p.member_id == r.policy.policy.member_id
                             && p.session_id == r.policy.policy.session_id

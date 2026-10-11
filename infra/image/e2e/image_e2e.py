@@ -688,10 +688,11 @@ def scenario_seat(a):
         r.check("seat: linked to the Instance it created", linked, link[-900:])
         r.check("seat: the Workspace address is the Instance's own name", link.startswith("https://ocinye-seat.test/"), link[:80])
         r.check("seat: the name resolves to this machine", link.splitlines()[1:2] == ["1"], link[:120])
-        door = run("curl -s -o /dev/null -w '%{http_code} ' http://127.0.0.1:8480/api/v1/auth/machine-session/key http://127.0.0.1:8480/api/v1/people http://127.0.0.1:8480/; "
-                   "ss -ltnH 'sport = :8480' | awk '{print $4}'").stdout.decode().split()
-        r.check("seat: the loopback door answers for the session key and for nothing else", door[:3] == ["200", "404", "404"], door)
-        r.check("seat: the door listens on the loopback only", door[3:] == ["127.0.0.1:8480"], door)
+        codes = [run(f"curl -s -o /dev/null -w '%{{http_code}}' http://127.0.0.1:8480{path}").stdout.decode().strip()
+                 for path in ("/api/v1/auth/machine-session/key", "/api/v1/people", "/api/v1/members", "/")]
+        r.check("seat: the loopback door answers for the session key and for nothing else", codes == ["200", "404", "404", "404"], codes)
+        listening = run("ss -ltnH 'sport = :8480' | awk '{print $4}'").stdout.decode().split()
+        r.check("seat: the door listens on the loopback only", listening == ["127.0.0.1:8480"], listening)
         # The first administrator's credential: on the screen once, then gone.
         # The bench cannot read a screen, so it reads the file the screen is
         # about to be given — as root, over the claim's SSH — and then checks
@@ -739,17 +740,23 @@ def scenario_seat(a):
         vm.type(totp(begun["secret_base32"]))
         vm.press("ret")
         active = {}
+        for _ in range(12):
+            time.sleep(5)
+            active = session_state(vm.port, k1)
+            if active.get("state") == "ACTIVE":
+                break
         r.check("seat: signed in at the machine's own screen", active.get("state") == "ACTIVE" and active.get("core") == "ONLINE", active)
         r.check("seat: the member is the Instance's administrator", active.get("member_name") == "Admin de Prova", active.get("member_name"))
         r.check("seat: the administrator, with the second factor satisfied, may operate the machine", active.get("operator") is True, active.get("operator"))
         time.sleep(4)
         vm.screenshot(os.path.join(shots, "7c-recovery-codes.png"))
-        procs = run("pgrep -af ocinye-system-ui | grep -c -- --workspace").stdout.decode().split()
-        r.check("seat: the Workspace waits while the recovery codes are on the screen", procs[:1] == ["0"], procs)
+        # `[o]`: the pattern must not match the command line that carries it.
+        waiting = run("pgrep -fc '[o]cinye-system-ui --workspace'").stdout.decode().split()
+        r.check("seat: the Workspace waits while the recovery codes are on the screen", waiting == ["0"], waiting)
         vm.press("ret")
         time.sleep(25)
         vm.screenshot(os.path.join(shots, "8-session.png"))
-        procs = run("pgrep -af ocinye-system-ui | grep -c -- --workspace; pgrep -u ocinye-ui -c ocinye-compositor").stdout.decode().split()
+        procs = run("pgrep -fc '[o]cinye-system-ui --workspace'; pgrep -u ocinye-ui -fc '[o]cinye-compositor -- '").stdout.decode().split()
         r.check("seat: the Workspace has its own window process", procs[:1] == ["1"], procs)
         r.check("seat: the compositor runs as the unprivileged screen account", procs[1:2] == ["1"], procs)
         # Lock, then unlock with the chosen password — the temporary one is gone.
