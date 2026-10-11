@@ -123,6 +123,14 @@ NORMAIS = {
     "ocinye-firstboot": {"ocinye-image-contracts", "ocinye-installer-contracts"},
     "ocinye-oie": {"ocinye-image-contracts", "ocinye-installer-contracts"},
     "ocinye-image-builder": {"ocinye-image-contracts", "ocinye-installer-contracts"},
+    # O Ocinye System Service (ADR-0031), desde 2026-10-11. Os contratos do
+    # sistema não assentam em nada: são a definição do que se pode pedir à
+    # máquina. O cliente só conhece os contratos; o serviço conhece os dois e
+    # mais ninguém — não liga o Core, o domínio, a persistência nem o Workspace.
+    # A autoridade sobre a máquina não é a autoridade institucional.
+    "ocinye-system-contracts": set(),
+    "ocinye-system-client": {"ocinye-system-contracts"},
+    "ocinye-system-service": {"ocinye-system-contracts", "ocinye-system-client"},
 }
 
 # Dependências de desenvolvimento. Um teste pode levantar o sistema todo; é

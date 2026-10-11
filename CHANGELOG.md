@@ -7,6 +7,25 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ocinye System Service — primeiro bloco — 2026-10-11 (ramo `feat/ocinye-os-v1-system-experience`)
+
+[ADR-0031](docs/adrs/0031-rust-system-authority-and-native-system-surfaces.md),
+`Proposed`. Sem prova numa imagem; sem interface gráfica.
+
+- **`ocinye-system-contracts`**: catálogo fechado de capacidades do sistema,
+  pedidos tipados com validação, estados, códigos de recusa, eventos e o formato
+  de fio (tramas limitadas, aperto de mão por versão). Ligações TypeScript
+  geradas e verificadas por teste.
+- **`ocinye-system-client`**: o cliente único do serviço.
+- **`ocinye-system-service`**: o daemon (posição pelo par do socket, autorização
+  antes da validação, prova fresca por pedido, auditoria sem segredos), o
+  executor endurecido de ferramentas, os leitores e acções Linux do primeiro
+  bloco, e o cliente sem ecrã `ocinye-system`.
+- Wi-Fi, Bluetooth, som, ecrãs e aplicação de actualizações: no catálogo,
+  `NOT_IMPLEMENTED`. Session Service e ligação ao Core: por fazer.
+- Dependências novas: `ts-rs` (geração das ligações) e `rustix` (credenciais do
+  par do socket, só em Linux).
+
 ### Integração em `main` — 2026-10-11
 
 - O Installer (D011) entrou em `main` (PR #195), como
