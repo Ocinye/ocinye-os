@@ -74,6 +74,9 @@ pub struct HttpCore {
     path: PathBuf,
     /// Core session id → Core session token.
     tokens: Mutex<BTreeMap<String, String>>,
+    /// The recovery codes of the enrolment the last sign-in closed, until the
+    /// engine takes them. Never written anywhere.
+    recovery_codes: Mutex<Vec<String>>,
 }
 
 impl HttpCore {
@@ -108,6 +111,7 @@ impl HttpCore {
             machine_id: machine_id.to_owned(),
             path,
             tokens: Mutex::new(tokens),
+            recovery_codes: Mutex::new(Vec::new()),
         })
     }
 
@@ -187,6 +191,20 @@ impl HttpCore {
             // Anything else is the Core not being able to answer.
             _ => Refresh::Unreachable,
         }
+    }
+
+    /// What the Core says this account's second factor needs: `challenge`,
+    /// `enrollment` or `not_required`.
+    fn second_factor_mode(&self, gate: &str) -> Option<String> {
+        #[derive(Deserialize)]
+        struct Status {
+            mfa_mode: String,
+        }
+        let answer = self.send("GET", "/auth/mfa", Some(gate), None)?;
+        answer
+            .ok()
+            .then(|| answer.json::<Status>())?
+            .map(|s| s.mfa_mode)
     }
 
     fn leave(&self, token: &str) {
@@ -274,21 +292,56 @@ impl Core for HttpCore {
         }
 
         if issued.state == "mfa_required" {
-            let Some(code) = second_factor else {
-                self.leave(&issued.session_token);
-                return Err(CoreRefusal::SecondFactorRequired);
-            };
             let gate = issued.session_token;
-            let answer = self
-                .post("/auth/mfa/challenge", Some(&gate), &json!({ "code": code }))
-                .ok_or(CoreRefusal::Unreachable)?;
-            if !answer.ok() {
+            // The Core says which it is: a factor to present, or one to
+            // enrol. When it cannot be asked, it is taken to be the former.
+            let enrolling = self.second_factor_mode(&gate).as_deref() == Some("enrollment");
+            let Some(code) = second_factor else {
                 self.leave(&gate);
-                return Err(if answer.status >= 500 {
+                return Err(if enrolling {
+                    CoreRefusal::SecondFactorEnrollmentRequired
+                } else {
+                    CoreRefusal::SecondFactorRequired
+                });
+            };
+            let refused = |answer: &Answer| {
+                if answer.status >= 500 {
                     CoreRefusal::Unreachable
                 } else {
                     CoreRefusal::InvalidCredentials
-                });
+                }
+            };
+            let answer = if enrolling {
+                // The code proves the authenticator holds the key: the Core
+                // confirms the enrolment and issues the recovery codes, and
+                // acknowledging them is what opens the assured session.
+                #[derive(Deserialize)]
+                struct Codes {
+                    recovery_codes: Vec<String>,
+                }
+                let confirmed = self
+                    .post(
+                        "/auth/mfa/enroll/confirm",
+                        Some(&gate),
+                        &json!({ "code": code }),
+                    )
+                    .ok_or(CoreRefusal::Unreachable)?;
+                if !confirmed.ok() {
+                    self.leave(&gate);
+                    return Err(refused(&confirmed));
+                }
+                let codes: Codes = confirmed.json().ok_or(CoreRefusal::Unreachable)?;
+                if let Ok(mut held) = self.recovery_codes.lock() {
+                    *held = codes.recovery_codes;
+                }
+                self.post("/auth/mfa/acknowledge", Some(&gate), &json!({}))
+            } else {
+                self.post("/auth/mfa/challenge", Some(&gate), &json!({ "code": code }))
+            }
+            .ok_or(CoreRefusal::Unreachable)?;
+            if !answer.ok() {
+                self.leave(&gate);
+                return Err(refused(&answer));
             }
             issued = answer.json().ok_or(CoreRefusal::Unreachable)?;
         }
@@ -310,6 +363,56 @@ impl Core for HttpCore {
                 Err(CoreRefusal::Unreachable)
             }
         }
+    }
+
+    fn begin_enrollment(&self, username: &str, password: &str) -> Result<String, CoreRefusal> {
+        #[derive(Deserialize)]
+        struct Enrollment {
+            secret_base32: Option<String>,
+        }
+        let answer = self
+            .post(
+                "/auth/login",
+                None,
+                &json!({ "email": username, "password": password }),
+            )
+            .ok_or(CoreRefusal::Unreachable)?;
+        if answer.status >= 500 {
+            return Err(CoreRefusal::Unreachable);
+        }
+        if !answer.ok() {
+            return Err(CoreRefusal::InvalidCredentials);
+        }
+        let issued: Issued = answer.json().ok_or(CoreRefusal::Unreachable)?;
+        let gate = issued.session_token;
+        let outcome = match issued.state.as_str() {
+            "password_change_required" => Err(CoreRefusal::PasswordChangeRequired),
+            "mfa_required" if self.second_factor_mode(&gate).as_deref() == Some("enrollment") => {
+                self
+                    // The key is asked for in clear because this screen has no
+                    // camera to point at: it is typed into the authenticator.
+                    .post("/auth/mfa/enroll?reveal=true", Some(&gate), &json!({}))
+                    .filter(Answer::ok)
+                    .and_then(|a| a.json::<Enrollment>())
+                    .and_then(|e| e.secret_base32)
+                    .filter(|k| !k.is_empty() && k.bytes().all(|b| b.is_ascii_alphanumeric()))
+                    .ok_or(CoreRefusal::Unreachable)
+            }
+            "mfa_required" => Err(CoreRefusal::SecondFactorRequired),
+            // An account that needs no enrolment has nothing to begin.
+            _ => Err(CoreRefusal::InvalidCredentials),
+        };
+        // The key is the Core's, kept with the person: the session that
+        // fetched it has no further use.
+        self.leave(&gate);
+        outcome
+    }
+
+    fn take_recovery_codes(&self) -> Vec<String> {
+        self.recovery_codes
+            .lock()
+            .map(|mut held| std::mem::take(&mut *held))
+            .unwrap_or_default()
     }
 
     fn refresh(&self, session_id: &str) -> Refresh {

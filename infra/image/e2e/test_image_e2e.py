@@ -285,5 +285,22 @@ class Preservation(unittest.TestCase):
             self.assertIsNone(summary["preserved_disk"])
 
 
+class SeatBench(unittest.TestCase):
+    def test_totp_matches_the_rfc_6238_vector(self):
+        # RFC 6238, appendix B: the SHA-1 key "12345678901234567890" at T=59
+        # gives 94287082; six digits are its last six.
+        self.assertEqual(m.totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", at=59), "287082")
+        self.assertEqual(m.totp("gezdgnbvgy3tqojqgezdgnbvgy3tqojq", at=1111111109), "081804")
+
+    def test_the_bench_keyboard_types_only_what_it_has_keys_for(self):
+        typed = []
+        vm = m.Vm.__new__(m.Vm)
+        vm.press = lambda code, shift=False: typed.append((code, shift))
+        vm.type("aB1-@")
+        self.assertEqual(typed, [("a", False), ("b", True), ("1", False), ("minus", False), ("2", True)])
+        with self.assertRaises(RuntimeError):
+            vm.type("ç")
+
+
 if __name__ == "__main__":
     unittest.main()

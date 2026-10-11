@@ -34,6 +34,8 @@ struct FakeCore {
     reachable: Rc<Cell<bool>>,
     refreshes: Rc<Cell<u32>>,
     signed_out: Rc<RefCell<Vec<String>>>,
+    /// The recovery codes the next sign-in comes with.
+    codes: Rc<RefCell<Vec<String>>>,
 }
 
 impl FakeCore {
@@ -44,6 +46,7 @@ impl FakeCore {
             reachable: Rc::new(Cell::new(true)),
             refreshes: Rc::new(Cell::new(0)),
             signed_out: Rc::new(RefCell::new(Vec::new())),
+            codes: Rc::new(RefCell::new(Vec::new())),
         }
     }
 }
@@ -64,6 +67,16 @@ impl Core for FakeCore {
         } else {
             Err(CoreRefusal::InvalidCredentials)
         }
+    }
+    fn begin_enrollment(&self, _: &str, password: &str) -> Result<String, CoreRefusal> {
+        if password == PASSWORD {
+            Ok("JBSWY3DPEHPK3PXP".to_owned())
+        } else {
+            Err(CoreRefusal::InvalidCredentials)
+        }
+    }
+    fn take_recovery_codes(&self) -> Vec<String> {
+        std::mem::take(&mut *self.codes.borrow_mut())
     }
     fn refresh(&self, _: &str) -> Refresh {
         self.refreshes.set(self.refreshes.get() + 1);
@@ -650,6 +663,43 @@ fn o_verificador_local_e_da_palavra_passe_escolhida_no_primeiro_acesso() {
     ));
 }
 
+#[test]
+fn quem_entra_a_inscrever_o_segundo_factor_recebe_os_codigos_com_a_sessao() {
+    let mut b = bench();
+    *b.core.codes.borrow_mut() = vec!["aaaa-bbbb".to_owned()];
+    match b.sign_in() {
+        SessionReply::Enrolled {
+            state,
+            recovery_codes,
+        } => {
+            assert!(matches!(state, SessionState::Active { .. }));
+            assert_eq!(recovery_codes.len(), 1);
+            assert_eq!(recovery_codes[0].expose(), "aaaa-bbbb");
+        }
+        other => panic!("expected the enrolment's codes, got {other:?}"),
+    }
+    // Once: the session that follows is an ordinary one.
+    b.ask(SessionRequest::SignOut {});
+    assert!(matches!(b.sign_in(), SessionReply::State { .. }));
+}
+
+#[test]
+fn a_chave_do_autenticador_so_se_pede_sem_sessao_aberta() {
+    let mut b = bench();
+    let begin = || SessionRequest::BeginSecondFactorEnrollment {
+        username: "pessoa".into(),
+        password: Secret::new(PASSWORD.into()),
+    };
+    match b.ask(begin()) {
+        SessionReply::SecondFactorSecret { secret_base32 } => {
+            assert_eq!(secret_base32.expose(), "JBSWY3DPEHPK3PXP")
+        }
+        other => panic!("expected the key, got {other:?}"),
+    }
+    b.sign_in();
+    assert_eq!(reason(&b.ask(begin())), SessionReason::AlreadySignedIn);
+}
+
 mod socket {
     use std::os::unix::net::UnixStream;
     use std::sync::Mutex;
@@ -772,6 +822,8 @@ mod core_link {
         login_state: &'static str,
         /// Whether `/auth/machine-session` still knows the session.
         revoked: bool,
+        /// What `/auth/mfa` says the account's second factor needs.
+        mfa_mode: &'static str,
         asked: Vec<String>,
     }
 
@@ -803,7 +855,7 @@ mod core_link {
                 }
                 let mut body = vec![0; length];
                 reader.read_exact(&mut body).unwrap();
-                let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
                 let mut script = script.lock().unwrap();
                 script.asked.push(path.clone());
                 let (status, answer) = match path.as_str() {
@@ -840,6 +892,23 @@ mod core_link {
                     {
                         (200, serde_json::to_string(&sign(policy(1))).unwrap())
                     }
+                    "/auth/mfa" if cookie.ends_with("=gate") => (
+                        200,
+                        serde_json::json!({ "mfa_mode": script.mfa_mode }).to_string(),
+                    ),
+                    "/auth/mfa/enroll?reveal=true" if cookie.ends_with("=gate") => (
+                        200,
+                        serde_json::json!({ "otpauth_uri": "otpauth://totp/x", "secret_base32": "JBSWY3DPEHPK3PXP" })
+                            .to_string(),
+                    ),
+                    "/auth/mfa/enroll/confirm" if cookie.ends_with("=gate") && body["code"] == "123456" => (
+                        200,
+                        serde_json::json!({ "recovery_codes": ["aaaa-bbbb", "cccc-dddd"] }).to_string(),
+                    ),
+                    "/auth/mfa/acknowledge" if cookie.ends_with("=gate") => (
+                        200,
+                        serde_json::json!({ "session_token": "assured", "state": "active" }).to_string(),
+                    ),
                     "/auth/logout" => (204, String::new()),
                     _ => (401, "{}".to_owned()),
                 };
@@ -943,6 +1012,76 @@ mod core_link {
             tail,
             ["/auth/login", "/auth/password", "/auth/machine-session"]
         );
+    }
+
+    #[test]
+    fn um_segundo_factor_por_inscrever_inscreve_se_aqui_e_os_codigos_entregam_se_uma_vez() {
+        let (core, script, _) = link("mfa_required");
+        script.lock().unwrap().mfa_mode = "enrollment";
+        assert_eq!(
+            core.sign_in("pessoa", PASSWORD, None, None),
+            Err(CoreRefusal::SecondFactorEnrollmentRequired)
+        );
+        assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
+        // The key comes from the Core, and the session that fetched it is closed.
+        assert_eq!(
+            core.begin_enrollment("pessoa", "errada"),
+            Err(CoreRefusal::InvalidCredentials)
+        );
+        assert_eq!(
+            core.begin_enrollment("pessoa", PASSWORD).as_deref(),
+            Ok("JBSWY3DPEHPK3PXP")
+        );
+        assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
+        // A wrong code enrols nothing and yields no codes.
+        assert_eq!(
+            core.sign_in("pessoa", PASSWORD, Some("000000"), None),
+            Err(CoreRefusal::InvalidCredentials)
+        );
+        assert!(core.take_recovery_codes().is_empty());
+        // The right one confirms, acknowledges, and opens the session.
+        assert!(core
+            .sign_in("pessoa", PASSWORD, Some("123456"), None)
+            .is_ok());
+        let asked = script.lock().unwrap().asked.clone();
+        let tail: Vec<&str> = asked
+            .iter()
+            .rev()
+            .take(5)
+            .rev()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            tail,
+            [
+                "/auth/login",
+                "/auth/mfa",
+                "/auth/mfa/enroll/confirm",
+                "/auth/mfa/acknowledge",
+                "/auth/machine-session"
+            ]
+        );
+        assert_eq!(core.take_recovery_codes(), ["aaaa-bbbb", "cccc-dddd"]);
+        assert!(
+            core.take_recovery_codes().is_empty(),
+            "os códigos entregaram-se duas vezes"
+        );
+    }
+
+    #[test]
+    fn uma_conta_ja_inscrita_nao_recebe_outra_chave() {
+        let (core, script, _) = link("mfa_required");
+        script.lock().unwrap().mfa_mode = "challenge";
+        assert_eq!(
+            core.begin_enrollment("pessoa", PASSWORD),
+            Err(CoreRefusal::SecondFactorRequired)
+        );
+        assert!(!script
+            .lock()
+            .unwrap()
+            .asked
+            .iter()
+            .any(|p| p.starts_with("/auth/mfa/enroll")));
     }
 
     #[test]

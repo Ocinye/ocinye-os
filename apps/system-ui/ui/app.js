@@ -23,7 +23,9 @@
     form: { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '', iname: '', domain: '', pname: '', pemail: '', aname: '', aemail: '' },
     dist: { research: true, business: false, education: false, personal: false },
     credential: null,       // a credencial do primeiro administrador, enquanto está no ecrã
-    step: 1,                // 1 conta · 2 segundo factor · 3 palavra-passe nova
+    enrolKey: null,         // a chave do autenticador, enquanto se inscreve o segundo factor
+    recovery: null,         // os códigos de recuperação, enquanto estão no ecrã
+    step: 1,                // 1 conta · 2 segundo factor · 3 palavra-passe nova · 4 inscrever o segundo factor
     busy: false,
     error: null,            // [chave, variáveis]
     toast: null,
@@ -227,7 +229,22 @@
     const facts = S.serviceDown
       ? `<li data-tone="bad">${t('fact.service')}</li>`
       : `<li data-tone="${TONE[h]}">${t('fact.instance.' + h)}</li><li data-tone="${n.tone}">${t(n.key)}</li>${time ? `<li data-tone="${time.synchronised ? 'ok' : 'warn'}">${t(time.synchronised ? 'fact.clock.yes' : 'fact.clock.no')}</li>` : ''}`;
-    const body = S.step === 3
+    const grouped = (k) => esc(String(k).replace(/(.{4})/g, '$1 ').trim());
+    const body = S.recovery
+      ? `<div><div class="sx-card__step">${t('enrol.step')}</div><h1 id="login-h" tabindex="-1">${t('enrol.codes.h')}</h1></div>
+         ${alert('warn', t('enrol.codes.once'))}
+         <ul class="sx-codes">${S.recovery.map((c) => `<li class="sx-mono">${esc(c)}</li>`).join('')}</ul>
+         <p class="sx-card__note">${t('enrol.codes.note')}</p>
+         ${btn('gold', t('enrol.codes.done'), 'recovery-done', { lg: true })}`
+      : S.step === 4
+      ? `<div><div class="sx-card__step">${t('enrol.step')}</div><h1 id="login-h">${t('enrol.h')}</h1></div>
+         <p>${t('enrol.lead')}</p>
+         ${S.error ? alert('bad', t(S.error[0], S.error[1])) : ''}
+         ${S.enrolKey ? `<dl class="sx-kv"><dt>${t('enrol.key')}</dt><dd class="sx-mono sx-secret">${grouped(S.enrolKey)}</dd></dl>` : alert('info', t('login.busy'))}
+         ${field('code', t('enrol.code'), { code: true })}
+         ${btn('gold', t(S.busy ? 'login.busy' : 'login.go'), null, { submit: true, lg: true, disabled: !S.enrolKey })}
+         ${btn('ghost', t('login.back'), 'login-back')}`
+      : S.step === 3
       ? `<div><div class="sx-card__step">${t('login.stepnew')}</div><h1 id="login-h">${t('login.hnew')}</h1></div>
          ${alert('info', t('login.newnote'))}
          ${S.error ? alert('bad', t(S.error[0], S.error[1])) : ''}
@@ -251,14 +268,14 @@
          ${btn('gold', t(S.busy ? 'login.busy' : 'login.go'), null, { submit: true, lg: true })}
          <p class="sx-card__note">${t('login.note')}</p>`;
     const a = activation();
-    const stage = S.credential || (a && a.phase === 'ACTIVATED' && a.credential_waiting) ? 'reveal'
+    const stage = S.recovery ? 'login' : S.credential || (a && a.phase === 'ACTIVATED' && a.credential_waiting) ? 'reveal'
       : a && a.phase === 'RUNNING' ? 'running'
         : a && (a.phase === 'READY' || a.phase === 'FAILED') ? 'setup' : 'login';
     const card = stage === 'reveal' ? reveal() : stage === 'running' ? running(a) : stage === 'setup' ? setup(a)
       : (a && a.phase === 'NOT_OFFERED' ? alert('info', t('act.none')) : '') + body;
     return `<main class="sx-screen">${corner()}
       <div class="sx-login">
-        <div class="sx-hero">${ic('mark')}<h1>${t('login.title')}</h1><p>${t(stage === 'login' ? 'login.lead' : 'act.hero')}</p><ul class="sx-facts">${stage === 'login' ? facts : ''}</ul></div>
+        <div class="sx-hero">${ic('mark')}<h1>${t('login.title')}</h1><p>${t(stage === 'login' ? 'login.lead' : stage === 'reveal' ? 'act.hero.done' : 'act.hero')}</p><ul class="sx-facts">${stage === 'login' ? facts : ''}</ul></div>
         <form class="sx-card${stage === 'setup' ? ' sx-card--setup' : ''}" data-form="${stage === 'setup' ? 'setup' : stage === 'login' ? 'login' : 'none'}" aria-labelledby="login-h">${card}</form>
       </div>
       <div class="sx-cornerleft">${langButton()}</div>${overlay()}</main>`;
@@ -455,7 +472,9 @@
   }
 
   // ── desenhar
-  const view = () => (!S.session ? 'wait' : S.session.state === 'ACTIVE' ? 'shell' : S.session.state === 'LOCKED' ? 'lock' : 'login');
+  // Os códigos de recuperação ficam no ecrã, sozinhos, até serem guardados:
+  // a sessão já existe, mas o Workspace espera por isso.
+  const view = () => (!S.session ? 'wait' : S.recovery ? 'login' : S.session.state === 'ACTIVE' ? 'shell' : S.session.state === 'LOCKED' ? 'lock' : 'login');
   let lastHtml = '';
   let lastFocusKey = '';
   let lastFocusId = '';
@@ -474,13 +493,15 @@
     root.innerHTML = html;
     // O foco segue o que mudou: um diálogo novo, uma página nova, um ecrã novo;
     // de resto fica onde a pessoa o tinha.
-    const focusKey = v + '|' + ((got('activation.status') || {}).phase || '') + (S.credential ? 'c' : '') + '|' + (S.dialog ? S.dialog.kind + (S.dialog.cls || '') : '') + '|' + (v === 'shell' ? S.panel + ':' + S.page : S.step);
+    const focusKey = v + '|' + ((got('activation.status') || {}).phase || '') + (S.credential ? 'c' : '') + (S.recovery ? 'r' : '') + (S.enrolKey ? 'k' : '') + '|' + (S.dialog ? S.dialog.kind + (S.dialog.cls || '') : '') + '|' + (v === 'shell' ? S.panel + ':' + S.page : S.step);
     const moved = focusKey !== lastFocusKey;
     lastFocusKey = focusKey;
     let target = null;
     if (moved) {
-      const scope = root.querySelector('.sx-dialog') || root.querySelector('.sx-panel') || root;
-      target = (S.panel === 'system' && !S.dialog && root.querySelector('#page-h')) || scope.querySelector('input:not([disabled])') || scope.querySelector('button:not([disabled])');
+      // Dentro do que acabou de aparecer: o diálogo, o painel, ou o cartão do
+      // ecrã — nunca os botões do canto, que estão antes dele no documento.
+      const scope = root.querySelector('.sx-dialog') || root.querySelector('.sx-panel') || root.querySelector('.sx-card') || root.querySelector('.sx-lock__who') || root;
+      target = (S.panel === 'system' && !S.dialog && root.querySelector('#page-h')) || scope.querySelector('input:not([disabled])') || scope.querySelector('button:not([disabled])') || scope.querySelector('[tabindex="-1"]');
     } else if (keep) {
       target = document.getElementById(keep.id);
       if (target && target.disabled) target = null;
@@ -514,7 +535,11 @@
     if (!reply) { S.error = ['why.SESSION_SERVICE']; }
     else if (reply.reply === 'refused') {
       const code = reply.reason.code;
-      if (code === 'SECOND_FACTOR_REQUIRED' && S.step !== 2) { S.step = 2; S.form.code = ''; }
+      // Chegar ao segundo factor quer dizer que a palavra-passe nova, quando a
+      // houve, já é a da conta: daqui em diante é ela que se apresenta.
+      if ((code === 'SECOND_FACTOR_REQUIRED' || code === 'SECOND_FACTOR_ENROLLMENT_REQUIRED') && S.form.new1) { S.form.pass = S.form.new1; S.form.new1 = ''; S.form.new2 = ''; }
+      if (code === 'SECOND_FACTOR_ENROLLMENT_REQUIRED' && S.step !== 4) { S.step = 4; S.form.code = ''; S.enrolKey = null; render(); await beginEnrollment(); }
+      else if (code === 'SECOND_FACTOR_REQUIRED' && S.step !== 2) { S.step = 2; S.form.code = ''; }
       else if (code === 'PASSWORD_CHANGE_REQUIRED' && S.step === 1) { S.step = 3; S.form.new1 = ''; S.form.new2 = ''; }
       else {
         S.error = ['why.' + code, { n: reply.reason.retry_after_secs }];
@@ -522,9 +547,19 @@
         if (S.step === 1) S.form.pass = '';
         if (code === 'PASSWORD_NOT_ACCEPTED') { S.step = 3; S.form.new1 = ''; S.form.new2 = ''; }
       }
-    } else { S.form = { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '' }; S.step = 1; S.panel = null; }
+    } else {
+      if (reply.reply === 'enrolled') { S.session = reply.state; S.recovery = reply.recovery_codes; }
+      S.form = Object.assign(S.form, { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '' }); S.step = 1; S.panel = null; S.enrolKey = null;
+    }
     render();
     if (view() === 'shell') { refresh(); invoke('open_workspace').catch(() => {}); }
+  }
+
+  async function beginEnrollment() {
+    const reply = await ask({ request: 'begin_second_factor_enrollment', username: S.form.user.trim(), password: S.form.pass });
+    if (reply && reply.reply === 'second_factor_secret') S.enrolKey = reply.secret_base32;
+    else S.error = [reply ? 'why.' + reply.reason.code : 'why.SESSION_SERVICE'];
+    render();
   }
 
   async function activate() {
@@ -560,7 +595,8 @@
       else S.error = ['act.cred.gone'];
     },
     'credential-done': () => { S.credential = null; S.step = 1; },
-    'login-back': () => { S.step = 1; S.error = null; S.form.code = ''; S.form.pass = ''; S.form.new1 = ''; S.form.new2 = ''; },
+    'recovery-done': () => { S.recovery = null; refresh(); invoke('open_workspace').catch(() => {}); },
+    'login-back': () => { S.step = 1; S.error = null; S.form.code = ''; S.form.pass = ''; S.form.new1 = ''; S.form.new2 = ''; S.enrolKey = null; },
     languages: () => { S.dialog = { kind: 'languages' }; },
     lang: async (arg) => { S.lang = arg; S.langChosen = true; S.dialog = null; document.documentElement.lang = LOCALE(); render(); const r = await call('locale.configure', { language: arg }); if (!r.refused) S.langChosen = false; },
     contrast: async () => { const a = got('accessibility.status') || { text_scale_percent: 100, high_contrast: false, reduce_motion: false }; const r = await call('accessibility.configure', Object.assign({}, a, { high_contrast: !a.high_contrast })); if (r.refused) document.documentElement.classList.toggle('sx-contrast'); else applyPreferences(); },

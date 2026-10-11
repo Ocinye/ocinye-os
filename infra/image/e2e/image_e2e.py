@@ -547,17 +547,36 @@ def read(s):
     n = struct.unpack(">I", s.recv(4, socket.MSG_WAITALL))[0]; return json.loads(s.recv(n, socket.MSG_WAITALL))
 s = socket.socket(socket.AF_UNIX); s.settimeout(20); s.connect("/run/ocinye/session.sock")
 s.sendall(frame({"frame": "hello", "contract": 1})); read(s)
-s.sendall(frame({"request": "state"})); print(json.dumps(read(s)))
+s.sendall(frame(REQUEST)); print(json.dumps(read(s)))
 '''
+
+
+def session_ask(port, key, request):
+    """One request to the Session Service, as root on the machine; its reply."""
+    probe = SESSION_PROBE.replace("REQUEST", repr(request))
+    r = ssh(port, "ocinye", key, "sudo -n python3 -", probe.encode(), timeout=60)
+    try:
+        return json.loads(r.stdout.decode().strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {"reply": "none", "detail": (r.stdout + r.stderr).decode(errors="replace")[-300:]}
+
+
+def totp(secret_base32, at=None):
+    """The six digits an authenticator shows for this key now (RFC 6238)."""
+    import base64
+    import hmac
+    import struct
+    key = base64.b32decode(secret_base32.upper() + "=" * (-len(secret_base32) % 8))
+    counter = int((at if at is not None else time.time()) // 30)
+    digest = hmac.new(key, struct.pack(">Q", counter), "sha1").digest()
+    offset = digest[-1] & 0x0F
+    return f"{(struct.unpack('>I', digest[offset:offset + 4])[0] & 0x7FFFFFFF) % 1000000:06d}"
 
 
 def session_state(port, key):
     """The local session, as the Session Service tells root on the machine."""
-    r = ssh(port, "ocinye", key, "sudo -n python3 -", SESSION_PROBE.encode(), timeout=60)
-    try:
-        return json.loads(r.stdout.decode().strip().splitlines()[-1])["state"]
-    except (ValueError, IndexError, KeyError):
-        return {"state": "UNKNOWN", "detail": (r.stdout + r.stderr).decode(errors="replace")[-300:]}
+    reply = session_ask(port, key, {"request": "state"})
+    return reply.get("state") or {"state": "UNKNOWN", "detail": reply}
 
 
 def png_is_a_picture(path):
@@ -660,12 +679,12 @@ def scenario_seat(a):
         # The link: the key, the address, the name.
         linked = False
         for _ in range(60):
-            got = run("test -s /etc/ocinye/instance-session.pub && echo linked").stdout.decode().strip()
+            got = run("test -s /var/lib/ocinye/seat/instance-session.pub && echo linked").stdout.decode().strip()
             if got == "linked":
                 linked = True
                 break
             time.sleep(10)
-        link = run("cat /etc/ocinye/workspace-url; grep -c 'ocinye-seat$' /etc/hosts; sudo -n journalctl -u ocinye-seat-link --no-pager -n 20").stdout.decode(errors="replace")
+        link = run("cat /var/lib/ocinye/seat/workspace-url; grep -c 'ocinye-seat$' /etc/hosts; sudo -n journalctl -u ocinye-seat-link --no-pager -n 20").stdout.decode(errors="replace")
         r.check("seat: linked to the Instance it created", linked, link[-900:])
         r.check("seat: the Workspace address is the Instance's own name", link.startswith("https://ocinye-seat.test/"), link[:80])
         r.check("seat: the name resolves to this machine", link.splitlines()[1:2] == ["1"], link[:120])
@@ -703,22 +722,39 @@ def scenario_seat(a):
         vm.press("tab")
         vm.type(chosen)
         vm.press("ret")
+        time.sleep(12)
+        vm.screenshot(os.path.join(shots, "7b-second-factor.png"))
+        r.check("seat: an administrator without a second factor still has no session", session_state(vm.port, k1).get("state") == "SIGNED_OUT")
+        # The screen shows the authenticator key; the bench cannot read a
+        # screen. It asks the Session Service to begin the enrolment again —
+        # which replaces the key on the Core's side — and plays the
+        # authenticator for the key it was given. The code typed at the
+        # keyboard is therefore a real one, for the key the Core now holds.
+        begun = session_ask(vm.port, k1, {"request": "begin_second_factor_enrollment", "username": "admin@ocinye-seat.test", "password": chosen})
+        r.check("seat: the Core hands out an authenticator key for the enrolment", begun.get("reply") == "second_factor_secret", {k: v for k, v in begun.items() if k != "secret_base32"})
+        if begun.get("reply") != "second_factor_secret":
+            return r.finish(work)
+        if time.time() % 30 > 22:
+            time.sleep(9)
+        vm.type(totp(begun["secret_base32"]))
+        vm.press("ret")
         active = {}
-        for _ in range(12):
-            time.sleep(5)
-            active = session_state(vm.port, k1)
-            if active.get("state") == "ACTIVE":
-                break
         r.check("seat: signed in at the machine's own screen", active.get("state") == "ACTIVE" and active.get("core") == "ONLINE", active)
         r.check("seat: the member is the Instance's administrator", active.get("member_name") == "Admin de Prova", active.get("member_name"))
-        time.sleep(20)
+        r.check("seat: the administrator, with the second factor satisfied, may operate the machine", active.get("operator") is True, active.get("operator"))
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "7c-recovery-codes.png"))
+        procs = run("pgrep -af ocinye-system-ui | grep -c -- --workspace").stdout.decode().split()
+        r.check("seat: the Workspace waits while the recovery codes are on the screen", procs[:1] == ["0"], procs)
+        vm.press("ret")
+        time.sleep(25)
         vm.screenshot(os.path.join(shots, "8-session.png"))
         procs = run("pgrep -af ocinye-system-ui | grep -c -- --workspace; pgrep -u ocinye-ui -c ocinye-compositor").stdout.decode().split()
         r.check("seat: the Workspace has its own window process", procs[:1] == ["1"], procs)
         r.check("seat: the compositor runs as the unprivileged screen account", procs[1:2] == ["1"], procs)
         # Lock, then unlock with the chosen password — the temporary one is gone.
-        lock = run("sudo -n python3 - <<'PY'\n" + SESSION_PROBE.replace('{"request": "state"}', '{"request": "lock"}') + "\nPY")
-        r.check("seat: locked", b'"LOCKED"' in lock.stdout, lock.stdout[-200:])
+        lock = session_ask(vm.port, k1, {"request": "lock"})
+        r.check("seat: locked", (lock.get("state") or {}).get("state") == "LOCKED", lock)
         time.sleep(6)
         vm.screenshot(os.path.join(shots, "9-locked.png"))
         vm.type(secret)

@@ -122,10 +122,13 @@ impl Activation {
     #[must_use]
     pub fn state(&self) -> ActivationState {
         let release = self.release();
-        let phase = if self.installed.exists() {
-            ActivationPhase::Activated
-        } else if self.running.load(Ordering::SeqCst) {
+        // Running comes first: the installer writes the Instance's
+        // configuration long before it is done, and a machine whose services
+        // are still coming up is not an activated machine.
+        let phase = if self.running.load(Ordering::SeqCst) {
             ActivationPhase::Running
+        } else if self.installed.exists() {
+            ActivationPhase::Activated
         } else if self.started_file().exists() {
             // Started and neither running nor finished: it failed, or the
             // service was stopped under it.
@@ -177,12 +180,15 @@ impl Activation {
         let Some((_, program)) = self.release() else {
             return Err(Reason::NotOfferedHere);
         };
-        if self.installed.exists() {
-            return Err(Reason::NotOfferedHere);
-        }
-        // One at a time: whoever sets the flag is the one that runs.
+        // One at a time: whoever sets the flag is the one that runs. Asked
+        // before whether an Instance exists, because one that is still being
+        // created already has its configuration on disk.
         if self.running.swap(true, Ordering::SeqCst) {
             return Err(Reason::OperationInProgress);
+        }
+        if self.installed.exists() {
+            self.running.store(false, Ordering::SeqCst);
+            return Err(Reason::NotOfferedHere);
         }
         let prepared = (|| -> std::io::Result<()> {
             fs::DirBuilder::new()
@@ -304,13 +310,17 @@ mod tests {
                 .unwrap()
                 .push((program.to_owned(), args.to_vec()));
             fs::write(log, "== primeiro ==\n  nota\n== segundo ==\n").unwrap();
+            // Like the real one: the configuration is on disk well before the
+            // installation ends.
+            if self.installs {
+                fs::write(&self.installed, "OCINYE_RELEASE_SHA=abc\n").unwrap();
+            }
             while self.hold.load(Ordering::SeqCst) {
                 std::thread::sleep(Duration::from_millis(5));
             }
             if self.installs {
                 let at = args.iter().position(|a| a == "--credential-file").unwrap();
                 fs::write(&args[at + 1], "temporaria-de-prova\n").unwrap();
-                fs::write(&self.installed, "OCINYE_RELEASE_SHA=abc\n").unwrap();
             }
             self.succeed
         }

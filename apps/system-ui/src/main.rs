@@ -26,7 +26,7 @@ use tauri::{State, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 /// Where the installation wrote the address of this machine's Workspace. The
 /// interface shows that address and no other: it is not an argument, and the
 /// webview cannot name one.
-const WORKSPACE_ADDRESS: &str = "/etc/ocinye/workspace-url";
+const WORKSPACE_ADDRESS: &str = "/var/lib/ocinye/seat/workspace-url";
 
 /// The argument that makes this program the Workspace's window instead of the
 /// system interface: a separate process, which the compositor therefore does
@@ -35,7 +35,7 @@ const WORKSPACE_MODE: &str = "--workspace";
 
 /// The certificate this machine's own Instance serves, where the installation
 /// put it. Public by nature: it is what the proxy hands every client.
-const INSTANCE_CERTIFICATE: &str = "/etc/ocinye/tls/instance.pem";
+const INSTANCE_CERTIFICATE: &str = "/var/lib/ocinye/seat/instance.pem";
 
 /// Open the Workspace in its window, trusting this machine's own Instance.
 ///

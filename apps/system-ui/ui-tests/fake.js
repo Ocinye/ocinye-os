@@ -1,6 +1,6 @@
 /* Bancada da interface do sistema: um duplo dos dois serviços, com o mesmo
    formato de resposta do contrato. O cenário vem do fragmento do endereço:
-   #signed-out (por omissão), #locked, #active, #offline, #mfa, #newpass, #setup, #down.
+   #signed-out (por omissão), #locked, #active, #offline, #mfa, #newpass, #enroll, #setup, #down.
    Serve para ver e medir a interface num browser; não prova nada sobre os
    serviços. */
 (function () {
@@ -34,13 +34,23 @@
     switch (r.request) {
       case 'state': return { reply: { reply: 'state', state: state() } };
       case 'sign_in':
-        if (r.password !== PASSWORD) return refused('INVALID_CREDENTIALS');
+        if (r.password !== PASSWORD && !(scenario === 'enroll' && F.newset)) return refused('INVALID_CREDENTIALS');
         if (scenario === 'newpass' && !r.new_password) return refused('PASSWORD_CHANGE_REQUIRED');
         if (scenario === 'newpass' && r.new_password === 'palavra-passe-conhecida') return refused('PASSWORD_NOT_ACCEPTED');
+        if (scenario === 'enroll') {
+          if (!F.newset && !r.new_password) return refused('PASSWORD_CHANGE_REQUIRED');
+          if (r.new_password) { F.newset = r.new_password; return refused('SECOND_FACTOR_ENROLLMENT_REQUIRED'); }
+          if (r.password !== F.newset) return refused('INVALID_CREDENTIALS');
+          if (!r.second_factor) return refused('SECOND_FACTOR_ENROLLMENT_REQUIRED');
+          if (r.second_factor !== '123456') return refused('INVALID_CREDENTIALS');
+          F.session = 'ACTIVE';
+          return { reply: { reply: 'enrolled', state: state(), recovery_codes: ['aaaa-bbbb-cccc', 'dddd-eeee-ffff', 'gggg-hhhh-iiii', 'jjjj-kkkk-llll'] } };
+        }
         if (scenario === 'mfa' && !r.second_factor) return refused('SECOND_FACTOR_REQUIRED');
         if (scenario === 'mfa' && r.second_factor !== '123456') return refused('INVALID_CREDENTIALS');
         F.session = 'ACTIVE';
         return { reply: { reply: 'state', state: state() } };
+      case 'begin_second_factor_enrollment': return r.password === (F.newset || PASSWORD) ? { reply: { reply: 'second_factor_secret', secret_base32: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP' } } : refused('INVALID_CREDENTIALS');
       case 'lock': if (F.session === 'ACTIVE') F.session = 'LOCKED'; return { reply: { reply: 'state', state: state() } };
       case 'unlock':
         if (r.password !== PASSWORD) { F.failures += 1; return refused('INVALID_CREDENTIALS'); }

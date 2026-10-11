@@ -45,5 +45,5 @@ Ocinye OS corre nela, um endereço que não seja de loopback é recusado ao
 arrancar, e por isso o serviço que guarda tokens de sessão não traz uma pilha
 de TLS; o token da sessão do Core fica em
 `/var/lib/ocinye/session/core-link.json` (0600) e nunca chega à interface. A
-chave pública da Instância lê-se de `/etc/ocinye/instance-session.pub`
+chave pública da Instância lê-se de `/var/lib/ocinye/seat/instance-session.pub`
 (hexadecimal); sem ela nenhuma política verifica e ninguém entra.

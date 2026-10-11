@@ -12,21 +12,25 @@ ConditionPathExistsGlob=/dev/dri/card*
 StartLimitIntervalSec=120
 StartLimitBurst=5
 OnFailure=ocinye-console@tty1.service
-After=systemd-user-sessions.service systemd-logind.service ocinye-system.service ocinye-session.service ocinye-firstboot.service
+After=systemd-user-sessions.service seatd.service ocinye-system.service ocinye-session.service ocinye-firstboot.service
+Requires=seatd.service
 Wants=ocinye-system.service ocinye-session.service
 Conflicts=getty@tty1.service ocinye-console@tty1.service
 After=getty@tty1.service ocinye-console@tty1.service
 
 [Service]
 User=ocinye-ui
-# A real session on seat0: logind hands the compositor the display and the
-# input devices, and takes them back when it stops. The account has no
-# password, no shell and no group that reaches a device by itself.
-PAMName=ocinye-display
+# The seat manager (seatd) hands the compositor the display and the input
+# devices, and takes them back when it stops: the account has no password and
+# no shell, and opens no input device by itself. Not a logind session: on an
+# image without polkit, logind refuses to activate a session for anyone but
+# root, and this is not a reason to bring polkit in.
+Environment=LIBSEAT_BACKEND=seatd
+Environment=XDG_RUNTIME_DIR=/run/ocinye-ui
 Environment=XDG_SESSION_TYPE=wayland
-Environment=XDG_SESSION_CLASS=user
-Environment=XDG_SEAT=seat0
-Environment=XDG_VTNR=1
+RuntimeDirectory=ocinye-ui
+RuntimeDirectoryMode=0700
+WorkingDirectory=/var/lib/ocinye-ui
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
@@ -34,8 +38,6 @@ TTYVTDisallocate=yes
 StandardInput=tty-fail
 StandardOutput=journal
 StandardError=journal
-UtmpIdentifier=tty1
-UtmpMode=user
 # The program the compositor starts is fixed here, and nowhere else.
 ExecStart=/usr/lib/ocinye/ocinye-compositor -- /usr/lib/ocinye/ocinye-system-ui
 Restart=always

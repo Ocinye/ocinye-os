@@ -27,7 +27,7 @@ comandos e não chega à rede (CSP `default-src 'none'`, sem `style` em linha).
 `ocinye-system-ui --workspace` é o mesmo programa noutro papel: um **processo
 separado**, com uma janela chamada `workspace` que **nenhuma capacidade nomeia**
 — não tem comando nenhum — e que fica na origem do Workspace. O endereço vem de
-`/etc/ocinye/workspace-url`, escrito pela instalação; não é um argumento. Por
+`/var/lib/ocinye/seat/workspace-url`, escrito pela instalação; não é um argumento. Por
 ser outro processo, o compositor não o trata como superfície de confiança.
 
 ## Primeiro arranque
@@ -35,6 +35,13 @@ ser outro processo, o compositor não o trata como superfície de confiança.
 Sem Instância, o ecrã de entrada dá lugar a **Configurar este computador**
 (`activation.start`), ao progresso, e à entrega — única — da credencial
 temporária do primeiro administrador (`activation.credential`).
+
+## Primeiro acesso
+
+No ecrã de entrada, sem sair dele: quem traz uma credencial temporária escolhe
+a palavra-passe; quem tem de ter segundo factor e ainda não tem inscreve-o (a
+chave do autenticador é mostrada para ser escrita à mão — este ecrã não tem
+câmara nem desenha um código QR) e recebe os códigos de recuperação, uma vez.
 
 ## Textos
 

@@ -15,6 +15,7 @@
 use std::path::PathBuf;
 
 use ocinye_system_contracts::capability::FreshAuthClass;
+use ocinye_system_contracts::request::Secret;
 use ocinye_system_contracts::session::{
     CoreLink, EndReason, SessionReason, SessionReply, SessionRequest, SessionState,
     SignedSessionPolicy,
@@ -32,6 +33,8 @@ pub enum CoreRefusal {
     InvalidCredentials,
     /// A second factor is needed.
     SecondFactorRequired,
+    /// A second factor is required and none is enrolled.
+    SecondFactorEnrollmentRequired,
     /// The member must first set a password.
     PasswordChangeRequired,
     /// The Core refused the password the member chose.
@@ -65,6 +68,19 @@ pub trait Core {
         second_factor: Option<&str>,
         new_password: Option<&str>,
     ) -> Result<SignedSessionPolicy, CoreRefusal>;
+    /// Begin enrolling a second factor: the authenticator key, base32.
+    ///
+    /// # Errors
+    ///
+    /// Why not.
+    fn begin_enrollment(&self, _username: &str, _password: &str) -> Result<String, CoreRefusal> {
+        Err(CoreRefusal::Unreachable)
+    }
+    /// The recovery codes the Core issued when the sign-in that just succeeded
+    /// closed an enrolment. Handed over once; empty otherwise.
+    fn take_recovery_codes(&self) -> Vec<String> {
+        Vec::new()
+    }
     /// Ask about a session.
     fn refresh(&self, session_id: &str) -> Refresh;
     /// Tell the Core a session ended here. Best effort.
@@ -259,6 +275,19 @@ impl<C: Core, K: Clock> Engine<C, K> {
         }
     }
 
+    const fn reason_of(refusal: CoreRefusal) -> SessionReason {
+        match refusal {
+            CoreRefusal::InvalidCredentials => SessionReason::InvalidCredentials,
+            CoreRefusal::SecondFactorRequired => SessionReason::SecondFactorRequired,
+            CoreRefusal::SecondFactorEnrollmentRequired => {
+                SessionReason::SecondFactorEnrollmentRequired
+            }
+            CoreRefusal::Unreachable => SessionReason::CoreUnreachable,
+            CoreRefusal::PasswordChangeRequired => SessionReason::PasswordChangeRequired,
+            CoreRefusal::PasswordNotAccepted => SessionReason::PasswordNotAccepted,
+        }
+    }
+
     fn refused(reason: SessionReason) -> SessionReply {
         SessionReply::Refused { reason }
     }
@@ -278,19 +307,7 @@ impl<C: Core, K: Clock> Engine<C, K> {
             .sign_in(username, password, second_factor, new_password)
         {
             Ok(p) => p,
-            Err(CoreRefusal::InvalidCredentials) => {
-                return Self::refused(SessionReason::InvalidCredentials)
-            }
-            Err(CoreRefusal::SecondFactorRequired) => {
-                return Self::refused(SessionReason::SecondFactorRequired)
-            }
-            Err(CoreRefusal::Unreachable) => return Self::refused(SessionReason::CoreUnreachable),
-            Err(CoreRefusal::PasswordChangeRequired) => {
-                return Self::refused(SessionReason::PasswordChangeRequired)
-            }
-            Err(CoreRefusal::PasswordNotAccepted) => {
-                return Self::refused(SessionReason::PasswordNotAccepted)
-            }
+            Err(refusal) => return Self::refused(Self::reason_of(refusal)),
         };
         if policy::verify(&signed, &self.instance_key, &self.machine_id).is_none() {
             self.core.sign_out(&signed.policy.session_id);
@@ -316,8 +333,19 @@ impl<C: Core, K: Clock> Engine<C, K> {
         self.accounted_at = self.clock.monotonic_secs();
         self.retry_at = self.accounted_at;
         self.persist();
-        SessionReply::State {
-            state: self.state(),
+        // A sign-in that closed a second-factor enrolment comes with the
+        // recovery codes the Core issued: they go to the screen with the
+        // session, once, and are kept nowhere here.
+        let codes = self.core.take_recovery_codes();
+        if codes.is_empty() {
+            SessionReply::State {
+                state: self.state(),
+            }
+        } else {
+            SessionReply::Enrolled {
+                state: self.state(),
+                recovery_codes: codes.into_iter().map(Secret::new).collect(),
+            }
         }
     }
 
@@ -472,6 +500,17 @@ impl<C: Core, K: Clock> Engine<C, K> {
                 second_factor.as_ref().map(|s| s.expose()),
                 new_password.as_ref().map(|s| s.expose()),
             ),
+            SessionRequest::BeginSecondFactorEnrollment { username, password } => {
+                if self.record.is_some() {
+                    return Self::refused(SessionReason::AlreadySignedIn);
+                }
+                match self.core.begin_enrollment(&username, password.expose()) {
+                    Ok(secret) => SessionReply::SecondFactorSecret {
+                        secret_base32: Secret::new(secret),
+                    },
+                    Err(refusal) => Self::refused(Self::reason_of(refusal)),
+                }
+            }
             SessionRequest::Lock {} => {
                 if self.record.is_none() {
                     return Self::refused(SessionReason::NotSignedIn);

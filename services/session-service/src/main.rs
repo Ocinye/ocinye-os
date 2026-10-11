@@ -98,10 +98,11 @@ fn main() -> ExitCode {
     };
     // The Instance's public key is written when the machine is claimed.
     // Without it no policy can verify, so no session can open: fail closed.
-    let instance_key: [u8; 32] = hex::decode(read("/etc/ocinye/instance-session.pub"))
-        .ok()
-        .and_then(|b| b.try_into().ok())
-        .unwrap_or([0; 32]);
+    let instance_key: [u8; 32] =
+        hex::decode(read(&format!("{}/instance-session.pub", link::SEAT_DIR)))
+            .ok()
+            .and_then(|b| b.try_into().ok())
+            .unwrap_or([0; 32]);
     let config = Config {
         path: "/var/lib/ocinye/session/session.json".into(),
         boot_id: read("/proc/sys/kernel/random/boot_id"),

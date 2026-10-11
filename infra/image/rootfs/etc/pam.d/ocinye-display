@@ -1,7 +1,0 @@
-# The Ocinye OS screen (ocinye-display.service): a logind session for the
-# unprivileged account the compositor runs as. Nobody authenticates here — the
-# unit names the account, and members sign in through the Session Service.
-auth      required  pam_permit.so
-account   required  pam_unix.so
-session   required  pam_unix.so
-session   required  pam_systemd.so

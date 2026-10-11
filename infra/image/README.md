@@ -22,9 +22,10 @@ a interface nativa do sistema, e as unidades que os ligam:
 | Unidade | Papel |
 |---|---|
 | `ocinye-system.service` | a autoridade sobre a máquina (root), em `/run/ocinye/system.sock` |
+| `seatd.service` | o gestor de postos: entrega ao compositor o ecrã e os dispositivos de entrada |
 | `ocinye-session.service` | a sessão local; root **sem capacidade nenhuma**, sistema só de leitura, rede só de loopback |
 | `ocinye-seat-start.service` | numa máquina com dispositivo de ecrã, arranca o ecrã depois de os dispositivos assentarem |
-| `ocinye-display.service` | o compositor e a interface, como `ocinye-ui`, numa sessão do logind em `tty1`. **Nunca activada no arranque**: é a `ocinye-seat-start` que a arranca. Se o ecrã não levantar, `tty1` volta à consola de texto |
+| `ocinye-display.service` | o compositor e a interface, como `ocinye-ui`, em `tty1`; o ecrã e a entrada vêm do `seatd` (o logind, sem polkit, recusa activar a sessão de quem não é root). **Nunca activada no arranque**: é a `ocinye-seat-start` que a arranca. Se o ecrã não levantar, `tty1` volta à consola de texto |
 | `ocinye-seat-link.path` / `.service` | quando existe `/etc/ocinye/release.env` (há uma Instância instalada), aprende a chave pública de sessão pela porta de loopback do proxy e regista o endereço do Workspace |
 | `ocinye-console@tty2.service` | a consola de texto e o código de emparelhamento, a `Ctrl+Alt+F2` do ecrã gráfico (e na linha série, como antes) |
 

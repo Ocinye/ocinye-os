@@ -22,7 +22,15 @@ second_factor: Secret | null,
  * The password the member chooses, when the Core said the one above
  * is temporary and must be replaced before any session can open.
  */
-new_password: Secret | null, } | { "request": "lock", } | { "request": "unlock",
+new_password: Secret | null, } | { "request": "begin_second_factor_enrollment",
+/**
+ * The member's user name.
+ */
+username: string,
+/**
+ * The password.
+ */
+password: Secret, } | { "request": "lock", } | { "request": "unlock",
 /**
  * The password.
  */

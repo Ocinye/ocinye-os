@@ -131,16 +131,18 @@ SRC
   # NetworkManager, no automounter (no recommends).
   policy_on
   "${APT[@]}" install --no-install-recommends \
-    libseat1 libinput10 libudev1 libdrm2 libgbm1 libegl1 libgles2 libgl1-mesa-dri \
+    seatd libseat1 libinput10 libudev1 libdrm2 libgbm1 libegl1 libgles2 libgl1-mesa-dri \
     libxkbcommon0 xkb-data libwayland-server0 libwayland-client0 \
-    libwebkit2gtk-4.1-0 libgtk-3-0 libpam-systemd dbus iproute2 rfkill
+    libwebkit2gtk-4.1-0 libgtk-3-0 dbus iproute2 rfkill
   policy_off
   install -d -m 0755 /usr/lib/ocinye
   install_seat_binaries
-  # No password, no shell, and no group that reaches a device by itself:
-  # logind hands the session its display and input, and takes them back.
+  # No password and no shell. `video` is the group seatd serves (its socket),
+  # and what lets the compositor's account ask it for the display and the
+  # input devices; the account is in no group that reaches an input device.
   id ocinye-ui >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib/ocinye-ui --shell /usr/sbin/nologin ocinye-ui
-  usermod -p '*' ocinye-ui
+  usermod -p '*' -a -G video ocinye-ui
+  systemctl disable seatd.service 2>/dev/null || true
   # Every binary of the seat finds what it links against on this root.
   for b in /usr/lib/ocinye/ocinye-compositor /usr/lib/ocinye/ocinye-system-ui; do
     if ldd "$b" | grep -q 'not found'; then ldd "$b" | grep 'not found' >&2; echo "SEAT_LIBRARY_MISSING $b" >&2; exit 22; fi
@@ -336,7 +338,7 @@ stage_finalize() {
       # the start of the screen on a machine that has one. The screen itself
       # (ocinye-display.service) is never enabled — see the unit. With the
       # screen on tty1, the text console and its pairing code are on tty2.
-      systemctl enable ocinye-system.service ocinye-session.service ocinye-seat-link.path \
+      systemctl enable seatd.service ocinye-system.service ocinye-session.service ocinye-seat-link.path \
         ocinye-seat-start.service ocinye-console@tty2.service ;;
     oie)
       systemctl disable ssh.service ssh.socket cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true

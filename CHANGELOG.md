@@ -55,6 +55,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   gráfico passa a arrancar em qualquer máquina com dispositivo de ecrã, a
   consola de texto fica em `Ctrl+Alt+F2`, e o compositor passa essas teclas ao
   núcleo. Sem prova numa imagem construída.
+- **Inscrição do segundo factor no ecrã da máquina**: uma conta que o exige e
+  ainda não o tem (o primeiro administrador) inscreve-o ali — a chave do
+  autenticador, o código, e os códigos de recuperação mostrados uma vez — pelos
+  endpoints de inscrição do próprio Core. Sem leitor de QR: a chave é escrita
+  à mão no autenticador.
+- **Instalador numa imagem do Ocinye OS**: um pacote embarcado numa imagem não
+  traz `images/*.tar` (as imagens já estão no runtime); o instalador confere as
+  somas do que o pacote traz e as imagens pelos identificadores do manifesto.
+  E a configuração deixa de ser movida para *dentro* de um `/etc/ocinye` que
+  já existia — o que numa imagem acontecia sempre.
+- O ecrã obtém os dispositivos pelo `seatd`: numa imagem sem polkit, o logind
+  recusa activar a sessão de uma conta sem privilégios. O que o posto aprende
+  da Instância (chave de sessão, endereço, certificado) fica em
+  `/var/lib/ocinye/seat`, legível pela conta do ecrã.
 - **Operador da máquina**: a política de sessão que o Core assina diz se o
   membro administra a plataforma (`platform.administer`, com o segundo factor
   satisfeito); o System Service decide as capacidades de operador por aí, em

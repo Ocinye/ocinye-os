@@ -179,6 +179,17 @@ pub enum SessionRequest {
         /// is temporary and must be replaced before any session can open.
         new_password: Option<Secret>,
     },
+    /// Start enrolling a second factor for a member whose account requires
+    /// one and has none: the Core generates the authenticator key, and it is
+    /// handed to the trusted screen to be typed into an authenticator. The
+    /// enrolment is closed by a [`SessionRequest::SignIn`] carrying a code
+    /// from that authenticator.
+    BeginSecondFactorEnrollment {
+        /// The member's user name.
+        username: String,
+        /// The password.
+        password: Secret,
+    },
     /// Lock the session.
     Lock {},
     /// Unlock the session. Does not need the Core.
@@ -225,6 +236,8 @@ pub enum SessionReason {
     InvalidCredentials,
     /// The Core asks for a second factor.
     SecondFactorRequired,
+    /// The account requires a second factor and has none enrolled yet.
+    SecondFactorEnrollmentRequired,
     /// The member must set a password in the Workspace before a session can
     /// open here.
     PasswordChangeRequired,
@@ -273,6 +286,20 @@ pub enum SessionReply {
     Consumed {
         /// True exactly once.
         valid: bool,
+    },
+    /// The authenticator key of an enrolment that has begun. Shown once, on
+    /// the trusted screen.
+    SecondFactorSecret {
+        /// The key, base32.
+        secret_base32: Secret,
+    },
+    /// Signed in, having just enrolled a second factor: the session, and the
+    /// recovery codes the Core issued. They are shown once.
+    Enrolled {
+        /// The session.
+        state: SessionState,
+        /// The recovery codes.
+        recovery_codes: Vec<Secret>,
     },
     /// Refused.
     Refused {

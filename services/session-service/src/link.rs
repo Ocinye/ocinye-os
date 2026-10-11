@@ -14,14 +14,25 @@ use std::net::IpAddr;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
+/// Where the seat keeps what it learned about the Instance. Not under the
+/// Instance's own configuration directory: that one holds the Instance's
+/// secrets and is closed to everyone but root, and these three files are for
+/// the screen's unprivileged account to read — none of them is a secret.
+pub const SEAT_DIR: &str = "/var/lib/ocinye/seat";
+
 /// The files a link reads and writes.
 pub struct Paths {
     /// What the installation recorded (`/etc/ocinye/release.env`).
     pub release_env: PathBuf,
-    /// The Instance's public session key (`/etc/ocinye/instance-session.pub`).
+    /// The Instance's public session key.
     pub key: PathBuf,
-    /// The Workspace's address (`/etc/ocinye/workspace-url`).
+    /// The Workspace's address.
     pub workspace_url: PathBuf,
+    /// The certificate the Instance's proxy serves, where the installation
+    /// keeps it (`/etc/ocinye/tls/instance.pem`).
+    pub certificate: PathBuf,
+    /// Where the seat keeps a copy of it that the screen's account can read.
+    pub certificate_copy: PathBuf,
     /// The host table (`/etc/hosts`).
     pub hosts: PathBuf,
 }
@@ -32,8 +43,10 @@ impl Paths {
     pub fn system() -> Self {
         Self {
             release_env: "/etc/ocinye/release.env".into(),
-            key: "/etc/ocinye/instance-session.pub".into(),
-            workspace_url: "/etc/ocinye/workspace-url".into(),
+            key: format!("{SEAT_DIR}/instance-session.pub").into(),
+            workspace_url: format!("{SEAT_DIR}/workspace-url").into(),
+            certificate: "/etc/ocinye/tls/instance.pem".into(),
+            certificate_copy: format!("{SEAT_DIR}/instance.pem").into(),
             hosts: "/etc/hosts".into(),
         }
     }
@@ -83,6 +96,9 @@ fn is_key(text: &str) -> bool {
 }
 
 fn write(path: &Path, content: &str) -> Result<(), LinkError> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|_| LinkError::Write)?;
+    }
     let temporary = path.with_extension("ocinye-new");
     fs::OpenOptions::new()
         .write(true)
@@ -158,6 +174,12 @@ pub fn link(
         format!("https://{host}/\n")
     };
     write(&paths.workspace_url, &url)?;
+    // The certificate is public — the proxy hands it to every client — and the
+    // Workspace's window needs it to recognise this machine's own Instance.
+    // An Instance with no certificate file yet simply has none to copy.
+    if let Ok(pem) = fs::read_to_string(&paths.certificate) {
+        write(&paths.certificate_copy, &pem)?;
+    }
     Ok(outcome)
 }
 
@@ -187,8 +209,10 @@ mod tests {
         .unwrap();
         let paths = Paths {
             release_env: dir.join("release.env"),
-            key: dir.join("instance-session.pub"),
-            workspace_url: dir.join("workspace-url"),
+            key: dir.join("seat/instance-session.pub"),
+            workspace_url: dir.join("seat/workspace-url"),
+            certificate: dir.join("tls/instance.pem"),
+            certificate_copy: dir.join("seat/instance.pem"),
             hosts: dir.join("hosts"),
         };
         (paths, dir)
@@ -261,6 +285,36 @@ mod tests {
                 "127.0.0.1 localhost\n::1 ip6-localhost\n"
             );
         }
+    }
+
+    #[test]
+    fn o_certificado_da_instancia_fica_onde_o_ecra_o_pode_ler() {
+        let (p, dir) = bench(Some(INSTALLED));
+        link(&p, || Some(KEY.to_owned())).unwrap();
+        assert!(
+            !p.certificate_copy.exists(),
+            "copiou um certificado que não existe"
+        );
+        fs::create_dir_all(dir.join("tls")).unwrap();
+        fs::write(
+            &p.certificate,
+            "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        link(&p, || None).unwrap();
+        assert_eq!(
+            fs::read_to_string(&p.certificate_copy).unwrap(),
+            fs::read_to_string(&p.certificate).unwrap()
+        );
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&p.certificate_copy)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o644
+        );
     }
 
     #[test]
