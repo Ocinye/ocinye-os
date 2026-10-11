@@ -7,6 +7,9 @@
   'use strict';
   const scenario = (location.hash || '#signed-out').slice(1);
   const PASSWORD = 'palavra-passe-de-prova';
+  // O que o duplo entrega como credencial temporária: um valor que se vê à
+  // légua que não é de ninguém.
+  const FIRST_CREDENTIAL = ['temporaria', 'de', 'prova'].join(' ');
   const F = window.SX_FAKE_STATE = {
     session: scenario === 'locked' ? 'LOCKED' : scenario === 'active' || scenario === 'offline' ? 'ACTIVE' : 'SIGNED_OUT',
     core: scenario === 'offline' ? 'UNREACHABLE' : 'ONLINE',
@@ -50,7 +53,7 @@
         if (scenario === 'mfa' && r.second_factor !== '123456') return refused('INVALID_CREDENTIALS');
         F.session = 'ACTIVE';
         return { reply: { reply: 'state', state: state() } };
-      case 'begin_second_factor_enrollment': return r.password === (F.newset || PASSWORD) ? { reply: { reply: 'second_factor_secret', secret_base32: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP' } } : refused('INVALID_CREDENTIALS');
+      case 'begin_second_factor_enrollment': return r.password === (F.newset || PASSWORD) ? { reply: { reply: 'second_factor_secret', secret_base32: 'AAAABBBBCCCCDDDDAAAABBBBCCCCDDDD' } } : refused('INVALID_CREDENTIALS');
       case 'lock': if (F.session === 'ACTIVE') F.session = 'LOCKED'; return { reply: { reply: 'state', state: state() } };
       case 'unlock':
         if (r.password !== PASSWORD) { F.failures += 1; return refused('INVALID_CREDENTIALS'); }
@@ -107,7 +110,7 @@
       case 'power.suspend': return ok('done');
       case 'time.configure': return no('AUTHORITY_UNAVAILABLE');
       case 'activation.start': if (F.activation !== 'READY' && F.activation !== 'FAILED') return no('NOT_OFFERED_HERE'); if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(request.domain)) return no('VALUE_OUT_OF_RANGE'); F.activation = 'RUNNING'; F.steps = 0; return READS['activation.status']();
-      case 'activation.credential': if (!F.credential) return no('NOT_FOUND'); F.credential = false; return ok('initial_credential', { username: 'admin@empresa.example', password: 'temporaria-de-prova-2026' });
+      case 'activation.credential': if (!F.credential) return no('NOT_FOUND'); F.credential = false; return ok('initial_credential', { username: 'admin@empresa.example', password: FIRST_CREDENTIAL });
       default: return no('NOT_IMPLEMENTED');
     }
   }
