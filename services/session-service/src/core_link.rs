@@ -1,4 +1,4 @@
-//! The Core, over HTTP.
+//! The Core, over HTTP on the loopback interface.
 //!
 //! The Session Service is not an identity provider, so it does not invent a
 //! way to sign in: it uses the Core's own sign-in and second-factor endpoints,
@@ -11,16 +11,14 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use ocinye_system_contracts::session::SignedSessionPolicy;
-use reqwest::blocking::{Client, Response};
-use reqwest::header::COOKIE;
-use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -29,6 +27,10 @@ use crate::engine::{Core, CoreRefusal, Refresh};
 /// Name of the Core's session cookie.
 const SESSION_COOKIE: &str = "ocinye_core_session";
 
+/// The most this service reads of one answer. A signed policy is a few
+/// hundred bytes; anything near this is not the Core.
+const ANSWER_LIMIT: u64 = 64 * 1024;
+
 /// What the Core answers to a sign-in or a satisfied second factor.
 #[derive(Deserialize)]
 struct Issued {
@@ -36,11 +38,37 @@ struct Issued {
     state: String,
 }
 
+/// One answer of the Core: the status, and the body when there is one.
+struct Answer {
+    status: u16,
+    body: Vec<u8>,
+}
+
+impl Answer {
+    fn ok(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
+    fn json<T: for<'de> Deserialize<'de>>(&self) -> Option<T> {
+        serde_json::from_slice(&self.body).ok()
+    }
+}
+
+/// Why a Core address was not accepted: it is not plain HTTP to a loopback
+/// address.
+#[derive(Debug, PartialEq, Eq)]
+pub struct NotLocal;
+
 /// The Core's HTTP API, from this machine.
+///
+/// The Core of an Ocinye OS machine runs on that machine, and this service
+/// reaches it on the loopback interface only: the address is checked when the
+/// link is built, and a name that would need resolving is not an address. That
+/// is what lets this be plain HTTP/1.1 over a socket, with no TLS stack inside
+/// the service that holds session tokens.
 pub struct HttpCore {
-    client: Client,
-    /// The API's base, such as `http://127.0.0.1:8080/api/v1`.
-    base: String,
+    address: SocketAddr,
+    /// The path prefix of the API, such as `/api/v1`.
+    prefix: String,
     machine_id: String,
     /// Where the tokens of the sessions held here are kept.
     path: PathBuf,
@@ -49,54 +77,87 @@ pub struct HttpCore {
 }
 
 impl HttpCore {
-    /// A link to the Core at `base`, for the machine `machine_id`, keeping its
-    /// tokens in `path`.
+    /// A link to the Core at `base` (`http://127.0.0.1:PORT/PREFIX`), for the
+    /// machine `machine_id`, keeping its tokens in `path`.
     ///
     /// # Errors
     ///
-    /// When the HTTP client cannot be built.
-    pub fn new(base: &str, machine_id: &str, path: PathBuf) -> Result<Self, reqwest::Error> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(10))
-            .connect_timeout(Duration::from_secs(3))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
+    /// [`NotLocal`] when `base` is not plain HTTP to a loopback address.
+    pub fn new(base: &str, machine_id: &str, path: PathBuf) -> Result<Self, NotLocal> {
+        let rest = base.strip_prefix("http://").ok_or(NotLocal)?;
+        let (authority, prefix) = rest.split_once('/').unwrap_or((rest, ""));
+        let address: SocketAddr = authority.parse().map_err(|_| NotLocal)?;
+        let prefix = prefix.trim_end_matches('/');
+        let plain = prefix
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'-' | b'_' | b'.'));
+        if !address.ip().is_loopback() || !plain {
+            return Err(NotLocal);
+        }
         let tokens = fs::read(&path)
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default();
         Ok(Self {
-            client,
-            base: base.trim_end_matches('/').to_owned(),
+            address,
+            prefix: if prefix.is_empty() {
+                String::new()
+            } else {
+                format!("/{prefix}")
+            },
             machine_id: machine_id.to_owned(),
             path,
             tokens: Mutex::new(tokens),
         })
     }
 
-    fn post(&self, path: &str, token: Option<&str>, body: &serde_json::Value) -> Option<Response> {
-        let mut request = self.client.post(format!("{}{path}", self.base)).json(body);
-        if let Some(token) = token {
-            request = request.header(COOKIE, format!("{SESSION_COOKIE}={token}"));
+    /// One `POST` with a JSON body, one answer, one connection.
+    fn post(&self, path: &str, token: Option<&str>, body: &serde_json::Value) -> Option<Answer> {
+        // A token is the Core's own hexadecimal; anything else is not sent as
+        // a header.
+        if token.is_some_and(|t| t.is_empty() || !t.bytes().all(|b| b.is_ascii_alphanumeric())) {
+            return None;
         }
-        request.send().ok()
+        let body = serde_json::to_vec(body).ok()?;
+        let mut stream = TcpStream::connect_timeout(&self.address, Duration::from_secs(3)).ok()?;
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .ok()?;
+        stream
+            .set_write_timeout(Some(Duration::from_secs(10)))
+            .ok()?;
+        let cookie = token
+            .map(|t| format!("Cookie: {SESSION_COOKIE}={t}\r\n"))
+            .unwrap_or_default();
+        let head = format!(
+            "POST {}{path} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n\
+             Content-Length: {}\r\n{cookie}Connection: close\r\n\r\n",
+            self.prefix,
+            self.address,
+            body.len()
+        );
+        stream.write_all(head.as_bytes()).ok()?;
+        stream.write_all(&body).ok()?;
+        let mut raw = Vec::new();
+        stream.take(ANSWER_LIMIT).read_to_end(&mut raw).ok()?;
+        parse(&raw)
     }
 
     /// The signed policy of the session `token` opens, as the Core sees it now.
     fn policy(&self, token: &str) -> Refresh {
-        let Some(response) = self.post(
+        let Some(answer) = self.post(
             "/auth/machine-session",
             Some(token),
             &json!({ "machine_id": self.machine_id }),
         ) else {
             return Refresh::Unreachable;
         };
-        match response.status() {
-            StatusCode::OK => response
+        match answer.status {
+            200 => answer
                 .json::<SignedSessionPolicy>()
                 .map_or(Refresh::Unreachable, Refresh::Current),
             // The Core knows the session and says no: it ended there.
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Refresh::Revoked,
+            401 | 403 => Refresh::Revoked,
             // Anything else is the Core not being able to answer.
             _ => Refresh::Unreachable,
         }
@@ -142,21 +203,21 @@ impl Core for HttpCore {
         password: &str,
         second_factor: Option<&str>,
     ) -> Result<SignedSessionPolicy, CoreRefusal> {
-        let response = self
+        let answer = self
             .post(
                 "/auth/login",
                 None,
                 &json!({ "email": username, "password": password }),
             )
             .ok_or(CoreRefusal::Unreachable)?;
-        if response.status().is_server_error() {
+        if answer.status >= 500 {
             return Err(CoreRefusal::Unreachable);
         }
-        if !response.status().is_success() {
+        if !answer.ok() {
             // The Core gives one refusal for every way of not being let in.
             return Err(CoreRefusal::InvalidCredentials);
         }
-        let mut issued: Issued = response.json().map_err(|_| CoreRefusal::Unreachable)?;
+        let mut issued: Issued = answer.json().ok_or(CoreRefusal::Unreachable)?;
 
         if issued.state == "mfa_required" {
             let Some(code) = second_factor else {
@@ -164,18 +225,18 @@ impl Core for HttpCore {
                 return Err(CoreRefusal::SecondFactorRequired);
             };
             let gate = issued.session_token;
-            let response = self
+            let answer = self
                 .post("/auth/mfa/challenge", Some(&gate), &json!({ "code": code }))
                 .ok_or(CoreRefusal::Unreachable)?;
-            if !response.status().is_success() {
+            if !answer.ok() {
                 self.leave(&gate);
-                return Err(if response.status().is_server_error() {
+                return Err(if answer.status >= 500 {
                     CoreRefusal::Unreachable
                 } else {
                     CoreRefusal::InvalidCredentials
                 });
             }
-            issued = response.json().map_err(|_| CoreRefusal::Unreachable)?;
+            issued = answer.json().ok_or(CoreRefusal::Unreachable)?;
         }
         if issued.state != "active" {
             self.leave(&issued.session_token);
@@ -215,5 +276,97 @@ impl Core for HttpCore {
             self.leave(&token);
             self.remember(session_id, None);
         }
+    }
+}
+
+/// Read one HTTP/1.1 answer that was sent whole and then closed: the status
+/// line, the headers, and a body delimited by `Content-Length` (or, without
+/// one, by the end of the connection). Chunked bodies are not the Core's
+/// answers to these requests and are refused rather than guessed at.
+fn parse(raw: &[u8]) -> Option<Answer> {
+    let split = raw.windows(4).position(|w| w == b"\r\n\r\n")?;
+    let head = std::str::from_utf8(&raw[..split]).ok()?;
+    let rest = &raw[split + 4..];
+    let mut lines = head.split("\r\n");
+    let mut status_line = lines.next()?.split(' ');
+    if !status_line.next()?.starts_with("HTTP/1.") {
+        return None;
+    }
+    let status: u16 = status_line.next()?.parse().ok()?;
+    let mut length = None;
+    for line in lines {
+        let (name, value) = line.split_once(':')?;
+        if name.eq_ignore_ascii_case("transfer-encoding") {
+            return None;
+        }
+        if name.eq_ignore_ascii_case("content-length") {
+            length = Some(value.trim().parse::<usize>().ok()?);
+        }
+    }
+    let body = match length {
+        Some(n) => rest.get(..n)?.to_vec(),
+        None => rest.to_vec(),
+    };
+    Some(Answer { status, body })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn so_um_endereco_de_loopback_em_http_simples_e_o_core() {
+        let at = |base: &str| {
+            HttpCore::new(base, "m", "/nonexistent/x".into()).map(|c| (c.address.port(), c.prefix))
+        };
+        assert_eq!(
+            at("http://127.0.0.1:8080/api/v1"),
+            Ok((8080, "/api/v1".to_owned()))
+        );
+        assert_eq!(
+            at("http://127.0.0.1:8080/api/v1/"),
+            Ok((8080, "/api/v1".to_owned()))
+        );
+        assert_eq!(at("http://[::1]:8080"), Ok((8080, String::new())));
+        for refused in [
+            "https://127.0.0.1:8080/api/v1",
+            "http://localhost:8080/api/v1",
+            "http://192.168.1.10:8080/api/v1",
+            "http://core.example:8080/api/v1",
+            "http://127.0.0.1/api/v1",
+            "http://127.0.0.1:8080/api/v1?x=1",
+            "http://127.0.0.1:8080/api v1",
+            "127.0.0.1:8080",
+        ] {
+            assert_eq!(at(refused), Err(NotLocal), "{refused}");
+        }
+    }
+
+    #[test]
+    fn uma_resposta_le_se_pelo_comprimento_dito_e_nada_se_adivinha() {
+        let a = parse(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\ncontent-length: 2\r\n\r\n{}trailing",
+        )
+        .unwrap();
+        assert_eq!((a.status, a.body.as_slice()), (200, b"{}".as_slice()));
+        let a = parse(b"HTTP/1.0 204 No Content\r\n\r\n").unwrap();
+        assert_eq!((a.status, a.body.len()), (204, 0));
+        // Shorter than it says, chunked, or not HTTP at all: no answer.
+        assert!(parse(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\n{}").is_none());
+        assert!(parse(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n"
+        )
+        .is_none());
+        assert!(parse(b"SSH-2.0-OpenSSH\r\n\r\n").is_none());
+        assert!(parse(b"HTTP/1.1 OK\r\n\r\n").is_none());
+    }
+
+    #[test]
+    fn um_token_que_nao_e_do_core_nao_vai_num_cabecalho() {
+        let core = HttpCore::new("http://127.0.0.1:9/x", "m", "/nonexistent/x".into()).unwrap();
+        assert!(core
+            .post("/auth/logout", Some("a\r\nX-Injected: 1"), &json!({}))
+            .is_none());
+        assert!(core.post("/auth/logout", Some(""), &json!({})).is_none());
     }
 }

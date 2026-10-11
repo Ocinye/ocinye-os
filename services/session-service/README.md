@@ -31,9 +31,14 @@ com o mesmo fio e o mesmo aperto de mão do
 
 ## Estado
 
-`IMPLEMENTED`, sem prova numa imagem. A ligação ao Core (`core_link`) usa o
-login e o segundo factor do próprio Core e pede a política assinada em
-`POST /auth/machine-session`; o token da sessão do Core fica em
+`IMPLEMENTED`, provado numa VM `arm64` com um Core de substituição
+(`infra/system-ui/bench/`). A ligação ao Core (`core_link`) usa o login e o
+segundo factor do próprio Core e pede a política assinada em
+`POST /auth/machine-session`. Fala **só com o loopback** (`OCINYE_CORE_API`,
+por omissão `http://127.0.0.1:8080/api/v1`): o Core de uma máquina com o
+Ocinye OS corre nela, um endereço que não seja de loopback é recusado ao
+arrancar, e por isso o serviço que guarda tokens de sessão não traz uma pilha
+de TLS; o token da sessão do Core fica em
 `/var/lib/ocinye/session/core-link.json` (0600) e nunca chega à interface. A
 chave pública da Instância lê-se de `/etc/ocinye/instance-session.pub`
 (hexadecimal); sem ela nenhuma política verifica e ninguém entra.
