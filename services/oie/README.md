@@ -22,6 +22,15 @@ de armazenamento desses modos é verificada em `policy.rs` a partir do que o
 núcleo reporta; se não se cumprir, a sessão fica restrita a metadados de
 dispositivos.
 
+Numa máquina com ecrã, a instalação conduz-se por um assistente gráfico
+(`apps/system-ui --installer`): `ocinye-oie run --window` (`window.rs`) é um
+segundo anfitrião **do mesmo motor** — a mesma classificação, a mesma selecção,
+a mesma confirmação escrita, o mesmo `InstallAuthority` — que troca estados e
+acções tipados (`ocinye_image_contracts::window`) em vez de linhas de texto. A
+janela não decide: pergunta ao motor se o texto de confirmação está certo, e o
+motor decide outra vez ao recebê-lo. Quem começa primeiro fica com a
+instalação; a outra consola é avisada. `tty1`/série continuam, como recurso.
+
 `ocinye-oie probe` mostra a classificação dos discos, só de leitura;
 `ocinye-oie policy` o veredicto da política de armazenamento deste arranque.
 

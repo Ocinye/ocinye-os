@@ -20,6 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use ocinye_image_contracts::window::{WindowAction, WindowEvent};
 use ocinye_system_client::{Client, ClientError, SessionClient};
 use ocinye_system_contracts::request::Request;
 use ocinye_system_contracts::session::{SessionRequest, SESSION_SOCKET_PATH};
@@ -83,43 +84,45 @@ fn workspace_address() -> Option<Url> {
 /// window: the screen of a machine started from the installation medium.
 const INSTALLER_MODE: &str = "--installer";
 
-/// Where the Installation Engine holds this boot's conversation for the
-/// window (`ocinye-oie run --window`).
+/// Where the Installation Engine attends the window
+/// (`ocinye-oie run --window`).
 const INSTALLER_SOCKET: &str = "/run/ocinye/oie.sock";
 
-/// The window's end of the conversation with the Installation Engine.
+/// The window's end of the exchange with the Installation Engine.
 ///
-/// The engine speaks in lines and waits for lines: the same conversation it
-/// holds on a terminal. This process carries text one way and one line the
-/// other; what is asked, what an answer means and what may be written to a
-/// disk are the engine's, and stay there.
+/// The engine sends typed events and takes typed actions
+/// ([`ocinye_image_contracts::window`]). This process carries them: it parses
+/// what arrives into those types — anything else is dropped — and writes an
+/// action only after it deserialised as one. Which disks exist, whether a
+/// confirmation is right and what may be written are the engine's, and stay
+/// there.
 #[derive(Default)]
 struct Conversation {
     stream: Mutex<Option<UnixStream>>,
-    /// What the engine said and the window has not shown yet.
+    /// What the engine sent and the window has not taken yet.
     unread: Arc<Mutex<Vec<u8>>>,
     /// Set by the reader when the engine closes its end.
     closed: Arc<AtomicBool>,
 }
 
-/// What the engine said since the last time, and whether it is still there.
+/// The events since the last time, and whether the engine is still there.
 #[tauri::command]
 async fn installer_poll(conversation: State<'_, Conversation>) -> Result<Value, ()> {
     let Ok(mut held) = conversation.stream.lock() else {
         return Err(());
     };
     if held.is_some() && conversation.closed.load(Ordering::SeqCst) {
-        // The conversation ended; the unit starts the engine again, and the
-        // next one begins on a clean screen.
+        // The exchange ended; the unit starts the engine again, and the next
+        // one begins from its own welcome.
         *held = None;
-        return Ok(json!({ "state": "CLOSED", "text": drain(&conversation.unread) }));
+        return Ok(json!({ "state": "CLOSED", "events": events(&conversation.unread, true) }));
     }
     if held.is_none() {
         let Ok(stream) = UnixStream::connect(INSTALLER_SOCKET) else {
-            return Ok(json!({ "state": "WAITING", "text": "" }));
+            return Ok(json!({ "state": "WAITING", "events": [] }));
         };
         let Ok(mut reader) = stream.try_clone() else {
-            return Ok(json!({ "state": "WAITING", "text": "" }));
+            return Ok(json!({ "state": "WAITING", "events": [] }));
         };
         conversation.closed.store(false, Ordering::SeqCst);
         let (unread, closed) = (
@@ -133,10 +136,9 @@ async fn installer_poll(conversation: State<'_, Conversation>) -> Result<Value, 
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
                         if let Ok(mut unread) = unread.lock() {
-                            // A screen's worth is all a window can show: an
-                            // engine that says more than this is not talking
-                            // to a person.
-                            if unread.len() < 256 * 1024 {
+                            // An engine that sends more than this between two
+                            // looks is not describing an installation.
+                            if unread.len() < 1024 * 1024 {
                                 unread.extend_from_slice(&buffer[..n]);
                             }
                         }
@@ -147,27 +149,43 @@ async fn installer_poll(conversation: State<'_, Conversation>) -> Result<Value, 
         });
         *held = Some(stream);
     }
-    Ok(json!({ "state": "OPEN", "text": drain(&conversation.unread) }))
+    Ok(json!({ "state": "OPEN", "events": events(&conversation.unread, false) }))
 }
 
-fn drain(unread: &Mutex<Vec<u8>>) -> String {
-    let bytes = unread
-        .lock()
-        .map(|mut held| std::mem::take(&mut *held))
-        .unwrap_or_default();
-    String::from_utf8_lossy(&bytes).into_owned()
-}
-
-/// Answer the engine: one line, as a person would type it.
-#[tauri::command]
-async fn installer_send(conversation: State<'_, Conversation>, line: String) -> Result<bool, ()> {
-    if line.chars().count() > 256 || line.chars().any(char::is_control) {
-        return Ok(false);
+/// The complete lines received so far, as events. A line that is not an event
+/// of the contract is not passed on; an unfinished line waits for its end
+/// (unless the engine has gone, when it is dropped).
+fn events(unread: &Mutex<Vec<u8>>, last: bool) -> Vec<WindowEvent> {
+    let Ok(mut held) = unread.lock() else {
+        return Vec::new();
+    };
+    let complete = match held.iter().rposition(|b| *b == b'\n') {
+        Some(at) => held.drain(..=at).collect::<Vec<u8>>(),
+        None => Vec::new(),
+    };
+    if last {
+        held.clear();
     }
+    String::from_utf8_lossy(&complete)
+        .lines()
+        .filter_map(|line| serde_json::from_str::<WindowEvent>(line).ok())
+        .collect()
+}
+
+/// One action for the engine. It arrives here already as the contract's type:
+/// what is not an action never reaches the socket.
+#[tauri::command]
+async fn installer_send(
+    conversation: State<'_, Conversation>,
+    action: WindowAction,
+) -> Result<bool, ()> {
     let Ok(mut held) = conversation.stream.lock() else {
         return Err(());
     };
     let Some(stream) = held.as_mut() else {
+        return Ok(false);
+    };
+    let Ok(line) = serde_json::to_string(&action) else {
         return Ok(false);
     };
     Ok(stream.write_all(format!("{line}\n").as_bytes()).is_ok())

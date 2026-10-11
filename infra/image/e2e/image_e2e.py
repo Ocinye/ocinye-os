@@ -1262,15 +1262,18 @@ def scenario_iso(a):
 
 
 def scenario_window(a):
-    """The installer window (ADR-0031): an installation done at the screen.
+    """The graphical installer (ADR-0031): an installation done with controls.
 
     The medium is started in a guest with a display; Install is chosen at the
-    keyboard, and the whole conversation — continue, the disk, the typed
-    confirmation — is held in the native window, never on the serial line.
-    The serial line is then asked to continue and is told the installation
-    belongs to another console; the installed disk boots to an unclaimed
-    Ocinye OS. The engine is the one the text installer uses: this scenario
-    is about the window reaching it, not about what it does to a disk, which
+    keyboard, and from there every step is a control of the installer's own
+    window, reached on the machine's keyboard: Start, the language, the
+    compatibility summary, a disk card, the review, the confirmation dialog and
+    Restart. Nothing is answered on a console: the serial line is tried and is
+    told the installation belongs elsewhere. What the bench waits on is the
+    engine's own trace of the typed exchange (`OCINYE-WINDOW …`), which only
+    the window's host writes — so a step observed there was reached through
+    the window. The engine is the one the text installer uses: this scenario
+    is about the window driving it, not about what it does to a disk, which
     `iso` proves.
     """
     r = Results(f"window-{a.arch}")
@@ -1279,6 +1282,17 @@ def scenario_window(a):
     shots = os.path.join(work, "screens")
     os.makedirs(shots, exist_ok=True)
     invalid = None
+
+    def reached(vm, what, timeout):
+        try:
+            vm.expect(rf"OCINYE-WINDOW {what}\b", timeout)
+            return True
+        except TimeoutError:
+            return False
+
+    def size():
+        return json.loads(sh("qemu-img", "info", "-U", "--output", "json", target).stdout).get("actual-size", 0)
+
     try:
         sh("qemu-img", "create", "-q", "-f", "qcow2", target, "40G")
         vm = Vm("window", a.arch, work, memory=3072)
@@ -1287,55 +1301,85 @@ def scenario_window(a):
         time.sleep(10)
         # Install, chosen on the machine's own keyboard.
         vm.press("i")
-        vm.expect(r"Instalar o Ocinye OS neste computador", 1800)
-        time.sleep(60)
+        r.check("window: the installer's window reached the engine", reached(vm, "step=WELCOME", 1800))
+        time.sleep(20)
         first = vm.screenshot(os.path.join(shots, "1-welcome.png"))
         r.check("window: the screen shows the installer", png_is_a_picture(first))
+        # Start, then the language page's Continue: both are the focused control.
         vm.press("ret")
-        time.sleep(8)
-        vm.screenshot(os.path.join(shots, "2-disks.png"))
-        # The serial line is the other console: it is refused, in words.
-        vm.buf = ""
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "2-language.png"))
+        vm.press("ret")
+        r.check("window: Continue on the language step asked the engine to begin", reached(vm, "step=COMPATIBILITY", 300))
+        # The window now holds the installation. The serial line is the other
+        # console: an answer there is refused, in words.
         vm.send("\r")
         try:
-            vm.expect(r"(noutra consola|another console)", 60)
+            vm.expect(r"(noutra consola|another console)", 30)
             other = True
         except TimeoutError:
             other = False
-        r.check("window: the installation belongs to the window, and the serial console is told so", other)
-        # One disk can be chosen; its row is the first or the second. A number
-        # that names a protected row lists the disks again, and the token typed
-        # at that prompt is not a number: nothing happens until the right pair.
-        for row in ("1", "2"):
-            vm.type(row)
-            vm.press("ret")
-            time.sleep(4)
-            vm.type("7F3A")
-            vm.press("ret")
-            time.sleep(6)
-        vm.screenshot(os.path.join(shots, "3-installing.png"))
-        time.sleep(90)
-        info = json.loads(sh("qemu-img", "info", "-U", "--output", "json", target).stdout)
-        r.check("window: the confirmation typed in the window started the installation", info.get("actual-size", 0) > (64 << 20), info.get("actual-size"))
-        # When it is done the window asks for Enter and the machine restarts
-        # from the installed disk, whose console says it is unclaimed. Enter is
-        # pressed every half minute: while the installation runs there is no
-        # field for it to land in.
-        vm.buf = ""
+        r.check("window: the serial console cannot drive the installation and is told so", other)
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "3-compatibility.png"))
+        vm.press("ret")
+        r.check("window: Continue on the compatibility summary opened storage", reached(vm, "step=STORAGE", 300))
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "4-storage.png"))
+        # No disk is chosen until a card is: Enter on the focused card chooses
+        # it and moves to Continue; Enter there sends the choice.
+        vm.press("ret")
+        time.sleep(3)
+        vm.screenshot(os.path.join(shots, "5-storage-chosen.png"))
+        vm.press("ret")
+        chosen = reached(vm, "selected=vd[a-z]", 120)
+        r.check("window: a disk card was chosen with the keyboard, and the engine selected it", chosen)
+        r.check("window: the engine showed the review", reached(vm, "step=REVIEW", 60))
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "6-review.png"))
+        # The destructive action opens the confirmation dialog.
+        vm.press("ret")
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "7-confirm-empty.png"))
+        # A wrong confirmation: the action stays disabled, and Enter does
+        # nothing — the engine is never asked to confirm, and nothing is written.
+        before = size()
+        vm.type("0000")
+        time.sleep(4)
+        vm.press("ret")
+        time.sleep(12)
+        vm.screenshot(os.path.join(shots, "8-confirm-wrong.png"))
+        with vm.lock:
+            asked = "OCINYE-WINDOW confirmation=" in vm.buf or "OCINYE-WINDOW step=INSTALLING" in vm.buf
+        r.check("window: a wrong confirmation leaves the action disabled; the engine is not asked", not asked)
+        r.check("window: nothing was written after the wrong confirmation", size() == before, f"{before} -> {size()}")
+        for _ in range(4):
+            vm.press("backspace")
+            time.sleep(0.1)
+        vm.type("7F3A")
+        time.sleep(5)
+        vm.screenshot(os.path.join(shots, "9-confirm-right.png"))
+        vm.press("ret")
+        r.check("window: the confirmation typed in the dialog was accepted by the engine", reached(vm, "confirmation=accepted", 120))
+        r.check("window: the installation started", reached(vm, "step=INSTALLING", 120))
+        time.sleep(60)
+        vm.screenshot(os.path.join(shots, "10-installing.png"))
+        r.check("window: the installation is writing the chosen disk", size() > (64 << 20), size())
+        done = reached(vm, "step=INSTALLED", 5400)
+        r.check("window: the engine finished and the window was told", done)
+        time.sleep(6)
+        vm.screenshot(os.path.join(shots, "11-installed.png"))
+        # Restart is the focused control; the machine restarts from the
+        # installed disk, whose console says it is unclaimed.
         booted = False
-        end = time.time() + 5400
-        n = 0
-        while time.time() < end:
+        if done:
+            vm.press("ret")
             try:
-                vm.expect(UNCLAIMED_RX, 30)
+                vm.expect(UNCLAIMED_RX, 1800)
                 booted = True
-                break
             except TimeoutError:
-                n += 1
-                if n % 10 == 1:
-                    vm.screenshot(os.path.join(shots, f"4-progress-{n // 10}.png"))
-                vm.press("ret")
-        r.check("window: installed from the window, and the installed system started", booted)
+                booted = False
+        r.check("window: Restart was pressed in the window, and the installed system started", booted)
         vm.stop()
         if booted:
             ident = installed_root_identity(target)

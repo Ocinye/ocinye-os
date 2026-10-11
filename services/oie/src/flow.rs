@@ -100,6 +100,16 @@ impl Ui<'_> {
         self.say(&format!("== Ocinye OS · {oie} · {t}"));
     }
 
+    /// A title whose text has values to fill in. A title is text like any
+    /// other: one with a placeholder goes through here, never through
+    /// [`Ui::title`], which would print the placeholder itself.
+    fn title_with(&mut self, key: &str, args: &[(&str, String)]) {
+        let t = self.tf(key, args);
+        let oie = self.t("c13.oie");
+        self.say("");
+        self.say(&format!("== Ocinye OS · {oie} · {t}"));
+    }
+
     /// One line of input; `None` at end of input.
     pub fn ask(&mut self, prompt: &str) -> Option<String> {
         let p = if self.serial {
@@ -264,7 +274,7 @@ pub fn run(ui: &mut Ui<'_>, m: &dyn Machine, authority: &InstallAuthority<'_>) -
         }
     };
     // DISK_CONFIRM — the only gate before writing.
-    ui.title("c13.confirm.t");
+    ui.title_with("c13.confirm.t", &[("d", disk.device.clone())]);
     let t = ui.tf(
         "c13.confirm.t",
         &[(
@@ -529,5 +539,63 @@ mod tests {
         let m = fake();
         assert_eq!(drive(&m, "\n3\n").0, Outcome::Abandoned);
         assert_eq!(m.installed.take(), None);
+    }
+
+    /// A string with a placeholder is only ever asked for with its values.
+    ///
+    /// The title of the confirmation once read «Apagar o disco {d}?» on the
+    /// screen: the key was passed to a function that fills nothing in. This
+    /// reads the sources of the two text hosts and refuses every `t("key")`
+    /// or `title("key")` whose string has something left to fill.
+    #[test]
+    fn nenhum_texto_com_campos_por_preencher_e_pedido_sem_eles() {
+        let sources = [include_str!("flow.rs"), include_str!("session.rs")];
+        let mut checked = 0;
+        for source in sources {
+            for call in [".t(\"", ".title(\""] {
+                for (at, _) in source.match_indices(call) {
+                    let rest = &source[at + call.len()..];
+                    let key = &rest[..rest.find('"').unwrap()];
+                    let Some((_, texts)) = STRINGS.iter().find(|(k, _)| *k == key) else {
+                        continue;
+                    };
+                    checked += 1;
+                    for text in texts {
+                        assert!(
+                            !text.contains('{'),
+                            "`{key}` tem campos por preencher e é pedido sem eles: «{text}»"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(
+            checked > 20,
+            "a leitura das fontes deixou de encontrar os pedidos"
+        );
+    }
+
+    /// And nothing with a placeholder reaches the screen, whatever the path:
+    /// a whole installation, in the three languages.
+    #[test]
+    fn uma_instalacao_inteira_nao_mostra_nenhum_campo_por_preencher() {
+        for lang in 0..3 {
+            // The language is changed from the welcome, as a person would.
+            let m = fake();
+            let script = format!("{}\n2\nAAAA\n\n", "L\n".repeat(lang));
+            let (outcome, text) = drive(&m, &script);
+            assert_eq!(outcome, Outcome::Installed, "{text}");
+            for line in text.lines() {
+                let leak = line.find('{').is_some_and(|a| {
+                    line[a + 1..].find('}').is_some_and(|b| {
+                        b > 0
+                            && line[a + 1..a + 1 + b]
+                                .bytes()
+                                .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+                    })
+                });
+                assert!(!leak, "campo por preencher no ecrã: «{line}»");
+            }
+        }
     }
 }

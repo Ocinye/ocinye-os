@@ -9,20 +9,9 @@
 <link rel="stylesheet" href="installer.css">
 </head>
 <body>
-<main class="sx-screen oi-screen">
-  <div class="sx-brand"><svg class="sx-icon" aria-hidden="true" focusable="false"><use href="icons.svg#mark"></use></svg>Ocinye OS</div>
-  <section class="oi-console" aria-label="Ocinye OS">
-    <div id="transcript" class="oi-transcript" role="log" aria-live="polite" tabindex="0"></div>
-    <form id="answer" class="oi-answer">
-      <label id="prompt" class="oi-prompt" for="line"></label>
-      <div class="oi-answer__row">
-        <input id="line" class="sx-input" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="256">
-        <button class="sx-btn sx-btn--gold sx-btn--lg" type="submit">↵</button>
-      </div>
-    </form>
-    <p id="status" class="oi-status" role="status"></p>
-  </section>
-</main>
+<div id="root"></div>
+<div id="live" class="sx-sr" role="status" aria-live="polite"></div>
+<script src="installer-strings.js"></script>
 <script src="installer.js"></script>
 </body>
 </html>

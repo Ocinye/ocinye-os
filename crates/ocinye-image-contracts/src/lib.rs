@@ -23,6 +23,7 @@ pub mod medium;
 pub mod oie;
 pub mod receipt;
 pub mod signing;
+pub mod window;
 
 /// Version of the claim protocol spoken by `ocinye-firstboot claim-serve`.
 pub const CLAIM_PROTOCOL: u16 = 1;

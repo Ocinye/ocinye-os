@@ -5,8 +5,8 @@
 //! ocinye-oie run --vt | --serial     this boot's mode on this terminal: the installer in
 //!                                    `ocinye.mode=install` (one console at a time), the
 //!                                    non-destructive session in every other mode
-//! ocinye-oie run --window           the same conversation, for the native window on
-//!                                    /run/ocinye/oie.sock (its account only)
+//! ocinye-oie run --window           the installer for the native window: a typed exchange
+//!                                    on /run/ocinye/oie.sock (its account only)
 //! ocinye-oie policy                  the storage-policy verdict of this boot, JSON
 //! ocinye-oie select-medium           (initramfs) which device this system booted from
 //! ocinye-oie probe                   disks as the OIE classifies them, JSON (read-only)
@@ -25,6 +25,7 @@ mod policy;
 mod probe;
 mod session;
 mod strings;
+mod window;
 
 use std::fs;
 use std::io::BufReader;
@@ -610,6 +611,67 @@ fn converse(input: &mut dyn std::io::BufRead, out: &mut dyn std::io::Write, seri
     }
 }
 
+/// This boot's installation, for the native window: the typed exchange of
+/// [`window`], with the same machine and the same authority as a terminal's.
+/// In a boot that is not an installation the window is told so and nothing
+/// else: the non-destructive sessions keep to the terminals.
+fn attend_window(input: &mut dyn std::io::BufRead, out: &mut dyn std::io::Write) -> i32 {
+    use ocinye_image_contracts::manifest::BuildKind;
+    use ocinye_image_contracts::window::{WindowEvent, WindowStep, WINDOW_PROTOCOL};
+    let _ = fs::create_dir_all("/run/ocinye-oie");
+    let cmdline = fs::read_to_string("/proc/cmdline").unwrap_or_default();
+    let boot = ResolvedMode::from_cmdline(&cmdline);
+    let machine = Real {
+        facts: load_facts(),
+        console: std::cell::RefCell::new(None),
+        fault_injected: boot.verifier_fault_injected(),
+    };
+    let Some(authority) = InstallAuthority::from_mode(&boot) else {
+        for event in [
+            WindowEvent::Hello {
+                protocol: WINDOW_PROTOCOL,
+            },
+            WindowEvent::Step {
+                state: WindowStep::NotInstalling,
+            },
+        ] {
+            let _ = writeln!(out, "{}", serde_json::to_string(&event).unwrap_or_default());
+        }
+        // Until the window goes away.
+        let mut line = String::new();
+        while matches!(input.read_line(&mut line), Ok(n) if n > 0) {
+            line.clear();
+        }
+        return 0;
+    };
+    let (release_id, development) = machine.facts.as_ref().map_or((String::new(), true), |f| {
+        (
+            f.image.release_id.clone(),
+            f.image.build_kind == BuildKind::Development,
+        )
+    });
+    let mut link = window::Link { input, out };
+    let language = ["pt", "en", "fr"][initial_lang(&cmdline).min(2)];
+    match window::run(
+        &mut link,
+        &machine,
+        &authority,
+        &release_id,
+        development,
+        language,
+    ) {
+        flow::Outcome::Installed => 0,
+        flow::Outcome::Abandoned => 3,
+        flow::Outcome::Failed(e) => {
+            let _ = fs::write(
+                "/run/ocinye-oie/failed.json",
+                serde_json::to_string(&e).unwrap_or_default(),
+            );
+            1
+        }
+    }
+}
+
 /// Where the native window reaches this boot's conversation.
 const WINDOW_SOCKET: &str = "/run/ocinye/oie.sock";
 /// The account the window runs as.
@@ -654,7 +716,7 @@ fn main() {
         }
         ["run", "--window"] => match window_connection() {
             Ok(stream) => match stream.try_clone() {
-                Ok(mut out) => converse(&mut BufReader::new(stream), &mut out, false),
+                Ok(mut out) => attend_window(&mut BufReader::new(stream), &mut out),
                 Err(_) => 1,
             },
             Err(e) => {
