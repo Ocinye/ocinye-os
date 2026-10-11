@@ -30,6 +30,12 @@ separado**, com uma janela chamada `workspace` que **nenhuma capacidade nomeia**
 `/etc/ocinye/workspace-url`, escrito pela instalação; não é um argumento. Por
 ser outro processo, o compositor não o trata como superfície de confiança.
 
+## Primeiro arranque
+
+Sem Instância, o ecrã de entrada dá lugar a **Configurar este computador**
+(`activation.start`), ao progresso, e à entrega — única — da credencial
+temporária do primeiro administrador (`activation.credential`).
+
 ## Textos
 
 Português, inglês e francês em `ui/strings.js`. O idioma é o do sistema

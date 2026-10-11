@@ -14,10 +14,10 @@ use zeroize::Zeroize;
 use crate::capability::CapabilityId;
 use crate::reason::Reason;
 use crate::state::{
-    AccessibilityState, AudioState, BluetoothState, CapabilityInventory, DiagnosticsReport,
-    DisplayState, KeyboardState, Language, LocaleState, NetworkState, Percent, PowerState,
-    PrivacyState, RecoveryState, RemoteAccessState, StorageState, SystemHealth, SystemInfo,
-    TimeState, UpdateState, WifiScan,
+    AccessibilityState, ActivationState, AudioState, BluetoothState, CapabilityInventory,
+    DiagnosticsReport, DisplayState, Distribution, InitialCredential, KeyboardState, Language,
+    LocaleState, NetworkState, Percent, PowerState, PrivacyState, RecoveryState, RemoteAccessState,
+    StorageState, SystemHealth, SystemInfo, TimeState, UpdateState, WifiScan,
 };
 
 /// A secret that crosses the socket once (a Wi-Fi passphrase). Zeroized on
@@ -319,6 +319,32 @@ pub enum Request {
     /// `recovery.status`.
     #[serde(rename = "recovery.status")]
     RecoveryStatus {},
+    /// `activation.status`.
+    #[serde(rename = "activation.status")]
+    ActivationStatus {},
+    /// `activation.start`: create, on this machine, the Instance it will run,
+    /// from the release it carries, with its first administrator named.
+    #[serde(rename = "activation.start")]
+    ActivationStart {
+        /// The name the Instance answers to on the network.
+        domain: String,
+        /// The Instance's name, as people will see it.
+        instance_name: String,
+        /// The distributions it starts with: at least one, none twice.
+        distributions: Vec<Distribution>,
+        /// The first member: the person setting the machine up.
+        person_name: String,
+        /// Their address.
+        person_email: String,
+        /// The first administrator's name.
+        admin_name: String,
+        /// The first administrator's address: what they sign in with.
+        admin_email: String,
+    },
+    /// `activation.credential`: the first administrator's temporary
+    /// credential. Handed over once, then gone from the machine.
+    #[serde(rename = "activation.credential")]
+    ActivationCredential {},
 }
 
 /// Text sizes the interface offers.
@@ -327,6 +353,48 @@ pub const TEXT_SCALES: [u16; 4] = [100, 115, 130, 150];
 pub const SSID_MAX: usize = 32;
 /// Shortest and longest WPA passphrase.
 pub const PASSPHRASE_RANGE: (usize, usize) = (8, 63);
+
+/// A DNS name: lower-case labels of letters, digits and inner hyphens, at
+/// least two of them. It becomes an argument of the release's installer, a
+/// server name of the proxy and a line of the host table, so nothing that is
+/// not a name gets as far as any of them.
+fn host_name(s: &str) -> bool {
+    s.len() <= 253
+        && s.split('.').count() >= 2
+        && s.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+}
+
+/// A name people read: something in it, bounded, one line, and not shaped
+/// like an option of the program it is handed to.
+fn display_name(s: &str) -> bool {
+    let n = s.chars().count();
+    (1..=80).contains(&n)
+        && s.trim() == s
+        && !s.starts_with('-')
+        && !s.chars().any(char::is_control)
+}
+
+/// An address with one `@`, a local part and a host name after it.
+fn email(s: &str) -> bool {
+    s.len() <= 254
+        && s.split_once('@').is_some_and(|(local, host)| {
+            !local.is_empty()
+                && local.len() <= 64
+                && !local.starts_with('-')
+                && local
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b".!#$%&'*+/=?^_`{|}~-".contains(&b))
+                && host_name(host)
+        })
+}
 
 fn bounded_name(s: &str, max: usize, extra: &[u8]) -> bool {
     !s.is_empty()
@@ -401,6 +469,9 @@ impl Request {
             Self::RemoteAccessStatus {} => C::RemoteAccessStatus,
             Self::RemoteAccessConfigure { .. } => C::RemoteAccessConfigure,
             Self::RecoveryStatus {} => C::RecoveryStatus,
+            Self::ActivationStatus {} => C::ActivationStatus,
+            Self::ActivationStart { .. } => C::ActivationStart,
+            Self::ActivationCredential {} => C::ActivationCredential,
         }
     }
 
@@ -483,6 +554,27 @@ impl Request {
             Self::AccessibilityConfigure {
                 text_scale_percent, ..
             } => TEXT_SCALES.contains(text_scale_percent),
+            Self::ActivationStart {
+                domain,
+                instance_name,
+                distributions,
+                person_name,
+                person_email,
+                admin_name,
+                admin_email,
+            } => {
+                let mut distinct = distributions.clone();
+                distinct.sort_unstable();
+                distinct.dedup();
+                host_name(domain)
+                    && display_name(instance_name)
+                    && !distributions.is_empty()
+                    && distinct.len() == distributions.len()
+                    && display_name(person_name)
+                    && display_name(admin_name)
+                    && email(person_email)
+                    && email(admin_email)
+            }
             _ => true,
         };
         if ok {
@@ -530,6 +622,15 @@ impl Request {
             Self::PrivacySetMicrophone { allowed } | Self::PrivacySetCamera { allowed } => {
                 format!("allowed={allowed}")
             }
+            // Who the first administrator is belongs in the record of the
+            // machine being given an Instance; the names are institutional
+            // facts, not secrets.
+            Self::ActivationStart {
+                domain,
+                distributions,
+                admin_email,
+                ..
+            } => format!("domain={domain} distributions={distributions:?} admin={admin_email:?}"),
             _ => String::new(),
         }
     }
@@ -579,6 +680,10 @@ pub enum Payload {
     RemoteAccess(RemoteAccessState),
     /// Recovery state.
     Recovery(RecoveryState),
+    /// Activation state.
+    Activation(ActivationState),
+    /// The first administrator's temporary credential.
+    InitialCredential(InitialCredential),
 }
 
 /// The result of one call.
@@ -623,6 +728,7 @@ mod tests {
             CapabilityId::AccessibilityConfigure => r#"{"capability":"accessibility.configure","text_scale_percent":115,"high_contrast":false,"reduce_motion":true}"#.to_owned(),
             CapabilityId::PrivacySetMicrophone | CapabilityId::PrivacySetCamera => format!(r#"{{"capability":"{}","allowed":false}}"#, id.as_str()),
             CapabilityId::RemoteAccessConfigure => r#"{"capability":"remote_access.configure","ssh_enabled":false}"#.to_owned(),
+            CapabilityId::ActivationStart => r#"{"capability":"activation.start","domain":"ocinye.empresa.example","instance_name":"Instituto","distributions":["research"],"person_name":"Pessoa","person_email":"pessoa@empresa.example","admin_name":"Admin","admin_email":"admin@empresa.example"}"#.to_owned(),
             other => format!(r#"{{"capability":"{}"}}"#, other.as_str()),
         };
         serde_json::from_str(&json).unwrap_or_else(|e| panic!("{}: {e}", id.as_str()))
@@ -685,5 +791,100 @@ mod tests {
         assert!(!format!("{r:?}").contains("correct horse"));
         assert!(!r.audit_summary().contains("correct horse"));
         assert!(r.audit_summary().contains("passphrase=given"));
+    }
+
+    fn activation(change: impl FnOnce(&mut Request)) -> Result<(), Reason> {
+        let mut r = Request::ActivationStart {
+            domain: "ocinye.empresa.example".into(),
+            instance_name: "Instituto de Prova".into(),
+            distributions: vec![Distribution::Research, Distribution::Business],
+            person_name: "Pessoa de Prova".into(),
+            person_email: "pessoa@empresa.example".into(),
+            admin_name: "Administração".into(),
+            admin_email: "admin+ocinye@empresa.example".into(),
+        };
+        change(&mut r);
+        r.validate()
+    }
+
+    #[test]
+    fn activar_so_com_nomes_que_sao_nomes_e_enderecos_que_sao_enderecos() {
+        assert_eq!(activation(|_| {}), Ok(()));
+        let refused: [fn(&mut Request); 12] = [
+            |r| {
+                if let Request::ActivationStart { domain, .. } = r {
+                    *domain = "localhost".into()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { domain, .. } = r {
+                    *domain = "Ocinye.Example".into()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { domain, .. } = r {
+                    *domain = "a.example; reboot".into()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { domain, .. } = r {
+                    *domain = "--help.example".into()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { instance_name, .. } = r {
+                    *instance_name = String::new()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { instance_name, .. } = r {
+                    *instance_name = "--restore".into()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { instance_name, .. } = r {
+                    *instance_name = "duas\nlinhas".into()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { person_name, .. } = r {
+                    *person_name = "x".repeat(81)
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { distributions, .. } = r {
+                    distributions.clear()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { distributions, .. } = r {
+                    distributions.push(Distribution::Research)
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { admin_email, .. } = r {
+                    *admin_email = "sem-arroba".into()
+                }
+            },
+            |r| {
+                if let Request::ActivationStart { person_email, .. } = r {
+                    *person_email = "a b@empresa.example".into()
+                }
+            },
+        ];
+        for (n, change) in refused.into_iter().enumerate() {
+            assert_eq!(activation(change), Err(Reason::ValueOutOfRange), "caso {n}");
+        }
+    }
+
+    #[test]
+    fn o_registo_de_uma_activacao_diz_o_dominio_e_o_administrador() {
+        let mut said = String::new();
+        let _ = activation(|r| said = r.audit_summary());
+        assert!(
+            said.contains("domain=ocinye.empresa.example")
+                && said.contains("admin+ocinye@empresa.example"),
+            "{said}"
+        );
     }
 }

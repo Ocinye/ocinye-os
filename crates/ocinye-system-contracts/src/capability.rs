@@ -109,6 +109,8 @@ pub enum Family {
     RemoteAccess,
     /// Recovery information.
     Recovery,
+    /// Creating, on this machine, the Instance it will run.
+    Activation,
     /// The local session.
     Session,
 }
@@ -227,6 +229,9 @@ catalogue! {
     RemoteAccessStatus  = "remote_access.status",   RemoteAccess, Member,   None,        None,     None,                mutating false, locked false, headless true,  ai true;
     RemoteAccessConfigure = "remote_access.configure", RemoteAccess, Operator, CoreStepUp, Security, None,              mutating true,  locked false, headless true,  ai false;
     RecoveryStatus      = "recovery.status",        Recovery,     Presence, None,        None,     None,                mutating false, locked true,  headless true,  ai true;
+    ActivationStatus    = "activation.status",      Activation,   Presence, None,        None,     None,                mutating false, locked true,  headless true,  ai false;
+    ActivationStart     = "activation.start",       Activation,   Presence, None,        Security, None,                mutating true,  locked true,  headless true,  ai false;
+    ActivationCredential = "activation.credential", Activation,   Presence, None,        Security, None,                mutating true,  locked true,  headless true,  ai false;
 }
 
 /// The row for a capability.

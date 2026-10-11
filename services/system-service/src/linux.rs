@@ -24,6 +24,7 @@ use ocinye_system_contracts::state::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::activation::{Activation, Installer, ReleaseInstaller};
 use crate::service::Platform;
 use crate::tool::{self, Tool};
 
@@ -83,6 +84,9 @@ pub const IMPLEMENTED: &[CapabilityId] = &[
     CapabilityId::RemoteAccessStatus,
     CapabilityId::RemoteAccessConfigure,
     CapabilityId::RecoveryStatus,
+    CapabilityId::ActivationStatus,
+    CapabilityId::ActivationStart,
+    CapabilityId::ActivationCredential,
 ];
 
 /// What the service remembers between restarts: preferences that have no
@@ -113,6 +117,7 @@ impl Default for Remembered {
 pub struct Linux {
     roots: Roots,
     remembered: Mutex<()>,
+    activation: Activation,
 }
 
 fn read(path: &Path) -> Option<String> {
@@ -171,9 +176,22 @@ impl Linux {
     /// The platform over a set of roots.
     #[must_use]
     pub fn new(roots: Roots) -> Self {
+        Self::with_installer(roots, std::sync::Arc::new(ReleaseInstaller))
+    }
+
+    /// The same, with the installation carried out by `installer`.
+    #[must_use]
+    pub fn with_installer(roots: Roots, installer: std::sync::Arc<dyn Installer>) -> Self {
+        let activation = Activation::new(
+            roots.ocinye_lib.join("release"),
+            roots.etc.join("ocinye/release.env"),
+            roots.state.join("activation"),
+            installer,
+        );
         Self {
             roots,
             remembered: Mutex::new(()),
+            activation,
         }
     }
 
@@ -739,6 +757,13 @@ impl Platform for Linux {
             return Err(Reason::NotImplemented);
         }
         match request {
+            Request::ActivationStatus {} => Ok(Payload::Activation(self.activation.state())),
+            Request::ActivationStart { .. } => {
+                self.activation.start(request).map(Payload::Activation)
+            }
+            Request::ActivationCredential {} => {
+                self.activation.credential().map(Payload::InitialCredential)
+            }
             Request::SystemHealth {} => Ok(Payload::Health(self.health())),
             Request::SystemInfo {} => Ok(Payload::Info(self.info())),
             Request::SystemCapabilities {} => Ok(Payload::Inventory(self.inventory())),

@@ -147,6 +147,58 @@ pub(crate) fn run_program(
     String::from_utf8(out).map_err(|_| AdapterFailure::UnexpectedReply)
 }
 
+/// Run a program that is not in the table — the installer of the release an
+/// image carries, whose path contains the release's id — to its end, with
+/// everything it prints going to `log`. The same rules as [`run`]: an absolute
+/// path, no shell, a fixed environment, a deadline. Its home is its own
+/// directory, never an account's.
+///
+/// # Errors
+///
+/// As [`run`], without [`AdapterFailure::UnexpectedReply`]: the output is not
+/// read here.
+pub fn run_logged(
+    program: &std::path::Path,
+    args: &[&str],
+    log: &std::path::Path,
+    deadline: Duration,
+) -> Result<(), AdapterFailure> {
+    if !program.is_absolute() {
+        return Err(AdapterFailure::Unreachable);
+    }
+    let out = std::fs::OpenOptions::new()
+        .append(true)
+        .open(log)
+        .map_err(|_| AdapterFailure::Unreachable)?;
+    let err = out.try_clone().map_err(|_| AdapterFailure::Unreachable)?;
+    let home = log.parent().unwrap_or(std::path::Path::new("/"));
+    let mut child = Command::new(program)
+        .args(args)
+        .env_clear()
+        .envs(ENVIRONMENT.iter().copied())
+        .env("HOME", home)
+        .current_dir("/")
+        .stdin(Stdio::null())
+        .stdout(out)
+        .stderr(err)
+        .spawn()
+        .map_err(|_| AdapterFailure::Unreachable)?;
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(_)) => return Err(AdapterFailure::Refused),
+            Ok(None) if started.elapsed() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(AdapterFailure::Timeout);
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(200)),
+            Err(_) => return Err(AdapterFailure::Unreachable),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

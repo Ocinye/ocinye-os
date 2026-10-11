@@ -3,4 +3,4 @@
 /**
  * The family a capability belongs to: the unit of Core authorisation.
  */
-export type Family = "system" | "network" | "bluetooth" | "audio" | "display" | "power" | "locale" | "accessibility" | "privacy" | "storage" | "update" | "diagnostics" | "remote_access" | "recovery" | "session";
+export type Family = "system" | "network" | "bluetooth" | "audio" | "display" | "power" | "locale" | "accessibility" | "privacy" | "storage" | "update" | "diagnostics" | "remote_access" | "recovery" | "activation" | "session";

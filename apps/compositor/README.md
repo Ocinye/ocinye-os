@@ -33,6 +33,9 @@ aplicação são texto de quem os escreve.
   sozinha com o ecrã.
 - **O ponteiro é desenhado pelo compositor**: o que a pessoa vê debaixo da mão
   não é uma imagem que uma aplicação forneceu.
+- **`Ctrl+Alt+F<n>`** muda de terminal virtual, como em qualquer Linux: a
+  consola de texto, com o código de emparelhamento, vive num deles. Nenhum
+  cliente vê essas teclas.
 - **Bloqueio por inactividade**: este é o processo que vê o teclado e o
   ponteiro. Quando passa o tempo que a política da Instância fixa (o Session
   Service diz o número), pede o bloqueio ao Session Service e trata o ecrã como

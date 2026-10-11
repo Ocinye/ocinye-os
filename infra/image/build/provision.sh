@@ -332,10 +332,12 @@ stage_finalize() {
   case "$profile" in
     virt|metal)
       systemctl enable ocinye-firstboot.service ocinye-console@tty1.service "ocinye-console@$SERIAL.service"
-      # The seat's services, and the watch for an Instance being installed.
-      # The screen itself (ocinye-display.service) is never enabled: the link
-      # starts it, once there is an Instance to sign in to.
-      systemctl enable ocinye-system.service ocinye-session.service ocinye-seat-link.path ;;
+      # The seat: its services, the watch for an Instance being installed, and
+      # the start of the screen on a machine that has one. The screen itself
+      # (ocinye-display.service) is never enabled — see the unit. With the
+      # screen on tty1, the text console and its pairing code are on tty2.
+      systemctl enable ocinye-system.service ocinye-session.service ocinye-seat-link.path \
+        ocinye-seat-start.service ocinye-console@tty2.service ;;
     oie)
       systemctl disable ssh.service ssh.socket cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
       systemctl enable ocinye-oie@tty1.service "ocinye-oie@$SERIAL.service"

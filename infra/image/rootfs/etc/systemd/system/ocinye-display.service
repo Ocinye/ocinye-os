@@ -1,16 +1,17 @@
 [Unit]
 Description=Ocinye OS screen (compositor and the native system interface)
 Documentation=file:///usr/share/doc/ocinye/images.md
-# The screen belongs to the text console until an Instance is linked: an
-# unclaimed machine shows its pairing code there, and only there. A machine
-# without a display device keeps the text console too.
+# Never part of the boot transaction: a unit that conflicts with the text
+# console and is started with everything else would stop the console even when
+# its own conditions then fail. ocinye-seat-start.service starts this one, and
+# only on a machine that has a display device.
 #
-# Not enabled at boot on purpose. A unit that conflicts with the console and
-# is part of the boot transaction would stop the console even when its own
-# conditions then fail — and an unclaimed machine would have no screen at all.
-# ocinye-seat-link.service starts this one, once there is something to show.
-ConditionPathExists=/etc/ocinye/instance-session.pub
+# If the screen cannot be brought up, tty1 goes back to the text console
+# instead of staying dark.
 ConditionPathExistsGlob=/dev/dri/card*
+StartLimitIntervalSec=120
+StartLimitBurst=5
+OnFailure=ocinye-console@tty1.service
 After=systemd-user-sessions.service systemd-logind.service ocinye-system.service ocinye-session.service ocinye-firstboot.service
 Wants=ocinye-system.service ocinye-session.service
 Conflicts=getty@tty1.service ocinye-console@tty1.service

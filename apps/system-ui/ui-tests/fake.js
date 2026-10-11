@@ -1,6 +1,6 @@
 /* Bancada da interface do sistema: um duplo dos dois serviços, com o mesmo
    formato de resposta do contrato. O cenário vem do fragmento do endereço:
-   #signed-out (por omissão), #locked, #active, #offline, #mfa, #newpass, #down.
+   #signed-out (por omissão), #locked, #active, #offline, #mfa, #newpass, #setup, #down.
    Serve para ver e medir a interface num browser; não prova nada sobre os
    serviços. */
 (function () {
@@ -19,6 +19,9 @@
     remote: { ssh_enabled: true, ssh_active: true },
     brightness: 70,
     grants: {},
+    activation: scenario === 'setup' ? 'READY' : 'ACTIVATED',
+    credential: false,
+    steps: 0,
   };
   const state = () => F.session === 'ACTIVE'
     ? { state: 'ACTIVE', member_id: 'm-1', member_name: 'Pessoa de Prova', core: F.core, operator: true, idle_lock_secs: 300 }
@@ -71,6 +74,7 @@
     'storage.status': () => ok('storage', { disks: [{ name: 'nvme0n1', model: 'Disco de prova', size_bytes: 512e9, removable: false }], volumes: [{ mount_point: '/', filesystem: 'ext4', total_bytes: 60e9, free_bytes: 41e9 }, { mount_point: '/var/lib/ocinye', filesystem: 'ext4', total_bytes: 430e9, free_bytes: 402e9 }] }),
     'update.status': () => ok('update', { current_release: 'ocinye-os-1.0.0-dev', pending_release: null, phase: 'UP_TO_DATE', signing: 'DEV_ONLY' }),
     'remote_access.status': () => ok('remote_access', F.remote),
+    'activation.status': () => { if (F.activation === 'RUNNING') { F.steps += 1; if (F.steps > 3) { F.activation = 'ACTIVATED'; F.credential = true; } } return ok('activation', { phase: F.activation, release_id: 'ocinye-os-1.0.0-dev', steps_begun: F.activation === 'RUNNING' ? F.steps : 0, credential_waiting: F.credential }); },
     'recovery.status': () => ok('recovery', { rollback_available: false, previous_release: null }),
   };
 
@@ -92,6 +96,8 @@
       case 'power.restart': case 'power.shutdown': { if (member) { const f = fresh('CONFIRM'); if (f) return f; } return ok('done'); }
       case 'power.suspend': return ok('done');
       case 'time.configure': return no('AUTHORITY_UNAVAILABLE');
+      case 'activation.start': if (F.activation !== 'READY' && F.activation !== 'FAILED') return no('NOT_OFFERED_HERE'); if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(request.domain)) return no('VALUE_OUT_OF_RANGE'); F.activation = 'RUNNING'; F.steps = 0; return READS['activation.status']();
+      case 'activation.credential': if (!F.credential) return no('NOT_FOUND'); F.credential = false; return ok('initial_credential', { username: 'admin@empresa.example', password: 'temporaria-de-prova-2026' });
       default: return no('NOT_IMPLEMENTED');
     }
   }

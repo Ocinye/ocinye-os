@@ -14,9 +14,9 @@ RemainAfterExit=yes
 # Learns the Instance's public session key through the loopback door and
 # records where this machine's Workspace is. With no key yet it fails, and is
 # retried until the Core answers; with a key from an earlier boot it succeeds
-# even while the Core is down, so the screen can say so.
+# even while the Core is down.
 ExecStart=/usr/lib/ocinye/ocinye-session-service link-instance
+# The Session Service reads the key when it starts.
 ExecStartPost=/usr/bin/systemctl try-restart ocinye-session.service
-ExecStartPost=/usr/bin/systemctl --no-block start ocinye-display.service
 Restart=on-failure
 RestartSec=15

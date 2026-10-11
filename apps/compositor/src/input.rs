@@ -4,7 +4,8 @@ use smithay::backend::input::{
     AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, InputBackend, InputEvent,
     KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
 };
-use smithay::input::keyboard::FilterResult;
+use smithay::backend::session::Session;
+use smithay::input::keyboard::{FilterResult, Keysym};
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
 use smithay::utils::{Logical, Point, SERIAL_COUNTER};
 
@@ -43,14 +44,33 @@ impl State {
         match event {
             InputEvent::Keyboard { event, .. } => {
                 if let Some(keyboard) = self.seat.get_keyboard() {
-                    keyboard.input::<(), _>(
+                    // Ctrl+Alt+F<n> is the kernel's own way to another virtual
+                    // terminal — the text console, with the machine's pairing
+                    // code, lives on one. No client sees these keys.
+                    let terminal = keyboard.input::<i32, _>(
                         self,
                         event.key_code(),
                         event.state(),
                         SERIAL_COUNTER.next_serial(),
                         Event::time_msec(&event),
-                        |_, _, _| FilterResult::Forward,
+                        |_, _, handle| {
+                            let sym = handle.modified_sym().raw();
+                            if (Keysym::XF86_Switch_VT_1.raw()..=Keysym::XF86_Switch_VT_12.raw())
+                                .contains(&sym)
+                            {
+                                // The twelve keysyms are consecutive.
+                                #[allow(clippy::cast_possible_wrap)]
+                                FilterResult::Intercept(
+                                    (sym - Keysym::XF86_Switch_VT_1.raw()) as i32 + 1,
+                                )
+                            } else {
+                                FilterResult::Forward
+                            }
+                        },
                     );
+                    if let (Some(terminal), Some(backend)) = (terminal, self.backend.as_mut()) {
+                        let _ = backend.session.change_vt(terminal);
+                    }
                 }
             }
             InputEvent::PointerMotion { event, .. } => {

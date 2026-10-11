@@ -23,12 +23,27 @@ a interface nativa do sistema, e as unidades que os ligam:
 |---|---|
 | `ocinye-system.service` | a autoridade sobre a máquina (root), em `/run/ocinye/system.sock` |
 | `ocinye-session.service` | a sessão local; root **sem capacidade nenhuma**, sistema só de leitura, rede só de loopback |
-| `ocinye-seat-link.path` / `.service` | quando existe `/etc/ocinye/release.env` (há uma Instância instalada), aprende a chave pública de sessão pela porta de loopback do proxy, regista o endereço do Workspace e arranca o ecrã |
-| `ocinye-display.service` | o compositor e a interface, como `ocinye-ui`, numa sessão do logind em `tty1`. **Nunca activada no arranque**: é a ligação que a arranca |
+| `ocinye-seat-start.service` | numa máquina com dispositivo de ecrã, arranca o ecrã depois de os dispositivos assentarem |
+| `ocinye-display.service` | o compositor e a interface, como `ocinye-ui`, numa sessão do logind em `tty1`. **Nunca activada no arranque**: é a `ocinye-seat-start` que a arranca. Se o ecrã não levantar, `tty1` volta à consola de texto |
+| `ocinye-seat-link.path` / `.service` | quando existe `/etc/ocinye/release.env` (há uma Instância instalada), aprende a chave pública de sessão pela porta de loopback do proxy e regista o endereço do Workspace |
+| `ocinye-console@tty2.service` | a consola de texto e o código de emparelhamento, a `Ctrl+Alt+F2` do ecrã gráfico (e na linha série, como antes) |
 
-Enquanto a máquina não tem uma Instância ligada, `tty1` é da consola de texto
-(`ocinye-console@tty1`): o código de emparelhamento aparece lá, e só lá. Uma
-máquina sem dispositivo de ecrã fica com a consola de texto.
+Uma máquina sem dispositivo de ecrã fica com a consola de texto em `tty1`.
+
+### Activação local
+
+Uma máquina sem Instância mostra, no seu próprio ecrã, **Configurar este
+computador**: o System Service corre o instalador do release que a imagem traz
+(`/usr/lib/ocinye/release/<id>/install/ocinye install …`) com os sete valores
+pedidos — domínio, nome da Instância, distribuições, a pessoa e o primeiro
+administrador —, sem rede e sem outro computador. É o mesmo instalador, a criar
+a mesma Instância, que o Ocinye OS Installer conduz à distância: mais um
+anfitrião da instalação, não outra maneira de instalar. A credencial temporária
+do primeiro administrador é entregue **uma vez**, nesse ecrã, e sai da máquina
+antes de aparecer.
+
+O emparelhamento à distância continua disponível (consola de texto): é também o
+caminho para administrar a máquina por SSH.
 
 O Session Service fala com o Core por `127.0.0.1:8480`, a porta que o proxy
 publica **só no loopback** (`infra/nginx/instance/20-machine.conf`) e por onde

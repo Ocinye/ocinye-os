@@ -223,3 +223,18 @@ h1, h2, p { margin: 0; }
   .sx-tile, .sx-group, .sx-card, .sx-dialog, .sx-panel, .sx-pill { border: 1px solid CanvasText; }
 }
 .sx-grow { flex: 1; }
+
+/* ── primeiro arranque */
+.sx-card--setup { width: 40rem; gap: .75rem; padding: 1.5rem 2rem; }
+.sx-card--setup h1 { font-size: 1.5rem; }
+.sx-card--setup .sx-input { height: 2.5rem; border-radius: 1.25rem; }
+.sx-form2 { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.sx-checks { border: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; }
+.sx-checks legend { padding: 0; }
+.sx-check { display: inline-flex; align-items: center; gap: .5rem; min-height: 1.75rem; }
+.sx-check input { width: 1.125rem; height: 1.125rem; accent-color: var(--blue-600); }
+.sx-kv { display: grid; grid-template-columns: auto 1fr; gap: .5rem 1rem; margin: 0; align-items: baseline; }
+.sx-kv dt { font-size: .8125rem; font-weight: 600; color: var(--ink-2); }
+.sx-kv dd { margin: 0; overflow-wrap: anywhere; }
+.sx-secret { font-size: 1.125rem; font-weight: 600; color: var(--navy-900); letter-spacing: .04em; }
+.sx-meter--busy progress:indeterminate { background: linear-gradient(90deg, var(--muted) 0%, var(--blue-600) 50%, var(--muted) 100%); }

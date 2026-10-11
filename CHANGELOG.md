@@ -48,6 +48,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mais nada; a janela do Workspace é outro processo, sem comandos.
 - `network.status` passa a dar os endereços de cada interface (lidos de
   `ip -json` pelo executor endurecido); antes vinham sempre vazios.
+- **Activação local**: uma máquina sem Instância cria-a no seu próprio ecrã,
+  sem rede nem outro computador — o System Service (`activation.*`) corre o
+  instalador do release que a imagem traz, com sete valores tipados e sem
+  shell; a credencial do primeiro administrador é entregue uma vez. O ecrã
+  gráfico passa a arrancar em qualquer máquina com dispositivo de ecrã, a
+  consola de texto fica em `Ctrl+Alt+F2`, e o compositor passa essas teclas ao
+  núcleo. Sem prova numa imagem construída.
 - **Operador da máquina**: a política de sessão que o Core assina diz se o
   membro administra a plataforma (`platform.administer`, com o segundo factor
   satisfeito); o System Service decide as capacidades de operador por aí, em

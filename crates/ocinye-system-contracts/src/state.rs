@@ -573,6 +573,76 @@ pub struct DiagnosticsReport {
     pub failed_units: Vec<String>,
 }
 
+/// A distribution an Instance can be created with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum Distribution {
+    /// Research.
+    Research,
+    /// Business.
+    Business,
+    /// Education.
+    Education,
+    /// Personal.
+    Personal,
+}
+
+impl Distribution {
+    /// The name the release's installer knows it by.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Research => "research",
+            Self::Business => "business",
+            Self::Education => "education",
+            Self::Personal => "personal",
+        }
+    }
+}
+
+/// Where local activation stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ActivationPhase {
+    /// This machine cannot create an Instance by itself: it carries no
+    /// release to create one from.
+    NotOffered,
+    /// No Instance yet, and one can be created here.
+    Ready,
+    /// The Instance is being created.
+    Running,
+    /// Creating it failed. The machine is as the failed step left it; the log
+    /// is on the machine for whoever operates it.
+    Failed,
+    /// An Instance runs on this machine.
+    Activated,
+}
+
+/// The answer to the activation capabilities.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ActivationState {
+    /// Phase.
+    pub phase: ActivationPhase,
+    /// The release an Instance is, or would be, created from.
+    pub release_id: Option<String>,
+    /// While running: how many steps of the installation have begun.
+    pub steps_begun: u32,
+    /// Whether the first administrator's temporary credential is still
+    /// waiting to be shown. It is shown once.
+    pub credential_waiting: bool,
+}
+
+/// The first administrator's temporary credential, handed over once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct InitialCredential {
+    /// The administrator's sign-in address.
+    pub username: String,
+    /// The temporary password. It opens nothing but the step that replaces it.
+    pub password: crate::request::Secret,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

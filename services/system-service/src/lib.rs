@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod activation;
 pub mod audit;
 pub mod authority;
 pub mod linux;

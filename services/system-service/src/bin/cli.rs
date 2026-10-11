@@ -31,6 +31,7 @@ const USAGE: &str = "usage: ocinye-system [--json] [--socket PATH] FAMILY ACTION
   update status
   remote-access status | ssh on|off
   recovery status
+  activation status
   diagnostics collect";
 
 fn switch(word: Option<&str>) -> Option<bool> {
@@ -100,6 +101,7 @@ fn parse(words: &[&str]) -> Option<Request> {
             },
         ),
         ("recovery", "status") => exact(2, Request::RecoveryStatus {}),
+        ("activation", "status") => exact(2, Request::ActivationStatus {}),
         ("diagnostics", "collect") => exact(2, Request::DiagnosticsCollect {}),
         _ => None,
     }

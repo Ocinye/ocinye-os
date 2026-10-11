@@ -20,7 +20,9 @@
     panel: null,            // null | 'quick' | 'system'
     page: 'home',
     dialog: null,
-    form: { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '' },
+    form: { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '', iname: '', domain: '', pname: '', pemail: '', aname: '', aemail: '' },
+    dist: { research: true, business: false, education: false, personal: false },
+    credential: null,       // a credencial do primeiro administrador, enquanto está no ecrã
     step: 1,                // 1 conta · 2 segundo factor · 3 palavra-passe nova
     busy: false,
     error: null,            // [chave, variáveis]
@@ -62,7 +64,7 @@
   // ── serviços
   const got = (cap) => { const v = S.sys[cap]; return v && !v.refused ? v : null; };
   const refusedText = (reason) => t('r.' + ((reason && reason.code) || 'SYSTEM_SERVICE'));
-  const STATUS_OF = { health: 'system.health', info: 'system.info', inventory: 'system.capabilities', network: 'network.status', audio: 'audio.status', display: 'display.status', power: 'power.status', locale: 'locale.status', time: 'time.status', keyboard: 'keyboard.status', accessibility: 'accessibility.status', privacy: 'privacy.status', storage: 'storage.status', update: 'update.status', remote_access: 'remote_access.status', recovery: 'recovery.status', bluetooth: 'bluetooth.status' };
+  const STATUS_OF = { health: 'system.health', info: 'system.info', inventory: 'system.capabilities', network: 'network.status', audio: 'audio.status', display: 'display.status', power: 'power.status', locale: 'locale.status', time: 'time.status', keyboard: 'keyboard.status', accessibility: 'accessibility.status', privacy: 'privacy.status', storage: 'storage.status', update: 'update.status', remote_access: 'remote_access.status', recovery: 'recovery.status', bluetooth: 'bluetooth.status', activation: 'activation.status' };
 
   async function call(capability, args, grant) {
     const request = Object.assign({ capability }, args || {});
@@ -185,6 +187,37 @@
   }
   const langButton = () => `<button class="sx-btn sx-btn--glass" type="button" data-act="languages" aria-label="${t('lang.choose')}">${ic('globe')}${t('lang.' + S.lang)}</button>`;
 
+  // ── primeiro arranque: este computador cria a sua Instância
+  const activation = () => got('activation.status');
+  const pairing = () => `<p class="sx-card__note">${t('act.pairing')}</p>`;
+  function setup(a) {
+    const check = (key) => `<label class="sx-check"><input type="checkbox" data-act="dist" data-arg="${key}"${S.dist[key] ? ' checked' : ''}${S.busy ? ' disabled' : ''}><span>${t('act.dist.' + key)}</span></label>`;
+    return `<div><div class="sx-card__step">${t('act.step')}</div><h1 id="login-h">${t('act.h')}</h1></div>
+      <p>${t('act.lead')}</p>
+      ${a.phase === 'FAILED' ? alert('bad', t('act.failed')) : ''}
+      ${S.error ? alert('bad', t(S.error[0], S.error[1])) : ''}
+      <div class="sx-form2">${field('iname', t('act.iname'))}${field('domain', t('act.domain'))}</div>
+      <fieldset class="sx-checks"><legend class="sx-field__l">${t('act.dists')}</legend>${['research', 'business', 'education', 'personal'].map(check).join('')}</fieldset>
+      <div class="sx-form2">${field('pname', t('act.pname'))}${field('pemail', t('act.pemail'))}</div>
+      <div class="sx-form2">${field('aname', t('act.aname'))}${field('aemail', t('act.aemail'))}</div>
+      ${btn('gold', t(S.busy ? 'login.busy' : 'act.go'), null, { submit: true, lg: true })}
+      ${pairing()}`;
+  }
+  const running = (a) => `<div><div class="sx-card__step">${t('act.step')}</div><h1 id="login-h" tabindex="-1">${t('act.running.h')}</h1></div>
+      <p role="status">${t('act.running.step', { n: a.steps_begun })}</p>
+      <div class="sx-meter sx-meter--busy"><progress aria-label="${t('act.running.h')}"></progress></div>
+      <p class="sx-card__note">${t('act.running.note')}</p>`;
+  const reveal = () => (S.credential
+    ? `<div><div class="sx-card__step">${t('act.step')}</div><h1 id="login-h" tabindex="-1">${t('act.cred.h')}</h1></div>
+       ${alert('warn', t('act.cred.once'))}
+       <dl class="sx-kv"><dt>${t('login.user')}</dt><dd class="sx-mono">${esc(S.credential.username)}</dd><dt>${t('act.cred.pass')}</dt><dd class="sx-mono sx-secret">${esc(S.credential.password)}</dd></dl>
+       <p class="sx-card__note">${t('act.cred.note')}</p>
+       ${btn('gold', t('act.cred.done'), 'credential-done', { lg: true })}`
+    : `<div><div class="sx-card__step">${t('act.step')}</div><h1 id="login-h" tabindex="-1">${t('act.done.h')}</h1></div>
+       <p>${t('act.done.lead')}</p>
+       ${S.error ? alert('bad', t(S.error[0], S.error[1])) : ''}
+       ${btn('gold', t('act.cred.show'), 'credential-show', { lg: true })}`);
+
   function login() {
     const n = netFact();
     const h = instanceHealth();
@@ -217,10 +250,16 @@
          ${k ? `<div class="sx-card__row"><span>${ic('keyboard', 'sx-icon--sm')}${t('login.kbd', { layout: k.layout + (k.variant ? ' · ' + k.variant : '') })}</span></div>` : ''}
          ${btn('gold', t(S.busy ? 'login.busy' : 'login.go'), null, { submit: true, lg: true })}
          <p class="sx-card__note">${t('login.note')}</p>`;
+    const a = activation();
+    const stage = S.credential || (a && a.phase === 'ACTIVATED' && a.credential_waiting) ? 'reveal'
+      : a && a.phase === 'RUNNING' ? 'running'
+        : a && (a.phase === 'READY' || a.phase === 'FAILED') ? 'setup' : 'login';
+    const card = stage === 'reveal' ? reveal() : stage === 'running' ? running(a) : stage === 'setup' ? setup(a)
+      : (a && a.phase === 'NOT_OFFERED' ? alert('info', t('act.none')) : '') + body;
     return `<main class="sx-screen">${corner()}
       <div class="sx-login">
-        <div class="sx-hero">${ic('mark')}<h1>${t('login.title')}</h1><p>${t('login.lead')}</p><ul class="sx-facts">${facts}</ul></div>
-        <form class="sx-card" data-form="login" aria-labelledby="login-h">${body}</form>
+        <div class="sx-hero">${ic('mark')}<h1>${t('login.title')}</h1><p>${t(stage === 'login' ? 'login.lead' : 'act.hero')}</p><ul class="sx-facts">${stage === 'login' ? facts : ''}</ul></div>
+        <form class="sx-card${stage === 'setup' ? ' sx-card--setup' : ''}" data-form="${stage === 'setup' ? 'setup' : stage === 'login' ? 'login' : 'none'}" aria-labelledby="login-h">${card}</form>
       </div>
       <div class="sx-cornerleft">${langButton()}</div>${overlay()}</main>`;
   }
@@ -435,7 +474,7 @@
     root.innerHTML = html;
     // O foco segue o que mudou: um diálogo novo, uma página nova, um ecrã novo;
     // de resto fica onde a pessoa o tinha.
-    const focusKey = v + '|' + (S.dialog ? S.dialog.kind + (S.dialog.cls || '') : '') + '|' + (v === 'shell' ? S.panel + ':' + S.page : S.step);
+    const focusKey = v + '|' + ((got('activation.status') || {}).phase || '') + (S.credential ? 'c' : '') + '|' + (S.dialog ? S.dialog.kind + (S.dialog.cls || '') : '') + '|' + (v === 'shell' ? S.panel + ':' + S.page : S.step);
     const moved = focusKey !== lastFocusKey;
     lastFocusKey = focusKey;
     let target = null;
@@ -455,7 +494,7 @@
   // ── acções
   async function refresh() {
     await ask({ request: 'state' });
-    const base = ['system.health', 'network.status', 'power.status', 'time.status', 'locale.status', 'accessibility.status', 'keyboard.status', 'audio.status', 'display.status', 'update.status'];
+    const base = ['activation.status', 'system.health', 'network.status', 'power.status', 'time.status', 'locale.status', 'accessibility.status', 'keyboard.status', 'audio.status', 'display.status', 'update.status'];
     const page = view() === 'shell' && S.panel === 'system' ? READS[S.page] : [];
     await read(Array.from(new Set(base.concat(page))));
     render();
@@ -488,6 +527,19 @@
     if (view() === 'shell') { refresh(); invoke('open_workspace').catch(() => {}); }
   }
 
+  async function activate() {
+    if (S.busy) return;
+    const f = S.form;
+    const distributions = Object.keys(S.dist).filter((k) => S.dist[k]);
+    const missing = [f.iname, f.domain, f.pname, f.pemail, f.aname, f.aemail].some((v) => !v.trim());
+    if (missing || !distributions.length) { S.error = ['act.missing']; return render(); }
+    S.busy = true; S.error = null; render();
+    const r = await call('activation.start', { domain: f.domain.trim().toLowerCase(), instance_name: f.iname.trim(), distributions, person_name: f.pname.trim(), person_email: f.pemail.trim(), admin_name: f.aname.trim(), admin_email: f.aemail.trim() });
+    S.busy = false;
+    if (r.refused) S.error = [r.refused.code === 'VALUE_OUT_OF_RANGE' ? 'act.invalid' : 'r.' + r.refused.code];
+    render();
+  }
+
   async function unlock() {
     if (S.busy || !S.form.unlock) return;
     S.busy = true; S.error = null; render();
@@ -500,6 +552,14 @@
   }
 
   const ACTIONS = {
+    dist: (arg) => { S.dist[arg] = !S.dist[arg]; },
+    'credential-show': async () => {
+      S.error = null;
+      const r = await call('activation.credential');
+      if (r.ok && r.ok.kind === 'initial_credential') { S.credential = r.ok.value; S.form.user = r.ok.value.username; await read(['activation.status']); }
+      else S.error = ['act.cred.gone'];
+    },
+    'credential-done': () => { S.credential = null; S.step = 1; },
     'login-back': () => { S.step = 1; S.error = null; S.form.code = ''; S.form.pass = ''; S.form.new1 = ''; S.form.new2 = ''; },
     languages: () => { S.dialog = { kind: 'languages' }; },
     lang: async (arg) => { S.lang = arg; S.langChosen = true; S.dialog = null; document.documentElement.lang = LOCALE(); render(); const r = await call('locale.configure', { language: arg }); if (!r.refused) S.langChosen = false; },
@@ -546,7 +606,9 @@
   });
   document.addEventListener('change', (e) => {
     const el = e.target.closest('select[data-act], input[type="range"][data-act]');
-    if (el) act(el.dataset.act, el.value);
+    if (el) return act(el.dataset.act, el.value);
+    const box = e.target.closest('input[type="checkbox"][data-act]');
+    if (box) act(box.dataset.act, box.dataset.arg);
   });
   document.addEventListener('input', (e) => {
     const el = e.target.closest('[data-f]');
@@ -557,6 +619,7 @@
     const form = e.target.closest('[data-form]');
     if (!form) return;
     if (form.dataset.form === 'login') signIn();
+    else if (form.dataset.form === 'setup') activate();
     else if (form.dataset.form === 'unlock') unlock();
     else if (form.dataset.form === 'auth') authorise();
   });

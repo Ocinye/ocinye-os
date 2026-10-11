@@ -13,14 +13,17 @@ StateDirectory=ocinye/system
 LogsDirectory=ocinye
 Restart=always
 RestartSec=2
-# The authority is root on purpose: it restarts the machine, sets the clock
-# and enables remote access. What it does not need, it does not have.
+# The authority is root on purpose: it restarts the machine, sets the clock,
+# enables remote access and — once — runs the release's installer to create
+# the Instance. What none of that needs, it does not have. The installer and
+# what it starts inherit all of this: it talks to the container runtime and
+# checks the Instance over the loopback, hence the network families, and it
+# hands the runtime files by path, hence no private /tmp.
 NoNewPrivileges=yes
 ProtectHome=yes
-PrivateTmp=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
-RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 
