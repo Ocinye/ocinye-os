@@ -20,8 +20,8 @@
     panel: null,            // null | 'quick' | 'system'
     page: 'home',
     dialog: null,
-    form: { user: '', pass: '', code: '', unlock: '', auth: '' },
-    step: 1,
+    form: { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '' },
+    step: 1,                // 1 conta · 2 segundo factor · 3 palavra-passe nova
     busy: false,
     error: null,            // [chave, variáveis]
     toast: null,
@@ -194,7 +194,15 @@
     const facts = S.serviceDown
       ? `<li data-tone="bad">${t('fact.service')}</li>`
       : `<li data-tone="${TONE[h]}">${t('fact.instance.' + h)}</li><li data-tone="${n.tone}">${t(n.key)}</li>${time ? `<li data-tone="${time.synchronised ? 'ok' : 'warn'}">${t(time.synchronised ? 'fact.clock.yes' : 'fact.clock.no')}</li>` : ''}`;
-    const body = S.step === 2
+    const body = S.step === 3
+      ? `<div><div class="sx-card__step">${t('login.stepnew')}</div><h1 id="login-h">${t('login.hnew')}</h1></div>
+         ${alert('info', t('login.newnote'))}
+         ${S.error ? alert('bad', t(S.error[0], S.error[1])) : ''}
+         ${field('new1', t('login.new1'), { type: 'password' })}
+         ${field('new2', t('login.new2'), { type: 'password' })}
+         ${btn('gold', t(S.busy ? 'login.busy' : 'login.go'), null, { submit: true, lg: true })}
+         ${btn('ghost', t('login.back'), 'login-back')}`
+      : S.step === 2
       ? `<div><div class="sx-card__step">${t('login.step2')}</div><h1 id="login-h">${t('login.h2')}</h1></div>
          ${S.error ? alert('bad', t(S.error[0], S.error[1])) : ''}
          ${field('code', t('login.code'), { code: true })}
@@ -456,14 +464,26 @@
   async function signIn() {
     if (S.busy) return;
     if (!S.form.user.trim() || !S.form.pass) return;
+    if (S.step === 3) {
+      // O que se pode dizer sem perguntar a ninguém diz-se já; a política é do Core.
+      if (S.form.new1 !== S.form.new2) { S.error = ['login.mismatch']; return render(); }
+      if (S.form.new1.length < 15) { S.error = ['why.PASSWORD_NOT_ACCEPTED']; return render(); }
+    }
     S.busy = true; S.error = null; render();
-    const reply = await ask({ request: 'sign_in', username: S.form.user.trim(), password: S.form.pass, second_factor: S.step === 2 && S.form.code ? S.form.code : null });
+    const reply = await ask({ request: 'sign_in', username: S.form.user.trim(), password: S.form.pass, second_factor: S.form.code ? S.form.code : null, new_password: S.form.new1 ? S.form.new1 : null });
     S.busy = false;
     if (!reply) { S.error = ['why.SESSION_SERVICE']; }
     else if (reply.reply === 'refused') {
-      if (reply.reason.code === 'SECOND_FACTOR_REQUIRED' && S.step === 1) { S.step = 2; S.form.code = ''; }
-      else { S.error = ['why.' + reply.reason.code, { n: reply.reason.retry_after_secs }]; S.form.code = ''; if (S.step === 1) S.form.pass = ''; }
-    } else { S.form = { user: '', pass: '', code: '', unlock: '', auth: '' }; S.step = 1; S.panel = null; }
+      const code = reply.reason.code;
+      if (code === 'SECOND_FACTOR_REQUIRED' && S.step !== 2) { S.step = 2; S.form.code = ''; }
+      else if (code === 'PASSWORD_CHANGE_REQUIRED' && S.step === 1) { S.step = 3; S.form.new1 = ''; S.form.new2 = ''; }
+      else {
+        S.error = ['why.' + code, { n: reply.reason.retry_after_secs }];
+        S.form.code = '';
+        if (S.step === 1) S.form.pass = '';
+        if (code === 'PASSWORD_NOT_ACCEPTED') { S.step = 3; S.form.new1 = ''; S.form.new2 = ''; }
+      }
+    } else { S.form = { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '' }; S.step = 1; S.panel = null; }
     render();
     if (view() === 'shell') { refresh(); invoke('open_workspace').catch(() => {}); }
   }
@@ -480,7 +500,7 @@
   }
 
   const ACTIONS = {
-    'login-back': () => { S.step = 1; S.error = null; S.form.code = ''; S.form.pass = ''; },
+    'login-back': () => { S.step = 1; S.error = null; S.form.code = ''; S.form.pass = ''; S.form.new1 = ''; S.form.new2 = ''; },
     languages: () => { S.dialog = { kind: 'languages' }; },
     lang: async (arg) => { S.lang = arg; S.langChosen = true; S.dialog = null; document.documentElement.lang = LOCALE(); render(); const r = await call('locale.configure', { language: arg }); if (!r.refused) S.langChosen = false; },
     contrast: async () => { const a = got('accessibility.status') || { text_scale_percent: 100, high_contrast: false, reduce_motion: false }; const r = await call('accessibility.configure', Object.assign({}, a, { high_contrast: !a.high_contrast })); if (r.refused) document.documentElement.classList.toggle('sx-contrast'); else applyPreferences(); },

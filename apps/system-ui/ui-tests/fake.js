@@ -1,6 +1,6 @@
 /* Bancada da interface do sistema: um duplo dos dois serviços, com o mesmo
    formato de resposta do contrato. O cenário vem do fragmento do endereço:
-   #signed-out (por omissão), #locked, #active, #offline, #mfa, #down.
+   #signed-out (por omissão), #locked, #active, #offline, #mfa, #newpass, #down.
    Serve para ver e medir a interface num browser; não prova nada sobre os
    serviços. */
 (function () {
@@ -32,6 +32,8 @@
       case 'state': return { reply: { reply: 'state', state: state() } };
       case 'sign_in':
         if (r.password !== PASSWORD) return refused('INVALID_CREDENTIALS');
+        if (scenario === 'newpass' && !r.new_password) return refused('PASSWORD_CHANGE_REQUIRED');
+        if (scenario === 'newpass' && r.new_password === 'palavra-passe-conhecida') return refused('PASSWORD_NOT_ACCEPTED');
         if (scenario === 'mfa' && !r.second_factor) return refused('SECOND_FACTOR_REQUIRED');
         if (scenario === 'mfa' && r.second_factor !== '123456') return refused('INVALID_CREDENTIALS');
         F.session = 'ACTIVE';

@@ -34,6 +34,8 @@ pub enum CoreRefusal {
     SecondFactorRequired,
     /// The member must first set a password.
     PasswordChangeRequired,
+    /// The Core refused the password the member chose.
+    PasswordNotAccepted,
     /// The Core cannot be reached.
     Unreachable,
 }
@@ -61,6 +63,7 @@ pub trait Core {
         username: &str,
         password: &str,
         second_factor: Option<&str>,
+        new_password: Option<&str>,
     ) -> Result<SignedSessionPolicy, CoreRefusal>;
     /// Ask about a session.
     fn refresh(&self, session_id: &str) -> Refresh;
@@ -264,11 +267,15 @@ impl<C: Core, K: Clock> Engine<C, K> {
         username: &str,
         password: &str,
         second_factor: Option<&str>,
+        new_password: Option<&str>,
     ) -> SessionReply {
         if self.record.is_some() {
             return Self::refused(SessionReason::AlreadySignedIn);
         }
-        let signed = match self.core.sign_in(username, password, second_factor) {
+        let signed = match self
+            .core
+            .sign_in(username, password, second_factor, new_password)
+        {
             Ok(p) => p,
             Err(CoreRefusal::InvalidCredentials) => {
                 return Self::refused(SessionReason::InvalidCredentials)
@@ -280,12 +287,17 @@ impl<C: Core, K: Clock> Engine<C, K> {
             Err(CoreRefusal::PasswordChangeRequired) => {
                 return Self::refused(SessionReason::PasswordChangeRequired)
             }
+            Err(CoreRefusal::PasswordNotAccepted) => {
+                return Self::refused(SessionReason::PasswordNotAccepted)
+            }
         };
         if policy::verify(&signed, &self.instance_key, &self.machine_id).is_none() {
             self.core.sign_out(&signed.policy.session_id);
             return Self::refused(SessionReason::PolicyInvalid);
         }
-        let Some(verifier) = verifier::create(password, self.cost) else {
+        // The local verifier is of the password that now opens the account:
+        // the one just chosen, when one was.
+        let Some(verifier) = verifier::create(new_password.unwrap_or(password), self.cost) else {
             self.core.sign_out(&signed.policy.session_id);
             return Self::refused(SessionReason::PolicyInvalid);
         };
@@ -452,10 +464,12 @@ impl<C: Core, K: Clock> Engine<C, K> {
                 username,
                 password,
                 second_factor,
+                new_password,
             } => self.sign_in(
                 &username,
                 password.expose(),
                 second_factor.as_ref().map(|s| s.expose()),
+                new_password.as_ref().map(|s| s.expose()),
             ),
             SessionRequest::Lock {} => {
                 if self.record.is_none() {

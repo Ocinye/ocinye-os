@@ -48,6 +48,9 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mais nada; a janela do Workspace é outro processo, sem comandos.
 - `network.status` passa a dar os endereços de cada interface (lidos de
   `ip -json` pelo executor endurecido); antes vinham sempre vazios.
+- **Primeiro acesso no ecrã da máquina**: quem entra com uma credencial
+  temporária escolhe ali a palavra-passe (o Session Service usa o endpoint de
+  primeiro acesso do Core); o verificador local fica a ser o da escolhida.
 - **O posto na imagem**: as imagens instaláveis trazem os dois serviços, o
   compositor e a interface, com as suas unidades. O ecrã gráfico só arranca
   depois de haver uma Instância ligada; até lá `tty1` é da consola de texto e

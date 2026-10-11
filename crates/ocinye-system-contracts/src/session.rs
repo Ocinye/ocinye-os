@@ -168,6 +168,9 @@ pub enum SessionRequest {
         password: Secret,
         /// A second factor, when the Core asked for one.
         second_factor: Option<Secret>,
+        /// The password the member chooses, when the Core said the one above
+        /// is temporary and must be replaced before any session can open.
+        new_password: Option<Secret>,
     },
     /// Lock the session.
     Lock {},
@@ -218,6 +221,9 @@ pub enum SessionReason {
     /// The member must set a password in the Workspace before a session can
     /// open here.
     PasswordChangeRequired,
+    /// The Core did not accept the new password: it does not meet the
+    /// Instance's password policy.
+    PasswordNotAccepted,
     /// Too many attempts: wait.
     Throttled {
         /// Seconds to wait.

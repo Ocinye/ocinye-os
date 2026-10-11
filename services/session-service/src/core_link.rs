@@ -228,6 +228,7 @@ impl Core for HttpCore {
         username: &str,
         password: &str,
         second_factor: Option<&str>,
+        new_password: Option<&str>,
     ) -> Result<SignedSessionPolicy, CoreRefusal> {
         let answer = self
             .post(
@@ -244,6 +245,33 @@ impl Core for HttpCore {
             return Err(CoreRefusal::InvalidCredentials);
         }
         let mut issued: Issued = answer.json().ok_or(CoreRefusal::Unreachable)?;
+
+        // A temporary credential opens nothing but the door to replace it.
+        // With the member's choice in hand, it is replaced here, by the Core's
+        // own first-access endpoint; without one, the member is asked.
+        if issued.state == "password_change_required" {
+            let gate = issued.session_token;
+            let Some(chosen) = new_password else {
+                self.leave(&gate);
+                return Err(CoreRefusal::PasswordChangeRequired);
+            };
+            let answer = self
+                .post(
+                    "/auth/password",
+                    Some(&gate),
+                    &json!({ "password": chosen, "confirmation": chosen }),
+                )
+                .ok_or(CoreRefusal::Unreachable)?;
+            if !answer.ok() {
+                self.leave(&gate);
+                return Err(if answer.status >= 500 {
+                    CoreRefusal::Unreachable
+                } else {
+                    CoreRefusal::PasswordNotAccepted
+                });
+            }
+            issued = answer.json().ok_or(CoreRefusal::Unreachable)?;
+        }
 
         if issued.state == "mfa_required" {
             let Some(code) = second_factor else {

@@ -17,7 +17,12 @@ password: Secret,
 /**
  * A second factor, when the Core asked for one.
  */
-second_factor: Secret | null, } | { "request": "lock", } | { "request": "unlock",
+second_factor: Secret | null,
+/**
+ * The password the member chooses, when the Core said the one above
+ * is temporary and must be replaced before any session can open.
+ */
+new_password: Secret | null, } | { "request": "lock", } | { "request": "unlock",
 /**
  * The password.
  */

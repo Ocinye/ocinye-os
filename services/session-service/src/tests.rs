@@ -54,6 +54,7 @@ impl Core for FakeCore {
         username: &str,
         password: &str,
         _: Option<&str>,
+        _: Option<&str>,
     ) -> Result<SignedSessionPolicy, CoreRefusal> {
         if !self.reachable.get() {
             return Err(CoreRefusal::Unreachable);
@@ -132,6 +133,7 @@ impl Bench {
             username: "pessoa".into(),
             password: Secret::new(PASSWORD.into()),
             second_factor: None,
+            new_password: None,
         })
     }
     fn lock(&mut self) {
@@ -178,6 +180,7 @@ fn entrar_precisa_do_core_e_da_palavra_passe_certa() {
         username: "pessoa".into(),
         password: Secret::new("nope".into()),
         second_factor: None,
+        new_password: None,
     });
     assert_eq!(reason(&wrong), SessionReason::InvalidCredentials);
     assert!(matches!(
@@ -624,6 +627,29 @@ fn sem_sessao_uma_confirmacao_e_da_presenca_e_bloqueado_nao_ha_reautenticacao() 
     ));
 }
 
+#[test]
+fn o_verificador_local_e_da_palavra_passe_escolhida_no_primeiro_acesso() {
+    let mut b = bench();
+    let chosen = "a escolha de quem entra";
+    let reply = b.ask(SessionRequest::SignIn {
+        username: "pessoa".into(),
+        password: Secret::new(PASSWORD.into()),
+        second_factor: None,
+        new_password: Some(Secret::new(chosen.into())),
+    });
+    assert!(matches!(state(&reply), SessionState::Active { .. }));
+    b.lock();
+    // The temporary credential no longer opens anything, here either.
+    assert_eq!(
+        reason(&b.unlock(PASSWORD)),
+        SessionReason::InvalidCredentials
+    );
+    assert!(matches!(
+        state(&b.unlock(chosen)),
+        SessionState::Active { .. }
+    ));
+}
+
 mod socket {
     use std::os::unix::net::UnixStream;
     use std::sync::Mutex;
@@ -786,6 +812,20 @@ mod core_link {
                         serde_json::json!({ "session_token": "gate", "state": script.login_state })
                             .to_string(),
                     ),
+                    "/auth/password"
+                        if cookie.ends_with("=gate")
+                            && body["password"] == body["confirmation"] =>
+                    {
+                        if body["password"].as_str().is_some_and(|p| p.len() >= 15) {
+                            (
+                                200,
+                                serde_json::json!({ "session_token": "assured", "state": "active" })
+                                    .to_string(),
+                            )
+                        } else {
+                            (422, "{}".to_owned())
+                        }
+                    }
                     "/auth/mfa/challenge"
                         if cookie.ends_with("=gate") && body["code"] == "123456" =>
                     {
@@ -829,10 +869,10 @@ mod core_link {
     fn entrar_usa_o_login_do_core_e_pede_a_politica_assinada() {
         let (core, script, path) = link("active");
         assert_eq!(
-            core.sign_in("pessoa", "errada", None),
+            core.sign_in("pessoa", "errada", None, None),
             Err(CoreRefusal::InvalidCredentials)
         );
-        let signed = core.sign_in("pessoa", PASSWORD, None).unwrap();
+        let signed = core.sign_in("pessoa", PASSWORD, None, None).unwrap();
         assert_eq!(signed, sign(policy(1)));
         // The token is kept where only the service reads it, and survives it.
         use std::os::unix::fs::PermissionsExt;
@@ -859,39 +899,63 @@ mod core_link {
     fn o_segundo_factor_e_pedido_e_depois_satisfeito() {
         let (core, script, _) = link("mfa_required");
         assert_eq!(
-            core.sign_in("pessoa", PASSWORD, None),
+            core.sign_in("pessoa", PASSWORD, None, None),
             Err(CoreRefusal::SecondFactorRequired)
         );
         // The gate session is not left open at the Core.
         assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
         assert_eq!(
-            core.sign_in("pessoa", PASSWORD, Some("000000")),
+            core.sign_in("pessoa", PASSWORD, Some("000000"), None),
             Err(CoreRefusal::InvalidCredentials)
         );
-        assert!(core.sign_in("pessoa", PASSWORD, Some("123456")).is_ok());
+        assert!(core
+            .sign_in("pessoa", PASSWORD, Some("123456"), None)
+            .is_ok());
     }
 
     #[test]
-    fn quem_tem_de_mudar_a_palavra_passe_nao_abre_sessao_aqui() {
+    fn uma_credencial_temporaria_so_abre_sessao_depois_de_substituida() {
         let (core, script, _) = link("password_change_required");
         assert_eq!(
-            core.sign_in("pessoa", PASSWORD, None),
+            core.sign_in("pessoa", PASSWORD, None, None),
             Err(CoreRefusal::PasswordChangeRequired)
         );
+        // The gate session is not left open at the Core.
         assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
+        // The Core judges the choice, and a refusal is said as such.
+        assert_eq!(
+            core.sign_in("pessoa", PASSWORD, None, Some("curta")),
+            Err(CoreRefusal::PasswordNotAccepted)
+        );
+        assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
+        assert!(core
+            .sign_in("pessoa", PASSWORD, None, Some("uma escolha bem comprida"))
+            .is_ok());
+        let asked = script.lock().unwrap().asked.clone();
+        let tail: Vec<&str> = asked
+            .iter()
+            .rev()
+            .take(3)
+            .rev()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            tail,
+            ["/auth/login", "/auth/password", "/auth/machine-session"]
+        );
     }
 
     #[test]
     fn uma_sessao_revogada_no_core_e_esquecida_e_sair_avisa_o_core() {
         let (core, script, _) = link("active");
-        core.sign_in("pessoa", PASSWORD, None).unwrap();
+        core.sign_in("pessoa", PASSWORD, None, None).unwrap();
         script.lock().unwrap().revoked = true;
         assert_eq!(core.refresh("s-1"), Refresh::Revoked);
         // Forgotten: the Core is not asked again about a session it ended.
         assert_eq!(core.refresh("s-1"), Refresh::Unreachable);
 
         script.lock().unwrap().revoked = false;
-        core.sign_in("pessoa", PASSWORD, None).unwrap();
+        core.sign_in("pessoa", PASSWORD, None, None).unwrap();
         core.sign_out("s-1");
         assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
         assert_eq!(core.refresh("s-1"), Refresh::Unreachable);
@@ -907,7 +971,7 @@ mod core_link {
         )
         .unwrap();
         assert_eq!(
-            core.sign_in("pessoa", PASSWORD, None),
+            core.sign_in("pessoa", PASSWORD, None, None),
             Err(CoreRefusal::Unreachable)
         );
     }
