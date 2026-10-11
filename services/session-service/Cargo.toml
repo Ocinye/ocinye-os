@@ -1,0 +1,28 @@
+[package]
+name = "ocinye-session-service"
+description = "Ocinye Session Service: the Rust authority of the local interactive session — sign-in, lock, offline unlock and fresh-authentication grants"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ocinye_session_service"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ocinye-session-service"
+path = "src/main.rs"
+
+[dependencies]
+ocinye-system-contracts = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+argon2 = { workspace = true }
+password-hash = { workspace = true }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true }

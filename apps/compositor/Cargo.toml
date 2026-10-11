@@ -1,0 +1,32 @@
+# The Ocinye compositor (ADR-0031): a minimal, purpose-built Wayland compositor
+# for the native system surfaces. Not a desktop environment.
+#
+# Outside the main Cargo workspace on purpose, like the Installer window: it
+# links the graphics stack of the base system (libseat, libinput, libdrm, GBM,
+# EGL) and is built on that base, for the target architecture
+# (infra/system-ui/build), never on a developer's machine.
+[workspace]
+
+[package]
+name = "ocinye-compositor"
+description = "Ocinye compositor: a minimal Wayland compositor for the native system surfaces"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+smithay = { version = "0.7.0", default-features = false, features = [
+    "backend_drm", "backend_gbm", "backend_egl", "backend_libinput",
+    "backend_session_libseat", "backend_udev", "renderer_gl",
+    "wayland_frontend", "desktop",
+] }
+# The Session Service is asked whether a session is active: without a yes,
+# only the trusted system surface is shown.
+ocinye-system-client = { path = "../../crates/ocinye-system-client" }
+ocinye-system-contracts = { path = "../../crates/ocinye-system-contracts" }
+
+[profile.release]
+lto = "thin"
+strip = true

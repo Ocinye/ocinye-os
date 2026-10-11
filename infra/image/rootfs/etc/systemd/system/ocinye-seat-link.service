@@ -1,0 +1,20 @@
+[Unit]
+Description=Ocinye OS seat: link to the Instance installed on this machine
+Documentation=file:///usr/share/doc/ocinye/images.md
+# Only once an Instance is installed here: the installation writes this file.
+ConditionPathExists=/etc/ocinye/release.env
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Stays "active" once done, so that the path unit does not start it again for
+# as long as the file exists.
+RemainAfterExit=yes
+# Learns the Instance's public session key through the loopback door and
+# records where this machine's Workspace is. With no key yet it fails, and is
+# retried until the Core answers; with a key from an earlier boot it succeeds
+# even while the Core is down.
+ExecStart=/usr/lib/ocinye/ocinye-session-service link-instance
+Restart=on-failure
+RestartSec=15

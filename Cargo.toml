@@ -9,6 +9,8 @@ members = [
     "crates/ocinye-installer-contracts",
     "crates/ocinye-installer-controller",
     "crates/ocinye-image-contracts",
+    "crates/ocinye-system-contracts",
+    "crates/ocinye-system-client",
     "services/core-server",
     "services/worker",
     "services/node-agent",
@@ -18,6 +20,8 @@ members = [
     "services/firstboot",
     "services/oie",
     "services/image-builder",
+    "services/system-service",
+    "services/session-service",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them
@@ -41,6 +45,8 @@ ocinye-core-server = { path = "services/core-server" }
 ocinye-capabilities = { path = "crates/ocinye-capabilities" }
 ocinye-installer-contracts = { path = "crates/ocinye-installer-contracts" }
 ocinye-image-contracts = { path = "crates/ocinye-image-contracts" }
+ocinye-system-contracts = { path = "crates/ocinye-system-contracts" }
+ocinye-system-client = { path = "crates/ocinye-system-client" }
 
 # --- runtime ----------------------------------------------------------------
 tokio = { version = "1.53", features = ["full"] }
@@ -155,6 +161,13 @@ chacha20poly1305 = "0.11"
 password-hash = { version = "0.5", features = ["std"] }
 subtle = "2"
 zeroize = { version = "1", features = ["derive"] }
+# TypeScript bindings for the native system surfaces, generated from the Rust
+# contracts (never written by hand). `no-serde-warnings`: the contracts use
+# serde attributes the generator does not need to understand.
+ts-rs = { version = "12", features = ["no-serde-warnings"] }
+# Safe system calls. Used for one thing: the peer credentials of the System
+# Service's socket.
+rustix = { version = "1", features = ["net"] }
 # NFC normalisation of passwords before hashing (ADR-0104). Without it the same
 # passphrase typed on two input methods produces two different byte sequences.
 unicode-normalization = "0.1"

@@ -10,6 +10,7 @@ prints one RESULT line: PASS, FAIL or INVALID (harness/infrastructure).
   image_e2e.py virt  --qcow2 F --arch A --work D [--keys D]
   image_e2e.py raw   --raw-zst F --raw-sha256 H --arch A --work D
   image_e2e.py iso   --iso F --arch A --work D
+  image_e2e.py seat  --qcow2 F --arch A --work D [--memory MiB]
 
 Stdlib only. Test keys are generated per run under --work; no secret is
 printed (codes are redacted in the log, compared in memory).
@@ -83,7 +84,7 @@ class Vm:
         self.buf = ""
         self.port = None
 
-    def start(self, disks, cdrom=None, net=True, seed=None):
+    def start(self, disks, cdrom=None, net=True, seed=None, screen=False):
         kvm = native(self.arch)
         code, _ = firmware(self.arch)
         if self.arch == "amd64":
@@ -109,6 +110,12 @@ class Vm:
                     "-device", "scsi-cd,drive=cd,bus=scsi0.0,bootindex=1"]
         if seed:
             cmd += ["-drive", f"if=none,id=seed,format=raw,readonly=on,file={seed}", "-device", "virtio-blk-pci,drive=seed"]
+        if screen:
+            # A display, a keyboard and a pointer, and the monitor socket the
+            # screen is read and the keys are pressed through.
+            self.qmp_sock = os.path.join(self.work, f"{self.name}.qmp")
+            cmd += ["-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet",
+                    "-qmp", f"unix:{self.qmp_sock},server=on,wait=off"]
         if net:
             self.port = next(PORTS)
             cmd += ["-netdev", f"user,id=n0,hostfwd=tcp:127.0.0.1:{self.port}-:22", "-device", "virtio-net-pci,netdev=n0"]
@@ -178,6 +185,56 @@ class Vm:
             if not self._pump():
                 time.sleep(0.1)
 
+    def qmp(self, *commands):
+        """Run monitor commands; raise on a refusal."""
+        c = socket.socket(socket.AF_UNIX)
+        c.settimeout(30)
+        c.connect(self.qmp_sock)
+        f = c.makefile("rw")
+        f.readline()
+        out = []
+        for command in ({"execute": "qmp_capabilities"},) + commands:
+            f.write(json.dumps(command) + "\n")
+            f.flush()
+            while True:
+                answer = json.loads(f.readline())
+                if "return" in answer or "error" in answer:
+                    break
+            if "error" in answer:
+                raise RuntimeError(f"qmp {command['execute']}: {answer['error']}")
+            out.append(answer)
+        c.close()
+        return out
+
+    def screenshot(self, path):
+        """The guest's screen, as the display device shows it, into a PNG."""
+        if os.path.exists(path):
+            os.remove(path)
+        self.qmp({"execute": "screendump", "arguments": {"filename": path, "format": "png"}})
+        return path
+
+    def press(self, qcode, shift=False):
+        k = lambda code, down: {"type": "key", "data": {"down": down, "key": {"type": "qcode", "data": code}}}
+        events = [k(qcode, True), k(qcode, False)]
+        if shift:
+            events = [k("shift", True)] + events + [k("shift", False)]
+        self.qmp({"execute": "input-send-event", "arguments": {"events": events}})
+
+    def type(self, text):
+        """Type on the guest's keyboard (US layout). The text is never logged."""
+        for ch in text:
+            if ch in TYPE_SHIFTED:
+                self.press(TYPE_SHIFTED[ch], shift=True)
+            elif ch.isalpha() and ch.isupper():
+                self.press(ch.lower(), shift=True)
+            elif ch in TYPE_PLAIN:
+                self.press(TYPE_PLAIN[ch])
+            elif ch.isalnum() and ch.isascii():
+                self.press(ch)
+            else:
+                raise RuntimeError("a character the bench keyboard cannot type")
+            time.sleep(0.04)
+
     def stop(self):
         if self.proc and self.proc.poll() is None:
             self.proc.terminate()
@@ -190,6 +247,13 @@ class Vm:
 
     def wait_exit(self, timeout):
         self.proc.wait(timeout)
+
+
+TYPE_PLAIN = {" ": "spc", "-": "minus", ".": "dot", ",": "comma", "/": "slash", "=": "equal", ";": "semicolon",
+              "'": "apostrophe", "[": "bracket_left", "]": "bracket_right", "\\": "backslash", "`": "grave_accent"}
+TYPE_SHIFTED = {"!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
+                "_": "minus", "+": "equal", ":": "semicolon", "?": "slash", "<": "comma", ">": "dot", '"': "apostrophe",
+                "{": "bracket_left", "}": "bracket_right", "|": "backslash", "~": "grave_accent"}
 
 
 def keygen(path):
@@ -470,6 +534,261 @@ def scenario_virt(a):
         st = ssh(a2.port, "ocinye", k1, "sudo -n /usr/lib/ocinye/ocinye-firstboot status")
         r.check("A: still CLAIMED after reboot", b'"CLAIMED"' in st.stdout, st.stdout)
         a2.stop()
+    except Exception as e:  # noqa: BLE001 — the harness reports, never hides
+        return r.finish(work, invalid=f"{type(e).__name__}: {e}")
+    return r.finish(work)
+
+
+SESSION_PROBE = r'''
+import json, socket, struct
+def frame(o):
+    b = json.dumps(o).encode(); return struct.pack(">I", len(b)) + b
+def read(s):
+    n = struct.unpack(">I", s.recv(4, socket.MSG_WAITALL))[0]; return json.loads(s.recv(n, socket.MSG_WAITALL))
+s = socket.socket(socket.AF_UNIX); s.settimeout(20); s.connect("/run/ocinye/session.sock")
+s.sendall(frame({"frame": "hello", "contract": 1})); read(s)
+s.sendall(frame(REQUEST)); print(json.dumps(read(s)))
+'''
+
+
+def session_ask(port, key, request):
+    """One request to the Session Service, as root on the machine; its reply."""
+    probe = SESSION_PROBE.replace("REQUEST", repr(request))
+    r = ssh(port, "ocinye", key, "sudo -n python3 -", probe.encode(), timeout=60)
+    try:
+        return json.loads(r.stdout.decode().strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {"reply": "none", "detail": (r.stdout + r.stderr).decode(errors="replace")[-300:]}
+
+
+def totp(secret_base32, at=None):
+    """The six digits an authenticator shows for this key now (RFC 6238)."""
+    import base64
+    import hmac
+    import struct
+    key = base64.b32decode(secret_base32.upper() + "=" * (-len(secret_base32) % 8))
+    counter = int((at if at is not None else time.time()) // 30)
+    digest = hmac.new(key, struct.pack(">Q", counter), "sha1").digest()
+    offset = digest[-1] & 0x0F
+    return f"{(struct.unpack('>I', digest[offset:offset + 4])[0] & 0x7FFFFFFF) % 1000000:06d}"
+
+
+def session_state(port, key):
+    """The local session, as the Session Service tells root on the machine."""
+    reply = session_ask(port, key, {"request": "state"})
+    return reply.get("state") or {"state": "UNKNOWN", "detail": reply}
+
+
+def png_is_a_picture(path):
+    """Whether a screenshot shows something: more than one colour in it."""
+    import zlib
+    data = open(path, "rb").read()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        return False
+    raw, pos = b"", 8
+    while pos < len(data):
+        n = int.from_bytes(data[pos:pos + 4], "big")
+        if data[pos + 4:pos + 8] == b"IDAT":
+            raw += data[pos + 8:pos + 8 + n]
+        pos += 12 + n
+    pixels = zlib.decompress(raw)
+    return len(set(pixels[1000:200000:97])) > 8
+
+
+def scenario_seat(a):
+    """The seat of an installed machine (ADR-0031), end to end on the image.
+
+    Everything a person does happens at the machine's own screen, with the
+    guest's keyboard: the first-start set-up creates the Instance from the
+    release the image carries, the first administrator's credential is shown
+    once, and the administrator signs in — replacing that credential — locks,
+    unlocks and restarts. The machine is also claimed, only so that the bench
+    has a way in to look: what it asserts comes from the services and the
+    units, never from pixels.
+    """
+    r = Results(f"seat-{a.arch}")
+    work = a.work
+    k1, k2 = keygen(os.path.join(work, "operator_a")), keygen(os.path.join(work, "operator_x"))
+    disk = os.path.join(work, "seat.qcow2")
+    sh("qemu-img", "create", "-q", "-f", "qcow2", "-F", "qcow2", "-b", a.qcow2, disk, "40G")
+    shots = os.path.join(work, "screens")
+    os.makedirs(shots, exist_ok=True)
+    chosen = "a escolha da bancada 2026"
+    try:
+        vm = Vm("seat", a.arch, work, memory=a.memory, cpus=3)
+        vm.start([{"file": disk, "boot": True}], screen=True)
+        vm.expect(UNCLAIMED_RX, BOOT_BUDGET)
+        wait_ssh_port(vm.port, 300)
+        facts = claim_by_code(r, vm, k1, k2, "seat")
+        if not facts:
+            return r.finish(work)
+        run = lambda command, timeout=120: ssh(vm.port, "ocinye", k1, command, timeout=timeout)
+        units = run("systemctl is-active ocinye-system.service ocinye-session.service ocinye-display.service ocinye-console@tty2.service; systemctl is-enabled ocinye-seat-link.path; systemctl is-active ocinye-console@tty1.service").stdout.decode().split()
+        r.check("seat: the two services run before any Instance exists", units[:2] == ["active", "active"], units)
+        r.check("seat: the screen is up on a machine with a display, and the text console is on tty2", units[2:4] == ["active", "active"], units)
+        r.check("seat: the link waits for an Instance", units[4:5] == ["enabled"], units)
+        r.check("seat: tty1 belongs to the screen", units[5:6] == ["inactive"], units)
+        st = session_state(vm.port, k1)
+        r.check("seat: nobody is signed in", st.get("state") == "SIGNED_OUT", st)
+
+        def activation():
+            out = run("sudo -n ocinye-system --json activation status").stdout.decode(errors="replace")
+            try:
+                return json.loads(out)["value"]
+            except (ValueError, KeyError):
+                return {"phase": "UNKNOWN", "detail": out[-200:]}
+
+        ready = activation()
+        r.check("seat: the machine offers to create its Instance from the release it carries", ready.get("phase") == "READY" and ready.get("release_id"), ready)
+        time.sleep(20)
+        r.check("seat: the screen shows the first-start set-up", png_is_a_picture(vm.screenshot(os.path.join(shots, "1-set-up.png"))))
+        # The whole set-up, at the keyboard: the form's fields in order, the
+        # four distribution boxes passed over (research is ticked), Enter.
+        vm.type("Bancada do posto")
+        vm.press("tab")
+        vm.type("ocinye-seat.test")
+        for _ in range(5):
+            vm.press("tab")
+        vm.type("Pessoa de Prova")
+        vm.press("tab")
+        vm.type("pessoa@ocinye-seat.test")
+        vm.press("tab")
+        vm.type("Admin de Prova")
+        vm.press("tab")
+        vm.type("admin@ocinye-seat.test")
+        time.sleep(1)
+        vm.screenshot(os.path.join(shots, "2-set-up-filled.png"))
+        vm.press("ret")
+        time.sleep(15)
+        started = activation()
+        r.check("seat: the set-up started the installation", started.get("phase") in ("RUNNING", "ACTIVATED"), started)
+        vm.screenshot(os.path.join(shots, "3-creating.png"))
+        done = started
+        for _ in range(240):
+            if done.get("phase") != "RUNNING":
+                break
+            time.sleep(15)
+            done = activation()
+        log_tail = run("sudo -n tail -c 1500 /var/lib/ocinye/system/activation/install.log").stdout.decode(errors="replace")
+        open(os.path.join(work, "install.log"), "w").write(redact(log_tail))
+        r.check("seat: the Instance was created on the machine, by the machine", done.get("phase") == "ACTIVATED" and done.get("credential_waiting") is True, (done, log_tail[-500:]))
+        if done.get("phase") != "ACTIVATED":
+            return r.finish(work)
+        audit = run("sudo -n grep -c activation.start /var/log/ocinye/system-audit.jsonl; sudo -n grep -c 'pessoa@' /var/log/ocinye/system-audit.jsonl").stdout.decode().split()
+        r.check("seat: the activation is in the audit record, by its administrator and not by the person's address", audit[:1] == ["1"] and audit[1:2] == ["0"], audit)
+        # The link: the key, the address, the name.
+        linked = False
+        for _ in range(60):
+            got = run("test -s /var/lib/ocinye/seat/instance-session.pub && echo linked").stdout.decode().strip()
+            if got == "linked":
+                linked = True
+                break
+            time.sleep(10)
+        link = run("cat /var/lib/ocinye/seat/workspace-url; grep -c 'ocinye-seat$' /etc/hosts; sudo -n journalctl -u ocinye-seat-link --no-pager -n 20").stdout.decode(errors="replace")
+        r.check("seat: linked to the Instance it created", linked, link[-900:])
+        r.check("seat: the Workspace address is the Instance's own name", link.startswith("https://ocinye-seat.test/"), link[:80])
+        r.check("seat: the name resolves to this machine", link.splitlines()[1:2] == ["1"], link[:120])
+        codes = [run(f"curl -s -o /dev/null -w '%{{http_code}}' http://127.0.0.1:8480{path}").stdout.decode().strip()
+                 for path in ("/api/v1/auth/machine-session/key", "/api/v1/people", "/api/v1/members", "/")]
+        r.check("seat: the loopback door answers for the session key and for nothing else", codes == ["200", "404", "404", "404"], codes)
+        listening = run("ss -ltnH 'sport = :8480' | awk '{print $4}'").stdout.decode().split()
+        r.check("seat: the door listens on the loopback only", listening == ["127.0.0.1:8480"], listening)
+        # The first administrator's credential: on the screen once, then gone.
+        # The bench cannot read a screen, so it reads the file the screen is
+        # about to be given — as root, over the claim's SSH — and then checks
+        # that showing it removed it.
+        secret = run("sudo -n cat /var/lib/ocinye/system/activation/credential").stdout.decode().strip()
+        r.check("seat: a temporary credential is waiting to be shown", len(secret) >= 12)
+        time.sleep(8)
+        vm.screenshot(os.path.join(shots, "4-instance-created.png"))
+        vm.press("ret")
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "5-credential.png"))
+        gone = run("sudo -n test -e /var/lib/ocinye/system/activation/credential && echo there || echo gone").stdout.decode().strip()
+        r.check("seat: once shown, the credential is no longer on the machine", gone == "gone" and activation().get("credential_waiting") is False, gone)
+        vm.press("ret")
+        time.sleep(3)
+        first = vm.screenshot(os.path.join(shots, "6-sign-in.png"))
+        r.check("seat: the screen shows the sign-in", png_is_a_picture(first))
+        # Sign in at the keyboard, with the temporary credential, and replace
+        # it. The address is already in its field: the screen put it there.
+        vm.press("tab")
+        vm.type(secret)
+        vm.press("ret")
+        time.sleep(12)
+        vm.screenshot(os.path.join(shots, "7-first-access.png"))
+        st = session_state(vm.port, k1)
+        r.check("seat: a temporary credential opens no session", st.get("state") == "SIGNED_OUT", st)
+        vm.type(chosen)
+        vm.press("tab")
+        vm.type(chosen)
+        vm.press("ret")
+        time.sleep(12)
+        vm.screenshot(os.path.join(shots, "7b-second-factor.png"))
+        r.check("seat: an administrator without a second factor still has no session", session_state(vm.port, k1).get("state") == "SIGNED_OUT")
+        # The screen shows the authenticator key; the bench cannot read a
+        # screen. It asks the Session Service to begin the enrolment again —
+        # which replaces the key on the Core's side — and plays the
+        # authenticator for the key it was given. The code typed at the
+        # keyboard is therefore a real one, for the key the Core now holds.
+        begun = session_ask(vm.port, k1, {"request": "begin_second_factor_enrollment", "username": "admin@ocinye-seat.test", "password": chosen})
+        r.check("seat: the Core hands out an authenticator key for the enrolment", begun.get("reply") == "second_factor_secret", {k: v for k, v in begun.items() if k != "secret_base32"})
+        if begun.get("reply") != "second_factor_secret":
+            return r.finish(work)
+        if time.time() % 30 > 22:
+            time.sleep(9)
+        vm.type(totp(begun["secret_base32"]))
+        vm.press("ret")
+        active = {}
+        for _ in range(12):
+            time.sleep(5)
+            active = session_state(vm.port, k1)
+            if active.get("state") == "ACTIVE":
+                break
+        r.check("seat: signed in at the machine's own screen", active.get("state") == "ACTIVE" and active.get("core") == "ONLINE", active)
+        r.check("seat: the member is the Instance's administrator", active.get("member_name") == "Admin de Prova", active.get("member_name"))
+        r.check("seat: the administrator, with the second factor satisfied, may operate the machine", active.get("operator") is True, active.get("operator"))
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "7c-recovery-codes.png"))
+        # `[o]`: the pattern must not match the command line that carries it.
+        waiting = run("pgrep -fc '[o]cinye-system-ui --workspace'").stdout.decode().split()
+        r.check("seat: the Workspace waits while the recovery codes are on the screen", waiting == ["0"], waiting)
+        vm.press("ret")
+        time.sleep(25)
+        vm.screenshot(os.path.join(shots, "8-session.png"))
+        procs = run("pgrep -fc '[o]cinye-system-ui --workspace'; pgrep -u ocinye-ui -fc '[o]cinye-compositor -- '").stdout.decode().split()
+        r.check("seat: the Workspace has its own window process", procs[:1] == ["1"], procs)
+        r.check("seat: the compositor runs as the unprivileged screen account", procs[1:2] == ["1"], procs)
+        # Lock, then unlock with the chosen password — the temporary one is gone.
+        lock = session_ask(vm.port, k1, {"request": "lock"})
+        r.check("seat: locked", (lock.get("state") or {}).get("state") == "LOCKED", lock)
+        time.sleep(6)
+        vm.screenshot(os.path.join(shots, "9-locked.png"))
+        vm.type(secret)
+        vm.press("ret")
+        time.sleep(6)
+        r.check("seat: the temporary credential does not unlock", session_state(vm.port, k1).get("state") == "LOCKED")
+        vm.type(chosen)
+        vm.press("ret")
+        time.sleep(8)
+        r.check("seat: unlocked with the chosen password", session_state(vm.port, k1).get("state") == "ACTIVE")
+        vm.screenshot(os.path.join(shots, "10-unlocked.png"))
+        # A restart ends the session and brings the screen back by itself.
+        run("sudo -n systemctl reboot", timeout=30)
+        time.sleep(20)
+        wait_ssh_port(vm.port, 600)
+        back = {}
+        for _ in range(60):
+            got = run("systemctl is-active ocinye-display.service").stdout.decode().strip()
+            if got == "active":
+                back = session_state(vm.port, k1)
+                break
+            time.sleep(10)
+        r.check("seat: after a restart the screen is back and nobody is signed in", back.get("state") == "SIGNED_OUT", back)
+        r.check("seat: the previous session is said to have ended with the restart", back.get("ended") == "RESTARTED", back)
+        time.sleep(20)
+        vm.screenshot(os.path.join(shots, "11-after-restart.png"))
+        vm.stop()
     except Exception as e:  # noqa: BLE001 — the harness reports, never hides
         return r.finish(work, invalid=f"{type(e).__name__}: {e}")
     return r.finish(work)
@@ -943,17 +1262,18 @@ def scenario_iso(a):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("scenario", choices=["virt", "raw", "iso"])
+    p.add_argument("scenario", choices=["virt", "raw", "iso", "seat"])
     p.add_argument("--arch", required=True, choices=["amd64", "arm64"])
     p.add_argument("--work", required=True)
     p.add_argument("--qcow2")
     p.add_argument("--raw-zst")
     p.add_argument("--raw-sha256")
     p.add_argument("--iso")
+    p.add_argument("--memory", type=int, default=4096, help="seat: the guest's memory, MiB (an Instance needs 3500)")
     a = p.parse_args()
     os.makedirs(a.work, exist_ok=True)
     try:
-        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso}[a.scenario](a)
+        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso, "seat": scenario_seat}[a.scenario](a)
     finally:
         # No guest outlives its scenario, whatever happened.
         for vm in RUNNING:

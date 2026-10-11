@@ -1,0 +1,46 @@
+[Unit]
+Description=Ocinye Session Service (the local session of this machine)
+Documentation=file:///usr/share/doc/ocinye/images.md
+After=local-fs.target ocinye-system.service
+
+[Service]
+ExecStart=/usr/lib/ocinye/ocinye-session-service serve
+# The Core is asked through the proxy's loopback door, and nowhere else.
+Environment=OCINYE_CORE_API=http://127.0.0.1:8480/api/v1
+RuntimeDirectory=ocinye
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+StateDirectory=ocinye/session
+StateDirectoryMode=0700
+Restart=always
+RestartSec=2
+# It is root only so that the kernel reports it as such to the System Service
+# (the one peer that may consume a grant). It holds no capability at all, sees
+# the system read-only, and reaches nothing but Unix sockets and the loopback.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

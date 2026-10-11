@@ -1,0 +1,11 @@
+[package]
+name = "ocinye-system-client"
+description = "Typed client of the Ocinye System Service: the one way a native surface or the headless client reaches it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ocinye-system-contracts = { workspace = true }

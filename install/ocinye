@@ -224,6 +224,36 @@ sha_do_pacote() {
     [[ "$SHA" =~ ^[0-9a-f]{12}$ ]] || fatal "RELEASE não contém um SHA curto válido"
 }
 
+# As somas do pacote, conferidas antes de qualquer coisa ser escrita.
+#
+# Um pacote completo traz as imagens em `images/*.tar`, e todas as somas
+# conferem. Um pacote **embarcado numa imagem do Ocinye OS** não as traz: a
+# imagem do sistema já as carregou no runtime ao ser construída, e guardar os
+# mesmos gigabytes duas vezes no disco não protegeria nada. Nesse caso conferem
+# as somas de tudo o que o pacote traz — o manifesto incluído —, e as imagens
+# conferem-se depois contra os identificadores que esse manifesto fixa
+# (`fase_imagens`). Não há terceiro caso: `images/` existe inteiro ou não existe.
+conferir_pacote() {
+    sha_do_pacote
+    if [ -d "$AQUI/images" ]; then
+        (cd "$AQUI" && sha256sum -c SHA256SUMS >/dev/null) \
+            || fatal "as somas do pacote não conferem: não instalo um pacote alterado"
+        nota "release $SHA · somas conferidas"
+    else
+        (cd "$AQUI" && grep -v '  \./images/' SHA256SUMS | sha256sum -c - >/dev/null) \
+            || fatal "as somas do pacote não conferem: não instalo um pacote alterado"
+        nota "release $SHA · somas conferidas · imagens já no runtime, a conferir pelo manifesto"
+    fi
+}
+
+# O identificador que o manifesto do release fixa para uma imagem. O manifesto
+# está na forma canónica (chaves ordenadas, sem espaços), e é nessa forma que
+# se lê; o que não tiver exactamente esta forma não dá identificador nenhum.
+id_no_manifesto() {  # serviço
+    grep -o "\"image_id\":\"sha256:[0-9a-f]\{64\}\",\"name\":\"ocinye/ocinye-$1\",\"tag\":\"$SHA\"" \
+        "$AQUI/MANIFEST.json" | head -1 | sed 's/^"image_id":"\(sha256:[0-9a-f]*\)".*/\1/'
+}
+
 # P05 · a árvore do release no sítio. Idempotente: o mesmo SHA, o mesmo sítio.
 fase_release() {
     sha_do_pacote
@@ -304,7 +334,21 @@ OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
 EOF
     umask 022
     chmod 600 "$parcial"/*.env
-    mv "$parcial" "$CONFIG"
+    if [ -d "$CONFIG" ]; then
+        # A pasta já existe sem ser a configuração de uma Instância (essa
+        # recusou-se acima): uma imagem do Ocinye OS traz lá os factos da
+        # própria imagem. Um `mv` para cima de uma pasta que existe mete a nova
+        # *dentro* dela, e a instalação seguia sem configuração nenhuma. O que
+        # lá está passa para a pasta nova, e a troca são dois `mv`: a antiga só
+        # desaparece depois de a nova estar no lugar.
+        cp -a "$CONFIG/." "$parcial/"
+        rm -rf "$CONFIG.anterior"
+        mv "$CONFIG" "$CONFIG.anterior"
+        mv "$parcial" "$CONFIG"
+        rm -rf "$CONFIG.anterior"
+    else
+        mv "$parcial" "$CONFIG"
+    fi
     nota "segredos gerados neste anfitrião: base de dados, armazenamento, raiz de selagem"
     nota "a raiz de selagem está em $CONFIG/core.env — sem ela, um backup não se lê"
 }
@@ -326,6 +370,10 @@ fase_proxy() {  # tls cert chave dominio [host…]
         > "$CONFIG/nginx/30-instance.conf"
     cp "$RAIZ/current/infra/nginx/instance/00-comum.conf" "$CONFIG/nginx/00-comum.conf"
     cp "$RAIZ/current/infra/nginx/instance/10-default.conf" "$CONFIG/nginx/10-default.conf"
+    # A porta da própria máquina (ADR-0031). Um release anterior não a traz.
+    if [ -f "$RAIZ/current/infra/nginx/instance/20-machine.conf" ]; then
+        cp "$RAIZ/current/infra/nginx/instance/20-machine.conf" "$CONFIG/nginx/20-machine.conf"
+    fi
     if [ "$tls" = provided ]; then
         [ -r "$cert" ] && [ -r "$chave" ] || fatal "--tls provided exige --cert e --key legíveis"
         install -m 644 "$cert" "$CONFIG/tls/instance.pem"
@@ -349,13 +397,27 @@ fase_proxy() {  # tls cert chave dominio [host…]
 # P09 · as imagens do release.
 fase_imagens() {
     sha_do_pacote
-    for imagem in "$AQUI"/images/*.tar; do
-        docker load -q -i "$imagem" | sed 's/^/  /'
-    done
-    for servico in core-server workspace worker conversion-runner converter; do
-        docker image inspect "ocinye/ocinye-$servico:$SHA" >/dev/null 2>&1 \
-            || fatal "o pacote não trouxe ocinye/ocinye-$servico:$SHA"
-    done
+    if [ -d "$AQUI/images" ]; then
+        for imagem in "$AQUI"/images/*.tar; do
+            docker load -q -i "$imagem" | sed 's/^/  /'
+        done
+        for servico in core-server workspace worker conversion-runner converter; do
+            docker image inspect "ocinye/ocinye-$servico:$SHA" >/dev/null 2>&1 \
+                || fatal "o pacote não trouxe ocinye/ocinye-$servico:$SHA"
+        done
+    else
+        # Pacote embarcado: as imagens têm de estar no runtime, e têm de ser
+        # exactamente as que o manifesto do release fixa.
+        local esperado tem
+        for servico in core-server workspace worker conversion-runner converter; do
+            esperado="$(id_no_manifesto "$servico")"
+            [ -n "$esperado" ] || fatal "o manifesto não fixa ocinye/ocinye-$servico:$SHA"
+            tem="$(docker image inspect -f '{{.Id}}' "ocinye/ocinye-$servico:$SHA" 2>/dev/null || true)"
+            [ "$tem" = "$esperado" ] \
+                || fatal "ocinye/ocinye-$servico:$SHA no runtime não é a imagem do release"
+        done
+        nota "imagens do release já no runtime, conferidas pelo manifesto"
+    fi
 }
 
 # P10 · base de dados e armazenamento.
@@ -513,10 +575,7 @@ install_() {
 
     # ── 2. O pacote ──────────────────────────────────────────────────
     passo "O pacote"
-    sha_do_pacote
-    (cd "$AQUI" && sha256sum -c SHA256SUMS >/dev/null) \
-        || fatal "as somas do pacote não conferem: não instalo um pacote alterado"
-    nota "release $SHA · somas conferidas"
+    conferir_pacote
 
     passo "O release";        fase_release
     passo "Configuração";     fase_config "$dominio" "$url_publico" "$nome_instancia" \
@@ -677,6 +736,14 @@ trocar_para() {  # sha
     # O proxy vem do release para onde se vai, e não do que lá estava.
     local nginx="$RAIZ/releases/$destino/infra/nginx/instance"
     cp "$nginx/00-comum.conf" "$nginx/10-default.conf" "$CONFIG/nginx/"
+    # A porta da própria máquina vem com o release que a tem, e sai com o que
+    # não a tem: uma configuração que sobrasse apontaria para um Compose que já
+    # não publica o porto.
+    if [ -f "$nginx/20-machine.conf" ]; then
+        cp "$nginx/20-machine.conf" "$CONFIG/nginx/20-machine.conf"
+    else
+        rm -f "$CONFIG/nginx/20-machine.conf"
+    fi
     # Os nomes que o proxy já servia continuam a ser servidos (D011: vários pontos).
     local nomes
     nomes="$(sed -n 's/^ *server_name \(.*\);$/\1/p' "$CONFIG/nginx/30-instance.conf" | head -1)"

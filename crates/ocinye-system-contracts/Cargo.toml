@@ -1,0 +1,16 @@
+[package]
+name = "ocinye-system-contracts"
+description = "Typed contracts of the Ocinye System Service: capabilities, requests, state, reason codes and the wire"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+zeroize = { workspace = true }
+# TypeScript bindings are generated from these types (never written by hand)
+# and checked in; CI regenerates them and fails on any difference.
+ts-rs = { workspace = true }

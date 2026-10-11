@@ -88,6 +88,10 @@ NORMAIS = {
         "ocinye-core",
         "ocinye-domain",
         "ocinye-observability",
+        # Só o tipo da política de sessão que o Core assina (ADR-0031). O
+        # contrato não depende de nada, e o Core não ganha autoridade sobre a
+        # máquina por o conhecer.
+        "ocinye-system-contracts",
     },
     "ocinye-worker": {"ocinye-contracts", "ocinye-core", "ocinye-observability"},
     "ocinye-node-agent": {"ocinye-contracts", "ocinye-observability"},
@@ -123,6 +127,18 @@ NORMAIS = {
     "ocinye-firstboot": {"ocinye-image-contracts", "ocinye-installer-contracts"},
     "ocinye-oie": {"ocinye-image-contracts", "ocinye-installer-contracts"},
     "ocinye-image-builder": {"ocinye-image-contracts", "ocinye-installer-contracts"},
+    # O Ocinye System Service (ADR-0031), desde 2026-10-11. Os contratos do
+    # sistema não assentam em nada: são a definição do que se pode pedir à
+    # máquina. O cliente só conhece os contratos; o serviço conhece os dois e
+    # mais ninguém — não liga o Core, o domínio, a persistência nem o Workspace.
+    # A autoridade sobre a máquina não é a autoridade institucional.
+    "ocinye-system-contracts": set(),
+    "ocinye-system-client": {"ocinye-system-contracts"},
+    "ocinye-system-service": {"ocinye-system-contracts", "ocinye-system-client"},
+    # O Session Service: a autoridade da sessão local. Conhece os contratos do
+    # sistema e a forma canónica (para a assinatura da política); não liga o
+    # Core — fala com ele por um contrato, como qualquer outro cliente.
+    "ocinye-session-service": {"ocinye-system-contracts"},
 }
 
 # Dependências de desenvolvimento. Um teste pode levantar o sistema todo; é

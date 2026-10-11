@@ -3929,11 +3929,14 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "ed25519-dalek",
+ "hex",
  "ocinye-contracts",
  "ocinye-core",
  "ocinye-domain",
  "ocinye-installer-contracts",
  "ocinye-observability",
+ "ocinye-system-contracts",
  "serde",
  "serde_json",
  "sqlx",
@@ -4082,6 +4085,48 @@ dependencies = [
  "ocinye-contracts",
  "ocinye-installer-contracts",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "ocinye-session-service"
+version = "0.1.0"
+dependencies = [
+ "argon2 0.5.3",
+ "ed25519-dalek",
+ "hex",
+ "ocinye-system-contracts",
+ "password-hash 0.5.0",
+ "rustix",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ocinye-system-client"
+version = "0.1.0"
+dependencies = [
+ "ocinye-system-contracts",
+]
+
+[[package]]
+name = "ocinye-system-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "ts-rs",
+ "zeroize",
+]
+
+[[package]]
+name = "ocinye-system-service"
+version = "0.1.0"
+dependencies = [
+ "ocinye-system-client",
+ "ocinye-system-contracts",
+ "rustix",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -6809,6 +6854,28 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "ts-rs"
+version = "12.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "756050066659291d47a554a9f558125db17428b073c5ffce1daf5dcb0f7231d8"
+dependencies = [
+ "thiserror 2.0.20",
+ "ts-rs-macros",
+]
+
+[[package]]
+name = "ts-rs-macros"
+version = "12.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38d90eea51bc7988ef9e674bf80a85ba6804739e535e9cab48e4bb34a8b652aa"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+ "termcolor",
+]
 
 [[package]]
 name = "ttf-parser"

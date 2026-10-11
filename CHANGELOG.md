@@ -7,6 +7,88 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ocinye System Service — primeiro bloco — 2026-10-11 (ramo `feat/ocinye-os-v1-system-experience`)
+
+[ADR-0031](docs/adrs/0031-rust-system-authority-and-native-system-surfaces.md),
+`Proposed`. Sem prova numa imagem; sem interface gráfica.
+
+- **`ocinye-system-contracts`**: catálogo fechado de capacidades do sistema,
+  pedidos tipados com validação, estados, códigos de recusa, eventos e o formato
+  de fio (tramas limitadas, aperto de mão por versão). Ligações TypeScript
+  geradas e verificadas por teste.
+- **`ocinye-system-client`**: o cliente único do serviço.
+- **`ocinye-system-service`**: o daemon (posição pelo par do socket, autorização
+  antes da validação, prova fresca por pedido, auditoria sem segredos), o
+  executor endurecido de ferramentas, os leitores e acções Linux do primeiro
+  bloco, e o cliente sem ecrã `ocinye-system`.
+- Wi-Fi, Bluetooth, som, ecrãs e aplicação de actualizações: no catálogo,
+  `NOT_IMPLEMENTED`.
+- **`ocinye-session-service`**: sessão local — entrar com `SessionPolicy`
+  assinada pelo Core e ligada à máquina, bloquear, desbloquear sem o Core
+  dentro da política (Argon2id calibrado), espera crescente, concessões de
+  prova fresca de uso único. O System Service passa a perguntar-lhe a sessão e
+  a consumir nele as concessões.
+- **Core**: `POST /auth/machine-session` assina a política de sessão de uma
+  máquina (Ed25519, chave derivada da raiz de selagem por HKDF com etiqueta
+  própria) e `GET /auth/machine-session/key` publica a chave pública. As
+  regras vêm de `OCINYE_MACHINE_SESSION_*`. O Session Service entra pelo login
+  e pelo MFA existentes do Core — não há um segundo caminho de autenticação.
+- Dependências novas: `ts-rs` (geração das ligações) e `rustix` (credenciais do
+  par do socket, só em Linux).
+- **`apps/compositor`**: superfície de confiança (a janela do processo que o
+  compositor arrancou, reconhecida pelo PID), barra no topo com a janela do
+  Workspace por baixo, ecrã inteiro para a interface sempre que não há sessão
+  activa — perguntado ao Session Service, e sem resposta não há sim —, bloqueio
+  por inactividade pedido ao Session Service, e ponteiro desenhado pelo
+  compositor. O desenho é concluído antes de cada troca de página (sem isso um
+  renderizador por software deixava no ecrã a imagem a meio).
+- **`apps/system-ui`**: a interface nativa do sistema (Tauri): entrar com
+  segundo factor, bloqueio, barra, definições rápidas e Sistema (15 páginas),
+  pedido de confiança para prova fresca, em pt/en/fr. Cinco comandos tipados e
+  mais nada; a janela do Workspace é outro processo, sem comandos.
+- `network.status` passa a dar os endereços de cada interface (lidos de
+  `ip -json` pelo executor endurecido); antes vinham sempre vazios.
+- **Activação local**: uma máquina sem Instância cria-a no seu próprio ecrã,
+  sem rede nem outro computador — o System Service (`activation.*`) corre o
+  instalador do release que a imagem traz, com sete valores tipados e sem
+  shell; a credencial do primeiro administrador é entregue uma vez. O ecrã
+  gráfico passa a arrancar em qualquer máquina com dispositivo de ecrã, a
+  consola de texto fica em `Ctrl+Alt+F2`, e o compositor passa essas teclas ao
+  núcleo. Sem prova numa imagem construída.
+- **Inscrição do segundo factor no ecrã da máquina**: uma conta que o exige e
+  ainda não o tem (o primeiro administrador) inscreve-o ali — a chave do
+  autenticador, o código, e os códigos de recuperação mostrados uma vez — pelos
+  endpoints de inscrição do próprio Core. Sem leitor de QR: a chave é escrita
+  à mão no autenticador.
+- **Instalador numa imagem do Ocinye OS**: um pacote embarcado numa imagem não
+  traz `images/*.tar` (as imagens já estão no runtime); o instalador confere as
+  somas do que o pacote traz e as imagens pelos identificadores do manifesto.
+  E a configuração deixa de ser movida para *dentro* de um `/etc/ocinye` que
+  já existia — o que numa imagem acontecia sempre.
+- O ecrã obtém os dispositivos pelo `seatd`: numa imagem sem polkit, o logind
+  recusa activar a sessão de uma conta sem privilégios. O que o posto aprende
+  da Instância (chave de sessão, endereço, certificado) fica em
+  `/var/lib/ocinye/seat`, legível pela conta do ecrã.
+- **Operador da máquina**: a política de sessão que o Core assina diz se o
+  membro administra a plataforma (`platform.administer`, com o segundo factor
+  satisfeito); o System Service decide as capacidades de operador por aí, em
+  vez de responder sempre `AUTHORITY_UNAVAILABLE`.
+- **Primeiro acesso no ecrã da máquina**: quem entra com uma credencial
+  temporária escolhe ali a palavra-passe (o Session Service usa o endpoint de
+  primeiro acesso do Core); o verificador local fica a ser o da escolhida.
+- **O posto na imagem**: as imagens instaláveis trazem os dois serviços, o
+  compositor e a interface, com as suas unidades. O ecrã gráfico só arranca
+  depois de haver uma Instância ligada; até lá `tty1` é da consola de texto e
+  do seu código de emparelhamento. Sem prova numa imagem construída.
+- **Porta da própria máquina**: o proxy publica `127.0.0.1:8480`, só no
+  loopback, e por ela passam apenas entrar, o segundo factor, a política de
+  sessão e a sua chave, e sair. O Core continua sem porto no host.
+- A janela do Workspace confia no certificado que a Instância desta máquina
+  serve (`/etc/ocinye/tls/instance.pem`), para o nome dela e para mais nenhum.
+- Bancada gráfica (`infra/system-ui/bench/`): entrada de teclado e ponteiro e
+  capturas pelo monitor do QEMU, um Core de substituição e um posto completo
+  dentro da VM.
+
 ### Integração em `main` — 2026-10-11
 
 - O Installer (D011) entrou em `main` (PR #195), como

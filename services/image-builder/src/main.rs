@@ -255,7 +255,15 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
             &fs::read(a.image_dir.join("build/provision.sh")).map_err(|_| asm("provision"))?,
             0o755,
         )?;
-        for b in ["ocinye-firstboot", "ocinye-oie"] {
+        for b in [
+            "ocinye-firstboot",
+            "ocinye-oie",
+            "ocinye-system-service",
+            "ocinye-session-service",
+            "ocinye-system",
+            "ocinye-compositor",
+            "ocinye-system-ui",
+        ] {
             vm::stage_file(
                 &stage,
                 &format!("bin/{b}"),
@@ -304,6 +312,11 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         "oie-rootfs.tar",
         "bin/ocinye-firstboot",
         "bin/ocinye-oie",
+        "bin/ocinye-system-service",
+        "bin/ocinye-session-service",
+        "bin/ocinye-system",
+        "bin/ocinye-compositor",
+        "bin/ocinye-system-ui",
     ] {
         fs::copy(stage.join(f), small.join(f)).map_err(|_| asm("stage"))?;
     }

@@ -1,0 +1,9 @@
+[Unit]
+Description=Ocinye OS seat: wait for an Instance to be installed on this machine
+
+[Path]
+PathExists=/etc/ocinye/release.env
+Unit=ocinye-seat-link.service
+
+[Install]
+WantedBy=multi-user.target

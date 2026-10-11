@@ -34,7 +34,26 @@ musl() { # alvo
   local t="$1" up
   up="$(echo "$t" | tr 'a-z-' 'A-Z_')"
   env "CARGO_TARGET_${up}_LINKER=rust-lld" cargo build --release --locked --target "$t" \
-    -p ocinye-firstboot -p ocinye-oie -p ocinye-image-builder --manifest-path "$RAIZ/Cargo.toml" >&2
+    -p ocinye-firstboot -p ocinye-oie -p ocinye-image-builder \
+    -p ocinye-system-service -p ocinye-session-service --manifest-path "$RAIZ/Cargo.toml" >&2
+}
+
+# O compositor e a interface do sistema ligam a pilha gráfica do sistema de
+# base (WebKitGTK, Mesa, libseat): constroem-se num contentor dessa base, para
+# a arquitectura do ALVO, e ficam ao lado dos binários estáticos. O Docker já é
+# pré-requisito do pacote de release; nada mais é pedido a esta máquina.
+seat() { # arch alvo
+  local arch="$1" alvo="$2" img="ocinye-system-ui-build:$1"
+  docker build --platform "linux/$arch" -t "$img" "$RAIZ/infra/system-ui/build" >&2
+  mkdir -p "$RAIZ/target/$alvo/release"
+  docker run --rm --platform "linux/$arch" \
+    -v "$RAIZ":/src -v "ocinye-cargo-registry:/opt/cargo/registry" \
+    -v "ocinye-seat-target-$arch:/target" -v "$RAIZ/target/$alvo/release":/out \
+    "$img" sh -euc '
+      cd /src/apps/compositor && CARGO_TARGET_DIR=/target/compositor cargo build --release --locked
+      cd /src/apps/system-ui && CARGO_TARGET_DIR=/target/system-ui cargo build --release --locked --features tauri/custom-protocol
+      install -m 0755 /target/compositor/release/ocinye-compositor /target/system-ui/release/ocinye-system-ui /out/
+    ' >&2
 }
 
 vm_existe() { limactl list -q 2>/dev/null | grep -qx "$VM"; }
@@ -67,6 +86,7 @@ case "${1:-}" in
     [ "$livre" -ge "${OCINYE_IMAGE_BUILD_MIN_FREE_GB:-30}" ] || { echo "ESPAÇO INSUFICIENTE: ${livre} GB livres" >&2; exit 4; }
     # Target-arch binaries for the image, then the builder binary for the VM arch.
     musl "$alvo"; musl "$btriple"
+    seat "$arch" "$alvo"
     vm_create
     limactl start "$VM" >/dev/null 2>&1 || true
     ensure_syft

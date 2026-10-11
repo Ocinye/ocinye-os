@@ -1,0 +1,3 @@
+# Licence texts are reproduced verbatim, trailing spaces included: a whitespace
+# check must not ask for them to be edited.
+apps/*/ui/static/fonts/LICENSE.txt -whitespace

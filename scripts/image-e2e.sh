@@ -3,7 +3,7 @@
 # construtor (scripts/image-build.sh vm-create): QCOW2 (dois clones), RAW e ISO
 # (instalação offline num disco em branco, com discos a proteger ao lado).
 #
-#   scripts/image-e2e.sh virt|raw|iso|all NOME amd64|arm64
+#   scripts/image-e2e.sh virt|raw|iso|seat|all NOME amd64|arm64
 #
 # NOME é a pasta em ~/.cache/ocinye-image-builder/dist. Os resultados ficam em
 # ~/.cache/ocinye-image-builder/e2e/NOME/result-*.json, uma linha RESULT por
@@ -12,7 +12,7 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 VM=ocinye-image-builder
 CACHE="$HOME/.cache/ocinye-image-builder"
-cenario="${1:?virt|raw|iso|all}"; nome="${2:?NOME}"; arch="${3:?amd64|arm64}"
+cenario="${1:?virt|raw|iso|seat|all}"; nome="${2:?NOME}"; arch="${3:?amd64|arm64}"
 dist="$CACHE/dist/$nome"
 [ -f "$dist/IMAGE_MANIFEST.json" ] || { echo "sem IMAGE_MANIFEST.json em $dist" >&2; exit 2; }
 stem="$(python3 -c "import json,sys;m=json.load(open(sys.argv[1]));i=m['image'];print(f\"ocinye-os-{i['release_id']}-r{i['revision']}{'-dev' if i['build_kind']=='development' else ''}-{m['architecture']}\")" "$dist/IMAGE_MANIFEST.json")"
@@ -26,6 +26,10 @@ quer() { [ "$cenario" = "$1" ] || [ "$cenario" = all ]; }
 if quer virt; then corre virt --qcow2 "$dist/$stem.qcow2" || rc=1; fi
 if quer raw; then corre raw --raw-zst "$dist/$stem.raw.zst" --raw-sha256 "$raw_sha" || rc=1; fi
 if quer iso; then corre iso --iso "$dist/$stem.iso" || rc=1; fi
+# O posto (ADR-0031): uma Instância instalada na VM, e a entrada pelo ecrã dela.
+# Fora de `all`: precisa de 4 GiB para a VM convidada e demora o que demora uma
+# instalação.
+if [ "$cenario" = seat ]; then corre seat --qcow2 "$dist/$stem.qcow2" || rc=1; fi
 mkdir -p "$CACHE/e2e/$nome"
 # Copy the verdicts and serial logs out, and — for a failed install — the
 # OFFLINE diagnostics the harness gathered (curtin's saved log/config, the ESP
@@ -34,6 +38,7 @@ mkdir -p "$CACHE/e2e/$nome"
 # are what must survive the VM being destroyed, so they always come out.
 limactl shell "$VM" sudo -n sh -c "
   cp $work/*/result-*.json $work/*/*-serial.log '$CACHE/e2e/$nome/' 2>/dev/null
+  [ -d $work/seat/screens ] && cp -r $work/seat/screens $work/seat/install.log '$CACHE/e2e/$nome/' 2>/dev/null
   for f in $work/*/failure $work/*/failure-*; do
     [ -d \"\$f\" ] || continue
     s=\$(basename \"\$(dirname \"\$f\")\")-\$(basename \"\$f\")

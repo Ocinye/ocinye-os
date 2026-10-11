@@ -1,0 +1,31 @@
+[package]
+name = "ocinye-system-service"
+description = "Ocinye System Service: the privileged, typed authority of an installed Ocinye OS, and its headless client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ocinye_system_service"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ocinye-system-service"
+path = "src/main.rs"
+
+[[bin]]
+name = "ocinye-system"
+path = "src/bin/cli.rs"
+
+[dependencies]
+ocinye-system-contracts = { workspace = true }
+ocinye-system-client = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Who is on the other end of the socket, by the kernel's word (SO_PEERCRED).
+# Linux only: the service is the authority of an installed Ocinye OS.
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true }
