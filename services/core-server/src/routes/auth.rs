@@ -911,6 +911,7 @@ async fn machine_session(
     State(state): State<AppState>,
     Ids(ids): Ids,
     RestrictedSession { session, person }: RestrictedSession,
+    CurrentPrincipal(principal): CurrentPrincipal,
     Json(request): Json<MachineSessionRequest>,
 ) -> Result<Response, ApiError> {
     use ed25519_dalek::Signer as _;
@@ -945,6 +946,19 @@ async fn machine_session(
         member_name: person.preferred_name().to_owned(),
         session_id: session.id.to_string(),
         machine_id: machine_id.to_owned(),
+        // Operar a máquina que corre a Instância é administrar a plataforma: a
+        // mesma permissão, decidida aqui pelo mesmo motor que decide o resto,
+        // e entregue assinada — a máquina não tem opinião sobre isto.
+        operator: ocinye_domain::can(
+            &principal,
+            ocinye_contracts::Permission::PlatformAdminister,
+            &ocinye_domain::ResourceContext::organisation(
+                ocinye_domain::ResourceKind::Platform,
+                principal.organisation_id,
+            ),
+            None,
+        )
+        .allowed,
         // A revogação é por sessão e pergunta-se aqui: uma sessão revogada
         // deixa de receber política. A época fica para uma revogação que tenha
         // de valer sem o Core — que esta versão ainda não emite.

@@ -41,6 +41,7 @@ pub(crate) mod tests {
             member_name: "Pessoa de Prova".into(),
             session_id: "s-1".into(),
             machine_id: "machine-a".into(),
+            operator: false,
             revocation_epoch: epoch,
             offline_unlock: true,
             max_offline_secs: Some(3600),

@@ -72,13 +72,33 @@ impl SessionView for SessionOverSocket {
     }
 }
 
-/// Until the Core link exists, institutional permission cannot be asked:
-/// operator capabilities answer `AUTHORITY_UNAVAILABLE`.
-struct CoreUnreachable;
+/// The Core's word on who may operate this machine, as the Session Service
+/// holds it: the Core signs it into the session policy, and re-signs it every
+/// time it is reached. This service never asks a member what they may do, and
+/// never decides it — without a session that says yes for this very member,
+/// the answer is no, and without the Session Service there is no answer.
+struct CoreThroughSession;
 
-impl CoreAuthority for CoreUnreachable {
-    fn permits(&self, _: &str, _: Family) -> CoreAnswer {
-        CoreAnswer::Unreachable
+impl CoreAuthority for CoreThroughSession {
+    fn permits(&self, member: &str, _: Family) -> CoreAnswer {
+        match SessionOverSocket::ask(&SessionRequest::State {}) {
+            Some(SessionReply::State {
+                state:
+                    SessionState::Active {
+                        member_id,
+                        operator,
+                        ..
+                    },
+            }) if member_id == member => {
+                if operator {
+                    CoreAnswer::Permits
+                } else {
+                    CoreAnswer::Denies
+                }
+            }
+            Some(_) => CoreAnswer::Denies,
+            None => CoreAnswer::Unreachable,
+        }
     }
 }
 
@@ -126,7 +146,7 @@ fn main() -> ExitCode {
     let shared = Arc::new(Shared {
         platform: Box::new(Linux::new(Roots::system())),
         session: Box::new(SessionOverSocket),
-        core: Box::new(CoreUnreachable),
+        core: Box::new(CoreThroughSession),
         audit: Box::new(FileAudit::new("/var/log/ocinye/system-audit.jsonl".into())),
     });
     for stream in listener.incoming() {

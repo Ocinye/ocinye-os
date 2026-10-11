@@ -32,6 +32,7 @@ def signed_bytes(p):
     for name in ("member_id", "member_name", "session_id", "machine_id"):
         raw = p[name].encode()
         out += struct.pack(">Q", len(raw)) + raw
+    out += bytes([1 if p["operator"] else 0])
     out += struct.pack(">Q", p["revocation_epoch"]) + bytes([1 if p["offline_unlock"] else 0])
     out += b"\0" if p["max_offline_secs"] is None else b"\1" + struct.pack(">Q", p["max_offline_secs"])
     out += struct.pack(">I", p["max_unlock_attempts"]) + struct.pack(">I", p["idle_lock_secs"])
@@ -73,7 +74,7 @@ class Core(http.server.BaseHTTPRequestHandler):
             if token not in SESSIONS:
                 return self.answer(401, {})
             policy = {"member_id": "m-bancada", "member_name": "Pessoa de Prova", "session_id": token,
-                      "machine_id": body["machine_id"], "revocation_epoch": 0, "offline_unlock": True,
+                      "machine_id": body["machine_id"], "operator": True, "revocation_epoch": 0, "offline_unlock": True,
                       "max_offline_secs": 3600, "max_unlock_attempts": 5, "idle_lock_secs": IDLE,
                       "issued_at": int(time.time())}
             return self.answer(200, {"policy": policy, "signature": KEY.sign(signed_bytes(policy)).hex()})

@@ -29,6 +29,10 @@ pub struct SessionPolicy {
     pub session_id: String,
     /// The machine the policy was issued for.
     pub machine_id: String,
+    /// Whether the member administers the platform this machine runs: the
+    /// Core's answer, signed, to "may this member operate the machine". The
+    /// System Service asks for nothing else before an operator capability.
+    pub operator: bool,
     /// Raised by the Core when sessions of this member must end.
     #[ts(type = "number")]
     pub revocation_epoch: u64,
@@ -67,6 +71,7 @@ impl SessionPolicy {
             out.extend_from_slice(&(text.len() as u64).to_be_bytes());
             out.extend_from_slice(text.as_bytes());
         }
+        out.push(u8::from(self.operator));
         out.extend_from_slice(&self.revocation_epoch.to_be_bytes());
         out.push(u8::from(self.offline_unlock));
         match self.max_offline_secs {
@@ -137,6 +142,8 @@ pub enum SessionState {
         member_name: String,
         /// The Core link.
         core: CoreLink,
+        /// Whether the Core says this member may operate the machine.
+        operator: bool,
         /// Idle seconds after which the session must lock itself; zero when
         /// the Instance sets no idle lock. The compositor, which sees the
         /// input, asks for the lock.

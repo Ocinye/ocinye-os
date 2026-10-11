@@ -253,6 +253,7 @@ impl<C: Core, K: Clock> Engine<C, K> {
                 member_id: r.policy.policy.member_id.clone(),
                 member_name: r.policy.policy.member_name.clone(),
                 core: self.link,
+                operator: r.policy.policy.operator,
                 idle_lock_secs: r.policy.policy.idle_lock_secs,
             },
         }

@@ -22,7 +22,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   executor endurecido de ferramentas, os leitores e acções Linux do primeiro
   bloco, e o cliente sem ecrã `ocinye-system`.
 - Wi-Fi, Bluetooth, som, ecrãs e aplicação de actualizações: no catálogo,
-  `NOT_IMPLEMENTED`. Permissão institucional pedida ao Core: por fazer.
+  `NOT_IMPLEMENTED`.
 - **`ocinye-session-service`**: sessão local — entrar com `SessionPolicy`
   assinada pelo Core e ligada à máquina, bloquear, desbloquear sem o Core
   dentro da política (Argon2id calibrado), espera crescente, concessões de
@@ -48,6 +48,10 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mais nada; a janela do Workspace é outro processo, sem comandos.
 - `network.status` passa a dar os endereços de cada interface (lidos de
   `ip -json` pelo executor endurecido); antes vinham sempre vazios.
+- **Operador da máquina**: a política de sessão que o Core assina diz se o
+  membro administra a plataforma (`platform.administer`, com o segundo factor
+  satisfeito); o System Service decide as capacidades de operador por aí, em
+  vez de responder sempre `AUTHORITY_UNAVAILABLE`.
 - **Primeiro acesso no ecrã da máquina**: quem entra com uma credencial
   temporária escolhe ali a palavra-passe (o Session Service usa o endpoint de
   primeiro acesso do Core); o verificador local fica a ser o da escolhida.

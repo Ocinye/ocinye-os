@@ -285,10 +285,12 @@ sem que nada falhe.
   `arm64` com placa gráfica virtual: entrar, a barra com o Workspace por baixo,
   definições rápidas e Sistema, com teclado e ponteiro; a janela que o
   compositor arrancou é a única superfície de confiança, e sem sessão activa
-  mais nenhuma é mostrada. **Não existem ainda** a resposta do Core ao System
-  Service sobre permissão institucional (capacidades de operador respondem
-  `AUTHORITY_UNAVAILABLE`) nem a integração na imagem; nada disto correu em
-  `amd64` nem em hardware físico.
+  mais nenhuma é mostrada. A **permissão de operador** vem do Core: a política de sessão assinada
+  diz se o membro administra a plataforma (com segundo factor satisfeito,
+  ADR-0107), e é só isso que o System Service pergunta antes de uma capacidade
+  de operador. As imagens instaláveis trazem o posto e as suas unidades, **sem
+  prova numa imagem construída**; nada disto correu em `amd64` nem em hardware
+  físico.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
   `ocinye upgrade` faz checkpoint da base, troca o release, passa um portão de
@@ -700,14 +702,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **2216 funções de teste** escritas na árvore, e **zero falhas** na última
+- **2217 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **741 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **742 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic

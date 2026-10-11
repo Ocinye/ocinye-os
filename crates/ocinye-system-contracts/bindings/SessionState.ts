@@ -23,6 +23,10 @@ member_name: string,
  */
 core: CoreLink,
 /**
+ * Whether the Core says this member may operate the machine.
+ */
+operator: boolean,
+/**
  * Idle seconds after which the session must lock itself; zero when
  * the Instance sets no idle lock. The compositor, which sees the
  * input, asks for the lock.

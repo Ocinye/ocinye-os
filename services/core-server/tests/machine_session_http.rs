@@ -130,6 +130,24 @@ async fn organisation(pool: &PgPool) -> Uuid {
 
 /// Uma pessoa e uma sessão sua, no estado pedido.
 async fn membro(pool: &PgPool, organisation_id: Uuid, estado: SessionState) -> (Uuid, Secret) {
+    pessoa(
+        pool,
+        organisation_id,
+        estado,
+        TechnicalRole::ResearchMember,
+        false,
+    )
+    .await
+}
+
+/// O mesmo, com o papel técnico à escolha.
+async fn pessoa(
+    pool: &PgPool,
+    organisation_id: Uuid,
+    estado: SessionState,
+    papel: TechnicalRole,
+    segundo_factor: bool,
+) -> (Uuid, Secret) {
     let handle = format!("m{}", Uuid::new_v4().simple());
     let person_id: Uuid = sqlx::query_scalar(
         "INSERT INTO people (organisation_id, full_name, email, status)
@@ -144,7 +162,7 @@ async fn membro(pool: &PgPool, organisation_id: Uuid, estado: SessionState) -> (
 
     sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, $2)")
         .bind(person_id)
-        .bind(TechnicalRole::ResearchMember.as_str())
+        .bind(papel.as_str())
         .execute(pool)
         .await
         .expect("papel");
@@ -155,12 +173,13 @@ async fn membro(pool: &PgPool, organisation_id: Uuid, estado: SessionState) -> (
         Uuid::new_v4().simple()
     ));
     sqlx::query(
-        "INSERT INTO sessions (person_id, token_digest, state, expires_at, user_agent)
-             VALUES ($1, $2, $3, now() + interval '1 hour', 'machine-session-test')",
+        "INSERT INTO sessions (person_id, token_digest, state, mfa_satisfied, expires_at, user_agent)
+             VALUES ($1, $2, $3, $4, now() + interval '1 hour', 'machine-session-test')",
     )
     .bind(person_id)
     .bind(identity::session_digest(&token))
     .bind(estado.as_str())
+    .bind(segundo_factor)
     .execute(pool)
     .await
     .expect("sessão");
@@ -372,4 +391,48 @@ async fn um_identificador_de_maquina_sem_forma_e_recusado() {
         status.is_client_error(),
         "aceitou um campo que ninguém definiu"
     );
+}
+
+/// Operar a máquina é administrar a plataforma, e quem o diz é o Core: a
+/// resposta vem na política, assinada, e não se muda sem a assinatura cair.
+///
+/// E é a autoridade que a sessão tem **agora**: um administrador de plataforma
+/// que não satisfez o segundo factor não exerce autoridade privilegiada
+/// (ADR-0107) — nem no Workspace, nem na máquina.
+#[tokio::test]
+async fn so_quem_administra_a_plataforma_com_segundo_factor_e_operador() {
+    let pool = pool!();
+    let organisation_id = organisation(&pool).await;
+    let state = state(pool.clone(), organisation_id, Some(&SealingKey::generate()));
+    let chave = chave_publica(&state).await;
+    let corpo = || Some(json!({ "machine_id": "maquina-a" }));
+
+    let mut assinadas = Vec::new();
+    for (papel, segundo_factor, esperado) in [
+        (TechnicalRole::ResearchMember, true, false),
+        (TechnicalRole::PlatformAdmin, false, false),
+        (TechnicalRole::PlatformAdmin, true, true),
+    ] {
+        let (_, token) = pessoa(
+            &pool,
+            organisation_id,
+            SessionState::Active,
+            papel,
+            segundo_factor,
+        )
+        .await;
+        let (status, resposta) = pedir(&state, Method::POST, POLITICA, Some(&token), corpo()).await;
+        assert_eq!(status, StatusCode::OK, "{papel:?}: {resposta}");
+        let assinada: SignedSessionPolicy = serde_json::from_value(resposta).expect("o contrato");
+        assert!(verifica(&chave, &assinada));
+        assert_eq!(
+            assinada.policy.operator, esperado,
+            "{papel:?}, segundo factor: {segundo_factor}"
+        );
+        assinadas.push(assinada);
+    }
+    // Promover-se a operador na máquina é reescrever o que o Core assinou.
+    let mut promovida = assinadas.remove(0);
+    promovida.policy.operator = true;
+    assert!(!verifica(&chave, &promovida));
 }

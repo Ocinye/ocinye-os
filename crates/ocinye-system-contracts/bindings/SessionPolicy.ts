@@ -23,6 +23,12 @@ session_id: string,
  */
 machine_id: string,
 /**
+ * Whether the member administers the platform this machine runs: the
+ * Core's answer, signed, to "may this member operate the machine". The
+ * System Service asks for nothing else before an operator capability.
+ */
+operator: boolean,
+/**
  * Raised by the Core when sessions of this member must end.
  */
 revocation_epoch: number,

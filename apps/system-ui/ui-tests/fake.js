@@ -21,7 +21,7 @@
     grants: {},
   };
   const state = () => F.session === 'ACTIVE'
-    ? { state: 'ACTIVE', member_id: 'm-1', member_name: 'Pessoa de Prova', core: F.core, idle_lock_secs: 300 }
+    ? { state: 'ACTIVE', member_id: 'm-1', member_name: 'Pessoa de Prova', core: F.core, operator: true, idle_lock_secs: 300 }
     : F.session === 'LOCKED'
       ? { state: 'LOCKED', member_name: 'Pessoa de Prova', core: F.core, retry_after_secs: F.failures > 2 ? 4 : 0 }
       : { state: 'SIGNED_OUT', ended: null };
