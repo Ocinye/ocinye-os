@@ -8,12 +8,16 @@ members = [
     "crates/ocinye-capabilities",
     "crates/ocinye-installer-contracts",
     "crates/ocinye-installer-controller",
+    "crates/ocinye-image-contracts",
     "services/core-server",
     "services/worker",
     "services/node-agent",
     "services/conversion-runner",
     "services/installer-bootstrap",
     "services/release-tool",
+    "services/firstboot",
+    "services/oie",
+    "services/image-builder",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them
@@ -36,6 +40,7 @@ ocinye-core = { path = "crates/ocinye-core" }
 ocinye-core-server = { path = "services/core-server" }
 ocinye-capabilities = { path = "crates/ocinye-capabilities" }
 ocinye-installer-contracts = { path = "crates/ocinye-installer-contracts" }
+ocinye-image-contracts = { path = "crates/ocinye-image-contracts" }
 
 # --- runtime ----------------------------------------------------------------
 tokio = { version = "1.53", features = ["full"] }
@@ -174,6 +179,12 @@ ammonia = "4"
 rand = "0.10"
 base64 = "0.23"
 hex = "0.4"
+# Verificação de assinaturas minisign das imagens (D013, ADR-0026): o
+# verificador de referência do autor do minisign, sem dependências.
+minisign-verify = "0.3"
+# Só para os testes de assinatura das imagens: assinam como o `minisign -S -H`.
+ed25519-dalek = "3"
+blake2 = "0.10"
 
 # --- errors, logging, misc --------------------------------------------------
 thiserror = "2"

@@ -1,0 +1,44 @@
+# Sourced by the patched /scripts/casper (see the ocinye-blockguard hook).
+#
+# With the guard armed casper examines ONE device: the installation medium
+# this system booted from, as `ocinye-oie select-medium` identifies it
+# (ocinye_image_contracts::medium). That decision reads each disk's first
+# volume descriptor and the firmware's boot entry; it mounts nothing. Every
+# other block device is skipped before casper probes, mounts or adopts it:
+#
+#   - no internal filesystem is mounted, not even read-only (a read-only
+#     mount of a journalled filesystem replays its journal);
+#   - a disk with a casper/ directory, the right label, or an exact copy of
+#     the medium is not the medium because it appeared first.
+#
+# casper calls this for every device, on every pass of its search, until one
+# is accepted: the decision is retried while devices are still appearing.
+#
+# Returns 0 (skip) or 1 (examine).
+
+# casper never creates or adopts a persistence partition on an Ocinye medium.
+NOPERSISTENT="Yes"
+PERSISTENT=""
+export NOPERSISTENT PERSISTENT
+
+ocinye_guard_skip() {
+    [ -e /run/ocinye/guard ] || return 1
+    if [ ! -s /run/ocinye/medium ]; then
+        _ocinye_m="$(/usr/lib/ocinye/ocinye-oie select-medium 2>/run/ocinye/medium-refused)"
+        case "$?" in
+        0) [ -n "$_ocinye_m" ] && echo "$_ocinye_m" >/run/ocinye/medium ;;
+        4)
+            # Refused: say why on the console, once, and take nothing.
+            if [ ! -e /run/ocinye/medium-refused-shown ]; then
+                cat /run/ocinye/medium-refused >/dev/console 2>/dev/null
+                : >/run/ocinye/medium-refused-shown
+            fi
+            ;;
+        esac
+    fi
+    _ocinye_m="$(cat /run/ocinye/medium 2>/dev/null)"
+    if [ -n "$_ocinye_m" ] && [ "$1" = "/dev/$_ocinye_m" ]; then
+        return 1
+    fi
+    return 0
+}

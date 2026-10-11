@@ -7,6 +7,86 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Integração em `main` — 2026-10-11
+
+- O Installer (D011) entrou em `main` (PR #195), como
+  `D011_READY_FOR_FINAL_AMD64_CERTIFICATION`: falta só a VM `amd64` externa.
+- As imagens do Ocinye OS (D013, fase A e L0-H) entram em `main` a seguir, ainda
+  `PROVISIONAL_PENDING_D011_CERTIFICATION`: só construções de desenvolvimento,
+  hardware físico por correr, ADR-0026 a ADR-0030 `Proposed`.
+
+### D013 — Endurecimento do armazenamento na instalação (L0-H) — 2026-10-10 (ramo `feat/d013-image-builder-phase-a`)
+
+Não mergeado, não publicado; só construções de desenvolvimento
+([registo](docs/install/live-storage-safety.md)).
+
+- **A guarda de blocos arma também no arranque de instalação.** Antes da
+  confirmação escrita nenhum disco é gravável; depois, só o alvo confirmado
+  (`ConfirmedTarget`, `release_target`).
+- **Confiança no suporte**: identidade por construção no volume ISO 9660 e
+  ligação à entrada de arranque do firmware; uma cópia num disco interno nunca
+  é adoptada; ambiguidade recusa (`ocinye-oie select-medium`).
+- **D013-SF-01 a 04: `RESOLVED`; resíduo da cópia ISO 9660: `CLOSED`** — em
+  bancada virtual, onze ensaios e dois controlos positivos, zero escritas fora
+  do alvo confirmado.
+  Hardware físico por correr.
+- O OIE recusa mostrar a lista de discos se a política não se verificar; a
+  procura de chaves do operador fica restrita a discos removíveis.
+
+### D013 — Modos de arranque do suporte e Prova de Segurança de Armazenamento do Live (L0, L0-S) — 2026-10-10 (ramo `feat/d013-image-builder-phase-a`)
+
+Não mergeado, não publicado; só construções de desenvolvimento
+([ADR-0030](docs/adrs/0030-installation-media-boot-modes-and-live-storage-policy.md),
+`Proposed`; [registo L0-S](docs/install/live-storage-safety.md)). Sem interface
+gráfica.
+
+- **Contrato (`ocinye_image_contracts::bootmode`)**: quatro modos (`live`,
+  `install`, `hardware-check`, `recovery`) por `ocinye.mode=`, fixos durante o
+  arranque; modo em falta, desconhecido ou contraditório resolve para a política
+  não destrutiva; `InstallAuthority` só existe num arranque `install` explícito.
+- **Menu de arranque**: gerado do contrato, sem temporizador nem arranque por
+  omissão (`timeout=-1`), sete escolhas, pt/en/fr. **Muda o comportamento
+  anterior**: a ISO já não entra sozinha no instalador ao fim de 10 s.
+- **OIE**: `flow::run` exige a autoridade de instalação; nos outros modos corre
+  uma sessão de texto provisória que só sabe inventariar, relatar e reiniciar;
+  `ocinye-oie policy` dá o veredicto da política de armazenamento.
+- **Guarda de blocos** (`infra/image/oie-rootfs`, só na raiz do OIE): tudo em
+  só-leitura antes do udev, RAID e LVM mascarados, a procura do casper contida
+  ao suporte do Ocinye e o seu passo de swap anulado. A inspecção offline recusa
+  uma raiz instalável que a traga.
+- **Bancada** (`infra/image/e2e/storage_proof.py`): quinze discos-sentinela e
+  três testemunhas. Nos modos não destrutivos: zero escritas. No ambiente de
+  arranque do instalador, existente e inalterado: **quatro achados de segurança
+  em aberto** (D013-SF-01 a 04).
+- A marca de só-leitura do núcleo **não impede `swapon`**: medido, e corrigido
+  na guarda.
+
+### D013 — Imagens do Ocinye OS, fase A de código — 2026-10-05 (ramo `feat/d013-image-builder-phase-a`)
+
+`PROVISIONAL_PENDING_D011_CERTIFICATION` — assenta em `feat/design-d011`, ainda
+não certificada; **não mergear**. Só construções de desenvolvimento; sem
+publicação, sem chave de produção, sem deploy
+([ADR-0026](docs/adrs/0026-release-and-image-signing.md) a
+[ADR-0029](docs/adrs/0029-image-machine-instance-identity.md), `Proposed`;
+[imagens](docs/install/images.md), [servidor físico](docs/install/bare-metal.md)).
+
+- **Contratos (`crates/ocinye-image-contracts`)**: manifestos da imagem e do
+  conteúdo, inventário de pacotes, portões do canal estável (falham fechados),
+  identidade da máquina, transições da reclamação como funções puras,
+  elegibilidade dos discos e confirmação escrita, verificação minisign com a
+  gramática fechada do comentário assinado, recibo da origem.
+- **Primeiro arranque (`services/firstboot`)**: identidade gerada depois da
+  entropia, integridade do release e das imagens pré-carregadas (nos dois
+  armazéns do Docker), firewall fechada, código de 125 bits só em tmpfs,
+  reclamação por SSH (conta restrita, comando forçado, `flock`), Docker activado
+  só em RECLAMADO, consola pt/en/fr com o código só a pedido.
+- **Ambiente de instalação (`services/oie`)**: discos protegidos (suporte,
+  montados, pequenos, sem caminho estável, ambíguos), confirmação pelo fim do
+  número de série, curtin com esquema fixo e sem rede, diário no disco.
+- **Construtor (`services/image-builder`, `infra/image`, `scripts/image-build.sh`,
+  `scripts/image-e2e.sh`)**: B01–B17 numa VM descartável, base fixada e
+  verificada por `gpgv`, limpeza e inspecção offline, ISO híbrido só UEFI, QCOW2,
+  RAW, SBOM SPDX 2.3, proveniência, assinatura de desenvolvimento.
 ### D011 — clone novo auto-suficiente e certificação externa preparada — 2026-10-11
 
 - Os três certificados públicos de teste que os testes de TLS do Installer

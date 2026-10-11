@@ -1,0 +1,18 @@
+[Unit]
+Description=Ocinye OS console on %I
+After=ocinye-firstboot.service
+Conflicts=getty@%i.service serial-getty@%i.service
+Before=getty.target
+
+[Service]
+ExecStart=/usr/lib/ocinye/ocinye-console-launch %I
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/%I
+TTYReset=yes
+TTYVHangup=yes
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=getty.target

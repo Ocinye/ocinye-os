@@ -1,0 +1,28 @@
+{
+  "apt_snapshot": "20261001T000000Z",
+  "codename": "noble",
+  "curtin": {
+    "commit": "204562c277b096229ca20ba546149deef1d85e38",
+    "license": "AGPL-3.0",
+    "repository": "https://git.launchpad.net/curtin",
+    "tag": "24.0.0"
+  },
+  "images": {
+    "amd64": {
+      "file": "ubuntu-24.04-minimal-cloudimg-amd64.img",
+      "sha256": "a8eb6570f87a941f3de2e000c046b9367f8ab1423756a94830d454fae8ad80ff"
+    },
+    "arm64": {
+      "file": "ubuntu-24.04-minimal-cloudimg-arm64.img",
+      "sha256": "fbf6b15c50c474dc6dee5b3c74da212bb687a2625e877227828e6492d88dc151"
+    }
+  },
+  "keyring": "keys/ubuntu-cloudimage-keyring.gpg",
+  "keyring_sha256": "7d3205c5554f6690006751edae92f147c0c26d4e0bc33ce04709f3f94ca3679d",
+  "release": "24.04",
+  "serial": "20261001",
+  "sums_sha256": "e94dcf0cc21fc27be0f748b84a0231a3101ca750839602fe9ef68b807d1f766c",
+  "sums_signing_key_fingerprint": "D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81",
+  "url_base": "https://cloud-images.ubuntu.com/minimal/releases/noble/release-20261001",
+  "variant": "minimal-cloudimg"
+}

@@ -1,0 +1,22 @@
+[Unit]
+Description=Ocinye OS first boot (identity, integrity, claim state)
+Documentation=file:///usr/share/doc/ocinye/images.md
+After=local-fs.target systemd-random-seed.service systemd-machine-id-commit.service cloud-init.service
+# Before ssh.service, not ssh.socket: the socket belongs to early boot
+# (sockets.target), and ordering it after cloud-init makes a cycle that
+# systemd breaks by dropping ssh.socket. sshd starts on the first
+# connection, after the host keys exist.
+Before=ssh.service
+Wants=systemd-random-seed.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/ocinye/ocinye-firstboot init
+# Never on the journal: the pairing code is not printed by `init`.
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

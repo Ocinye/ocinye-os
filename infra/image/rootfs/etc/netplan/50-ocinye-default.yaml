@@ -1,0 +1,17 @@
+# Ocinye OS image (D013): DHCP on every Ethernet interface until cloud-init
+# or the console says otherwise. No MAC address from the build machine.
+network:
+  version: 2
+  ethernets:
+    all-en:
+      match:
+        name: "en*"
+      dhcp4: true
+      dhcp6: false
+      optional: true
+    all-eth:
+      match:
+        name: "eth*"
+      dhcp4: true
+      dhcp6: false
+      optional: true

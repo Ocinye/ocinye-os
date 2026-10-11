@@ -1,0 +1,59 @@
+# O construtor de imagens do Ocinye OS (D013): uma VM Linux descartável onde o
+# ocinye-image-builder corre como root — anexa discos com qemu-nbd e arranca
+# VMs de construção com QEMU. Nada disto corre no Mac do operador, e nada
+# escreve num disco amovível.
+#
+# Mesma base Ubuntu 24.04 Minimal fixada que as provas da D011. Virtualização
+# encaixada (M3+, macOS 15+): imagens arm64 arrancam com KVM; amd64 com TCG.
+#
+# Criada e destruída só por `scripts/image-build.sh`.
+vmType: vz
+arch: aarch64
+cpus: 4
+memory: 5GiB
+disk: 120GiB
+nestedVirtualization: true
+images:
+  - location: "https://cloud-images.ubuntu.com/minimal/releases/noble/release-20261001/ubuntu-24.04-minimal-cloudimg-arm64.img"
+    arch: aarch64
+    digest: "sha256:fbf6b15c50c474dc6dee5b3c74da212bb687a2625e877227828e6492d88dc151"
+mounts:
+  # O repositório, só de leitura (o builder lê infra/image e os binários).
+  # scripts/image-build.sh põe aqui o caminho da árvore (--set).
+  - location: "/nonexistent-ocinye-repo"
+    writable: false
+  # Pacotes de release D011 (entrada), só de leitura.
+  - location: "~/.cache/ocinye-installer-test/bundles"
+    writable: false
+  # Cache da base Ubuntu, chave de desenvolvimento e artefactos (saída).
+  - location: "~/.cache/ocinye-image-builder"
+    writable: true
+portForwards:
+  - guestPortRange: [1, 65535]
+    ignore: true
+containerd:
+  system: false
+  user: false
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euxo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y --no-install-recommends \
+        qemu-system-x86 qemu-system-arm qemu-efi-aarch64 ovmf qemu-utils \
+        cloud-image-utils gpgv xorriso squashfs-tools mtools dosfstools \
+        zstd minisign parted openssh-client curl ca-certificates git \
+        initramfs-tools-core cpio gdisk lvm2 mdadm e2fsprogs xfsprogs ntfs-3g \
+        cryptsetup-bin python3-virt-firmware
+      modprobe nbd max_part=16 || true
+      echo nbd > /etc/modules-load.d/nbd.conf
+      echo "options nbd max_part=16" > /etc/modprobe.d/nbd.conf
+      # syft is installed by scripts/image-build.sh from the mounted repo
+      # (infra/image/builder/install-syft.sh), which picks the binary for THIS
+      # builder VM's architecture (never the Ocinye target's) and verifies it
+      # against the pinned infra/image/builder/syft.sha256. Kept out of this
+      # static provision block so there is one architecture-aware source of
+      # truth instead of a hardcoded per-arch download here.
+      install -d -m 0755 /var/lib/ocinye-image-build

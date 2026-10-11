@@ -1,0 +1,77 @@
+#!/bin/sh
+# Builds the Ocinye block guard into the installation medium's initramfs
+# (D013 Live Mode, L0-S). Fails the build rather than produce an initramfs in
+# which the guard is absent or casper is not restrained.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+fail() {
+    echo "ocinye-blockguard: $*" >&2
+    exit 1
+}
+
+copy_exec /usr/sbin/blockdev /usr/sbin
+mkdir -p "${DESTDIR}/usr/lib/ocinye/guard"
+cp /usr/lib/ocinye/guard/blockguard-apply "${DESTDIR}/usr/lib/ocinye/guard/blockguard-apply" ||
+    fail "blockguard-apply missing"
+chmod 0755 "${DESTDIR}/usr/lib/ocinye/guard/blockguard-apply"
+
+# The medium is chosen by the OIE's own rules, in the initramfs.
+[ -x /usr/lib/ocinye/ocinye-oie ] || fail "ocinye-oie is not in this root"
+mkdir -p "${DESTDIR}/usr/lib/ocinye" "${DESTDIR}/conf"
+cp /usr/lib/ocinye/ocinye-oie "${DESTDIR}/usr/lib/ocinye/ocinye-oie" || fail "cannot copy ocinye-oie"
+chmod 0755 "${DESTDIR}/usr/lib/ocinye/ocinye-oie"
+# This build's media identity: the same value is in the medium's volume
+# descriptor. Without it nothing can be recognised as the medium.
+grep -q -x '[0-9a-f]\{32\}' /usr/lib/ocinye/guard/media-id || fail "no media identity in this root"
+cp /usr/lib/ocinye/guard/media-id "${DESTDIR}/conf/ocinye-media-id" || fail "cannot copy the media identity"
+
+mkdir -p "${DESTDIR}/usr/lib/udev/rules.d" "${DESTDIR}/scripts"
+cp /usr/lib/udev/rules.d/01-ocinye-blockguard.rules "${DESTDIR}/usr/lib/udev/rules.d/" ||
+    fail "udev rule missing"
+cp /usr/lib/ocinye/guard/casper-guard-functions "${DESTDIR}/scripts/ocinye-guard-functions" ||
+    fail "guard functions missing"
+
+# casper's search for its medium walks every block device and mounts what it
+# finds. Restrain it at the one place every branch passes through: with the
+# guard armed, only the device select-medium named is examined.
+casper="${DESTDIR}/scripts/casper"
+[ -f "$casper" ] || fail "no /scripts/casper in this initramfs"
+anchor='        devname=$(sys2dev "${sysblock}")'
+[ "$(grep -c -F -x "$anchor" "$casper")" = 1 ] ||
+    fail "casper's find_livefs loop is not where it was: review the guard"
+[ "$(grep -c -x 'find_livefs() {' "$casper")" = 1 ] ||
+    fail "casper's find_livefs is not where it was: review the guard"
+sed -i \
+    -e '/^find_livefs() {$/i . /scripts/ocinye-guard-functions\n' \
+    -e '/^        devname=\$(sys2dev "\${sysblock}")$/a\        ocinye_guard_skip "${devname}" \&\& continue' \
+    "$casper"
+grep -q -F -x '        ocinye_guard_skip "${devname}" && continue' "$casper" ||
+    fail "casper was not patched"
+grep -q -F -x '. /scripts/ocinye-guard-functions' "$casper" ||
+    fail "guard functions are not sourced"
+sh -n "$casper" || fail "patched casper does not parse"
+
+# casper activates every swap partition it finds on sd*, hd* and vd* disks
+# (casper-bottom/13swap), and the kernel accepts swap on a device whose
+# read-only flag is set: the flag does not stop it (observed, L0-S). With the
+# guard armed that step does nothing.
+swap="${DESTDIR}/scripts/casper-bottom/13swap"
+[ -f "$swap" ] || fail "no casper-bottom/13swap in this initramfs"
+[ "$(grep -c -F -x '. /scripts/casper-functions' "$swap")" = 1 ] ||
+    fail "casper's swap step is not where it was: review the guard"
+grep -q -w swapon "$swap" || fail "casper's swap step no longer calls swapon: review the guard"
+sed -i -e '/^\. \/scripts\/casper-functions$/a\[ -e /run/ocinye/guard ] \&\& exit 0' "$swap"
+grep -q -F -x '[ -e /run/ocinye/guard ] && exit 0' "$swap" || fail "casper's swap step was not restrained"
+sh -n "$swap" || fail "patched swap step does not parse"
+# Nothing else in the initramfs may turn swap on.
+others="$(grep -l -w swapon "${DESTDIR}"/scripts/*/* 2>/dev/null | grep -v '/casper-bottom/13swap$' || true)"
+[ -z "$others" ] || fail "another initramfs script calls swapon: $others"

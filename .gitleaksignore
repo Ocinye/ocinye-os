@@ -18,3 +18,16 @@
 # A impressão digital inclui a linha. Rodar a chave, ou movê-la, repõe o
 # vermelho — o que é próprio: cada chave nova merece ser vista uma vez.
 .env:generic-api-key:179
+
+# Imagens do Ocinye OS (D013, fase A). Quatro achados, nenhum é um segredo.
+#
+# A impressão digital da chave pública com que a Canonical assina os SHA256SUMS
+# da base Ubuntu: é pública por definição, e está no contrato e na base fixada
+# precisamente para ser conferida.
+crates/ocinye-image-contracts/src/manifest.rs:generic-api-key:802
+infra/image/base.json:generic-api-key:25
+# Vectores de teste do detector de segredos da inspecção offline: um cabeçalho
+# de chave privada sem chave e o identificador de exemplo da AWS. O teste existe
+# para provar que a inspecção os apanha numa imagem.
+services/image-builder/src/offline.rs:private-key:774
+services/image-builder/src/offline.rs:aws-access-token:778

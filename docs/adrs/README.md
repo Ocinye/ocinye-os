@@ -139,6 +139,11 @@ O que o Ocinye OS é, onde reside a autoridade, e sobre que runtime assenta.
 - [ADR-0023](0023-installation-plan-and-journal.md) — Plano de Instalação imutável e diário de instalação no servidor
 - [ADR-0024](0024-installer-tls-and-endpoints.md) — TLS do Installer v1 e pontos de acesso na instalação
 - [ADR-0025](0025-hardware-discovery-and-compute-boundary.md) — Descoberta de capacidades de hardware e a fronteira do futuro Nó de Computação
+- [ADR-0026](0026-release-and-image-signing.md) — Assinatura dos releases e das imagens do Ocinye OS
+- [ADR-0027](0027-image-builder-and-formats.md) — Ocinye OS Image Builder: base Ubuntu, formatos e reprodutibilidade
+- [ADR-0028](0028-first-boot-and-claim.md) — Primeiro arranque e reclamação (UNCLAIMED → CLAIMED)
+- [ADR-0029](0029-image-machine-instance-identity.md) — Identidades: imagem, máquina, instalação, Instância, organização, utilizador
+- [ADR-0030](0030-installation-media-boot-modes-and-live-storage-policy.md) — Modos de arranque do suporte de instalação e política de armazenamento da sessão Live
 
 ### 0100–0199 · Identidade, Segurança, Autorização e Governação
 
@@ -296,6 +301,11 @@ preencher.
 | [0023](0023-installation-plan-and-journal.md) | Plano de Instalação imutável e diário de instalação no servidor | Foundation | `MEDIUM` | Proposed |
 | [0024](0024-installer-tls-and-endpoints.md) | TLS do Installer v1 e pontos de acesso na instalação | Foundation | `MEDIUM` | Proposed |
 | [0025](0025-hardware-discovery-and-compute-boundary.md) | Descoberta de capacidades de hardware e a fronteira do futuro Nó de Computação | Compute | `MEDIUM` | Proposed |
+| [0026](0026-release-and-image-signing.md) | Assinatura dos releases e das imagens do Ocinye OS | Foundation | `HIGH` | Proposed |
+| [0027](0027-image-builder-and-formats.md) | Ocinye OS Image Builder: base Ubuntu, formatos e reprodutibilidade | Foundation | `HIGH` | Proposed |
+| [0028](0028-first-boot-and-claim.md) | Primeiro arranque e reclamação (UNCLAIMED → CLAIMED) | Foundation | `HIGH` | Proposed |
+| [0029](0029-image-machine-instance-identity.md) | Identidades: imagem, máquina, instalação, Instância, organização, utilizador | Foundation | `MEDIUM` | Proposed |
+| [0030](0030-installation-media-boot-modes-and-live-storage-policy.md) | Modos de arranque do suporte de instalação e política de armazenamento da sessão Live | Foundation | `HIGH` | Proposed |
 | [0100](0100-authorization-model.md) | RBAC + ABAC contextual, fail closed | Security | `FOUNDATIONAL` | Accepted |
 | [0101](0101-permissions-scopes-and-grants.md) | Permissões nomeadas, âmbitos e grants explícitos | Security | `HIGH` | Accepted |
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |

@@ -90,11 +90,12 @@ sem que nada falhe.
 
 **Existe e funciona hoje:**
 
-- **Monorepo Rust**, Cargo workspace com 7 crates (`ocinye-contracts`,
+- **Monorepo Rust**, Cargo workspace com 8 crates (`ocinye-contracts`,
   `ocinye-domain`, `ocinye-observability`, `ocinye-core`, `ocinye-capabilities`,
-  `ocinye-installer-contracts`, `ocinye-installer-controller`), 6 serviços
-  (`core-server`, `worker`, `node-agent`, `conversion-runner`,
-  `installer-bootstrap`, `release-tool`) e 1 aplicação (`apps/workspace`). Fora
+  `ocinye-installer-contracts`, `ocinye-installer-controller`,
+  `ocinye-image-contracts`), 9 serviços (`core-server`, `worker`, `node-agent`,
+  `conversion-runner`, `installer-bootstrap`, `release-tool`, `firstboot`,
+  `oie`, `image-builder`) e 1 aplicação (`apps/workspace`). Fora
   da workspace do host: a janela do Installer (`apps/installer`, Tauri) e uma
   capacidade WASM (`wasm/capabilities/bibtex-import`).
 - **Ocinye Core: `IMPLEMENTED` e em produção.** 254 caminhos e 302 operações
@@ -236,6 +237,26 @@ sem que nada falhe.
   final exige ainda uma VM `amd64` externa, e é um comando
   ([runbook](docs/runbooks/certify-installer-on-external-amd64-vm.md), `NOT_RUN`). ACME `DEFERRED`; assinatura do
   release `NOT_IMPLEMENTED`; modo fornecedor de computação não existe.
+- **Imagens do Ocinye OS (D013): fase A de código e endurecimento do
+  armazenamento (L0-H) em `main`, `PROVISIONAL_PENDING_D011_CERTIFICATION`** ([ADR-0026](docs/adrs/0026-release-and-image-signing.md) a
+  [ADR-0029](docs/adrs/0029-image-machine-instance-identity.md), `Proposed`;
+  [imagens](docs/install/images.md)). Construtor de ISO/QCOW2/RAW numa VM
+  descartável, primeiro arranque com reclamação por SSH (código de 125 bits na
+  consola ou chave provisionada) e ambiente de instalação com discos protegidos.
+  Só construções de desenvolvimento; canal estável bloqueado; nada publicado;
+  hardware físico `NOT_RUN`. O suporte arranca num de quatro modos tipados
+  (`ocinye.mode=`: `live`, `install`, `hardware-check`, `recovery`), com um menu
+  que espera pelo operador; só `install` alcança o código que escreve, e uma
+  guarda no initramfs põe todos os dispositivos de blocos em só-leitura em todos
+  os arranques do suporte; na instalação, só o disco confirmado por escrito no
+  OIE é libertado ([ADR-0030](docs/adrs/0030-installation-media-boot-modes-and-live-storage-policy.md),
+  `Proposed`). A [Prova de Segurança de Armazenamento](docs/install/live-storage-safety.md)
+  correu em bancada virtual: zero escritas nos discos-sentinela em todos os
+  modos, e os quatro achados de segurança do ambiente de arranque da instalação
+  (D013-SF-01 a 04) mais o da cópia do suporte num disco interno ficaram
+  resolvidos nessa bancada (L0-H). A frase «nada é escrito nos discos internos»
+  **não** está certificada: falta o hardware físico. Sem interface gráfica: os modos não
+  destrutivos têm só uma sessão de texto provisória.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
   `ocinye upgrade` faz checkpoint da base, troca o release, passa um portão de
@@ -630,8 +651,8 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **111 ADRs** em `docs/adrs/`, **13 runbooks** em `docs/runbooks/`,
-  **53 READMEs**, `docs/` povoado — incluindo
+- **116 ADRs** em `docs/adrs/`, **13 runbooks** em `docs/runbooks/`,
+  **59 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -647,7 +668,7 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1971 funções de teste** escritas na árvore, e **zero falhas** na última
+- **2112 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
@@ -1296,6 +1317,8 @@ services/core-server            services/worker
 services/node-agent             services/conversion-runner
 crates/ocinye-installer-contracts crates/ocinye-installer-controller
 services/installer-bootstrap    services/release-tool
+crates/ocinye-image-contracts   services/firstboot
+services/oie                    services/image-builder
 apps/installer (fora da workspace)
 wasm/capabilities/bibtex-import
 docs    infra    migrations    scripts

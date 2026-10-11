@@ -1,0 +1,38 @@
+#!/bin/sh
+# Ocinye block guard, part 1 of 3: before udev starts, arm the guard for this
+# boot of the installation medium (D013 Live Mode L0-S, install hardening L0-H).
+#
+# Armed in EVERY boot of the medium, the installer included. In the installer
+# the OIE releases exactly one disk, after its typed destructive confirmation;
+# in every other mode nothing is ever released. The same rule as
+# ocinye_image_contracts::bootmode::guard_must_arm.
+#
+# Never armed outside the medium (`boot=casper`): an installed system that
+# somehow carried this script must not lose its own disks.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+casper=0
+for x in $(cat /proc/cmdline); do
+    case "$x" in
+    -- | ---) break ;;
+    boot=casper) casper=1 ;;
+    esac
+done
+
+[ "$casper" = 1 ] || exit 0
+
+mkdir -p /run/ocinye /run/udev/rules.d
+echo armed >/run/ocinye/guard
+# No software RAID assembly and no LVM activation: an empty file in
+# /run/udev/rules.d replaces the rule of the same name, here and after the
+# switch to the real root (/run is carried over).
+: >/run/udev/rules.d/64-md-raid-assembly.rules
+: >/run/udev/rules.d/69-lvm.rules
+exit 0

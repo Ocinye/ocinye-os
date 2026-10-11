@@ -287,6 +287,14 @@ step "Política dos portões de segurança"
 # decisão, não o que as bases de advisories por acaso contêm hoje.
 python3 scripts/test_supply_chain.py
 
+step "Harness de certificação de imagens"
+# A lógica do harness de E2E das imagens, com as chamadas de sistema injectadas:
+# que uma falha de instalação preserva o disco e recolhe a prova OFFLINE (montagem
+# só de leitura, qemu-nbd sempre desligado), e que um sucesso em qualquer língua
+# não é lido como falha. Sem QEMU real nem nbd: a corrida longa da ISO não corre
+# aqui.
+python3 infra/image/e2e/test_image_e2e.py
+
 step "Advisories RustSec"
 # A CI corre `cargo audit` sempre. Localmente, a ferramenta pode não
 # estar instalada — e obrigar a instalá-la para correr o sweep seria atrito sem

@@ -32,7 +32,9 @@ import sys
 #
 # `Residency` guarda os locais institucionais como `OCINYE_CAMAMA` e
 # `OCINYE_COLOCATION`: são valores de um enum, e não configuração.
-NAO_SAO_VARIAVEIS = {"OCINYE_CAMAMA", "OCINYE_COLOCATION"}
+# Literais com a forma de uma variável que não o são: nomes de lugares, e as
+# etiquetas de volume do ISO e da sua ESP (D013, `services/image-builder`).
+NAO_SAO_VARIAVEIS = {"OCINYE_CAMAMA", "OCINYE_COLOCATION", "OCINYE_OS", "OCINYE_ESP"}
 
 
 def raiz() -> str:
