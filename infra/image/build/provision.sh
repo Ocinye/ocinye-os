@@ -343,6 +343,10 @@ stage_finalize() {
     oie)
       systemctl disable ssh.service ssh.socket cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
       systemctl enable ocinye-oie@tty1.service "ocinye-oie@$SERIAL.service"
+      # The installer window (ADR-0031): the same conversation as the text
+      # consoles, on the screen of a machine that has one. tty1 keeps the text
+      # installer until the screen is up, and gets it back if it cannot be.
+      systemctl enable seatd.service ocinye-oie-window.service ocinye-oie-seat-start.service
       touch /etc/cloud/cloud-init.disabled ;;
   esac
   rm -f /etc/ssh/sshd_config.d/00-ocinye-build.conf

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost; base-uri 'none'; form-action 'none'">
+<title>Ocinye OS</title>
+<link rel="stylesheet" href="sx.css">
+<link rel="stylesheet" href="installer.css">
+</head>
+<body>
+<main class="sx-screen oi-screen">
+  <div class="sx-brand"><svg class="sx-icon" aria-hidden="true" focusable="false"><use href="icons.svg#mark"></use></svg>Ocinye OS</div>
+  <section class="oi-console" aria-label="Ocinye OS">
+    <div id="transcript" class="oi-transcript" role="log" aria-live="polite" tabindex="0"></div>
+    <form id="answer" class="oi-answer">
+      <label id="prompt" class="oi-prompt" for="line"></label>
+      <div class="oi-answer__row">
+        <input id="line" class="sx-input" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="256">
+        <button class="sx-btn sx-btn--gold sx-btn--lg" type="submit">↵</button>
+      </div>
+    </form>
+    <p id="status" class="oi-status" role="status"></p>
+  </section>
+</main>
+<script src="installer.js"></script>
+</body>
+</html>

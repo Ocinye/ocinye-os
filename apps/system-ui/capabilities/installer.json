@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "installer",
+  "description": "The installation environment's window: read what the Installation Engine says and answer it, one line at a time. Nothing else: no system capability, no session, no filesystem, shell or network.",
+  "windows": ["installer"],
+  "permissions": ["allow-installer-poll", "allow-installer-send"]
+}

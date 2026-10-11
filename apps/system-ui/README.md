@@ -30,6 +30,14 @@ separado**, com uma janela chamada `workspace` que **nenhuma capacidade nomeia**
 `/var/lib/ocinye/seat/workspace-url`, escrito pela instalação; não é um argumento. Por
 ser outro processo, o compositor não o trata como superfície de confiança.
 
+## A janela do instalador
+
+`ocinye-system-ui --installer` é o ecrã de uma máquina arrancada do suporte de
+instalação. A janela chama-se `installer` e a sua capacidade concede dois
+comandos — `installer_poll` e `installer_send` — e nenhum dos do posto: mostra
+o que o Motor de Instalação diz e devolve-lhe uma linha de cada vez. O texto do
+motor entra no documento como texto, nunca como marcação.
+
 ## Primeiro arranque
 
 Sem Instância, o ecrã de entrada dá lugar a **Configurar este computador**

@@ -12,8 +12,12 @@
 
 #![forbid(unsafe_code)]
 
+use std::io::{Read, Write};
+use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use ocinye_system_client::{Client, ClientError, SessionClient};
@@ -73,6 +77,100 @@ fn workspace_address() -> Option<Url> {
     let url = Url::parse(text.trim()).ok()?;
     let local = matches!(url.host_str(), Some("127.0.0.1" | "localhost"));
     (url.scheme() == "https" || (url.scheme() == "http" && local)).then_some(url)
+}
+
+/// The argument that makes this program the installation environment's
+/// window: the screen of a machine started from the installation medium.
+const INSTALLER_MODE: &str = "--installer";
+
+/// Where the Installation Engine holds this boot's conversation for the
+/// window (`ocinye-oie run --window`).
+const INSTALLER_SOCKET: &str = "/run/ocinye/oie.sock";
+
+/// The window's end of the conversation with the Installation Engine.
+///
+/// The engine speaks in lines and waits for lines: the same conversation it
+/// holds on a terminal. This process carries text one way and one line the
+/// other; what is asked, what an answer means and what may be written to a
+/// disk are the engine's, and stay there.
+#[derive(Default)]
+struct Conversation {
+    stream: Mutex<Option<UnixStream>>,
+    /// What the engine said and the window has not shown yet.
+    unread: Arc<Mutex<Vec<u8>>>,
+    /// Set by the reader when the engine closes its end.
+    closed: Arc<AtomicBool>,
+}
+
+/// What the engine said since the last time, and whether it is still there.
+#[tauri::command]
+async fn installer_poll(conversation: State<'_, Conversation>) -> Result<Value, ()> {
+    let Ok(mut held) = conversation.stream.lock() else {
+        return Err(());
+    };
+    if held.is_some() && conversation.closed.load(Ordering::SeqCst) {
+        // The conversation ended; the unit starts the engine again, and the
+        // next one begins on a clean screen.
+        *held = None;
+        return Ok(json!({ "state": "CLOSED", "text": drain(&conversation.unread) }));
+    }
+    if held.is_none() {
+        let Ok(stream) = UnixStream::connect(INSTALLER_SOCKET) else {
+            return Ok(json!({ "state": "WAITING", "text": "" }));
+        };
+        let Ok(mut reader) = stream.try_clone() else {
+            return Ok(json!({ "state": "WAITING", "text": "" }));
+        };
+        conversation.closed.store(false, Ordering::SeqCst);
+        let (unread, closed) = (
+            Arc::clone(&conversation.unread),
+            Arc::clone(&conversation.closed),
+        );
+        std::thread::spawn(move || {
+            let mut buffer = [0_u8; 4096];
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if let Ok(mut unread) = unread.lock() {
+                            // A screen's worth is all a window can show: an
+                            // engine that says more than this is not talking
+                            // to a person.
+                            if unread.len() < 256 * 1024 {
+                                unread.extend_from_slice(&buffer[..n]);
+                            }
+                        }
+                    }
+                }
+            }
+            closed.store(true, Ordering::SeqCst);
+        });
+        *held = Some(stream);
+    }
+    Ok(json!({ "state": "OPEN", "text": drain(&conversation.unread) }))
+}
+
+fn drain(unread: &Mutex<Vec<u8>>) -> String {
+    let bytes = unread
+        .lock()
+        .map(|mut held| std::mem::take(&mut *held))
+        .unwrap_or_default();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// Answer the engine: one line, as a person would type it.
+#[tauri::command]
+async fn installer_send(conversation: State<'_, Conversation>, line: String) -> Result<bool, ()> {
+    if line.chars().count() > 256 || line.chars().any(char::is_control) {
+        return Ok(false);
+    }
+    let Ok(mut held) = conversation.stream.lock() else {
+        return Err(());
+    };
+    let Some(stream) = held.as_mut() else {
+        return Ok(false);
+    };
+    Ok(stream.write_all(format!("{line}\n").as_bytes()).is_ok())
 }
 
 /// The Workspace's window, while it is open.
@@ -165,27 +263,54 @@ async fn open_workspace(workspace: State<'_, Workspace>) -> Result<bool, ()> {
     Ok(held.is_some())
 }
 
+/// What this process is, by its one argument.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Role {
+    /// The seat's interface: sign-in, lock, the bar, System.
+    Seat,
+    /// The Workspace's window.
+    Workspace,
+    /// The installation environment's window.
+    Installer,
+}
+
 fn main() {
     let mut args = std::env::args().skip(1);
-    let workspace = match (args.next().as_deref(), args.next()) {
-        (None, _) => false,
-        (Some(WORKSPACE_MODE), None) => true,
+    let role = match (args.next().as_deref(), args.next()) {
+        (None, _) => Role::Seat,
+        (Some(WORKSPACE_MODE), None) => Role::Workspace,
+        (Some(INSTALLER_MODE), None) => Role::Installer,
         _ => {
-            eprintln!("usage: ocinye-system-ui [{WORKSPACE_MODE}]");
+            eprintln!("usage: ocinye-system-ui [{WORKSPACE_MODE} | {INSTALLER_MODE}]");
             std::process::exit(64);
         }
     };
     tauri::Builder::default()
         .manage(Workspace(Mutex::new(None)))
+        .manage(Conversation::default())
         .invoke_handler(tauri::generate_handler![
             session,
             system,
             binding,
             surface,
-            open_workspace
+            open_workspace,
+            installer_poll,
+            installer_send
         ])
         .setup(move |app| {
-            if workspace {
+            if role == Role::Installer {
+                // The window is called `installer`: its capability grants the
+                // conversation's two commands and none of the seat's.
+                WebviewWindowBuilder::new(
+                    app,
+                    "installer",
+                    WebviewUrl::App("installer.html".into()),
+                )
+                .title("Ocinye OS")
+                .decorations(false)
+                .fullscreen(true)
+                .build()?;
+            } else if role == Role::Workspace {
                 let address = workspace_address()
                     .ok_or("no Workspace address is recorded on this machine")?;
                 let origin = address.origin();

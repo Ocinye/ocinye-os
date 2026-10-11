@@ -1,0 +1,16 @@
+/* Ocinye OS · a janela do ambiente de instalação.
+   A conversa do Motor de Instalação, tal como ele a diz: esta janela dá-lhe
+   forma, não lhe acrescenta nem lhe tira nada. */
+.oi-screen { align-items: center; justify-content: center; padding: 4.5rem 2rem 2rem; }
+.oi-console { width: min(62rem, 100%); flex: 1; min-height: 0; display: flex; flex-direction: column; gap: .75rem; border-radius: 1.5rem; background: #FFFFFF; color: var(--ink); padding: 1.5rem 1.75rem; box-shadow: 0 24px 64px rgba(0,0,0,.4); }
+.oi-transcript { flex: 1; min-height: 0; overflow-y: auto; font: 400 .9375rem/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.oi-transcript:focus-visible { outline-offset: 4px; }
+.oi-line { margin: 0; min-height: 1.45em; }
+.oi-line--title { font: 700 1.25rem/1.3 var(--sans); color: var(--navy-900); margin: 1rem 0 .375rem; white-space: normal; }
+.oi-line--title:first-child { margin-top: 0; }
+.oi-answer { display: flex; flex-direction: column; gap: .375rem; border-top: 1px solid var(--muted); padding-top: .75rem; }
+.oi-answer[hidden] { display: none; }
+.oi-prompt { font-weight: 600; color: var(--navy-900); }
+.oi-answer__row { display: flex; gap: .5rem; }
+.oi-answer__row .sx-input { flex: 1; font-family: var(--mono); }
+.oi-status { margin: 0; font-size: .8125rem; color: var(--ink-3); min-height: 1.2em; }

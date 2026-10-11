@@ -1,0 +1,14 @@
+[Unit]
+Description=Ocinye Installation Environment: this boot's conversation, for the native window
+# The same engine, the same conversation and the same authority over disks as
+# on a terminal (ocinye-oie@.service): only the other end differs. The window
+# connects to /run/ocinye/oie.sock, which belongs to its account alone.
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/lib/ocinye/ocinye-oie run --window
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

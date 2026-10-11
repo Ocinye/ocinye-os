@@ -5,6 +5,8 @@
 //! ocinye-oie run --vt | --serial     this boot's mode on this terminal: the installer in
 //!                                    `ocinye.mode=install` (one console at a time), the
 //!                                    non-destructive session in every other mode
+//! ocinye-oie run --window           the same conversation, for the native window on
+//!                                    /run/ocinye/oie.sock (its account only)
 //! ocinye-oie policy                  the storage-policy verdict of this boot, JSON
 //! ocinye-oie select-medium           (initramfs) which device this system booted from
 //! ocinye-oie probe                   disks as the OIE classifies them, JSON (read-only)
@@ -556,6 +558,87 @@ fn load_facts() -> Option<OiePayload> {
     f.rootfs_sha256.is_valid().then_some(f)
 }
 
+/// The conversation of this boot — the installer in `ocinye.mode=install`,
+/// the non-destructive session in every other mode — over one reader and one
+/// writer. A terminal and the native window are the same thing to it: lines
+/// out, lines in. Nothing about what may be written, or to which disk, depends
+/// on which of them is at the other end.
+fn converse(input: &mut dyn std::io::BufRead, out: &mut dyn std::io::Write, serial: bool) -> i32 {
+    let _ = fs::create_dir_all("/run/ocinye-oie");
+    // The mode of this boot: read once, never changed.
+    let cmdline = fs::read_to_string("/proc/cmdline").unwrap_or_default();
+    let boot = ResolvedMode::from_cmdline(&cmdline);
+    let machine = Real {
+        facts: load_facts(),
+        console: std::cell::RefCell::new(None),
+        fault_injected: boot.verifier_fault_injected(),
+    };
+    let mut ui = flow::Ui {
+        lang: initial_lang(&cmdline),
+        serial,
+        input,
+        out,
+    };
+    // Which device this system booted from, and why it is trusted.
+    if let Ok(medium) = fs::read_to_string(MEDIUM_FILE) {
+        ui.say(&format!("OCINYE-MEDIUM {}", medium.trim()));
+    }
+    match InstallAuthority::from_mode(&boot) {
+        // Only `ocinye.mode=install` reaches the installer.
+        Some(authority) => match flow::run(&mut ui, &machine, &authority) {
+            flow::Outcome::Installed => 0,
+            flow::Outcome::Abandoned => 3,
+            flow::Outcome::Failed(e) => {
+                let _ = fs::write(
+                    "/run/ocinye-oie/failed.json",
+                    serde_json::to_string(&e).unwrap_or_default(),
+                );
+                // Keep the failure on screen until someone acts.
+                let mut line = String::new();
+                let _ = ui.input.read_line(&mut line);
+                1
+            }
+        },
+        None => match session::run(&mut ui, &machine, &boot, storage_safety_evidence()) {
+            session::SessionOutcome::Abandoned => 3,
+            session::SessionOutcome::Restarting | session::SessionOutcome::PoweringOff => {
+                // Leave the screen as it is until the machine goes.
+                std::thread::sleep(std::time::Duration::from_secs(600));
+                0
+            }
+        },
+    }
+}
+
+/// Where the native window reaches this boot's conversation.
+const WINDOW_SOCKET: &str = "/run/ocinye/oie.sock";
+/// The account the window runs as.
+const WINDOW_ACCOUNT: &str = "ocinye-ui";
+
+/// Wait for the native window and return its connection.
+///
+/// The socket belongs to the window's account and to nobody else (mode 0600):
+/// the kernel decides who may connect, before this program reads a byte. One
+/// connection is served; the unit starts another conversation when it ends.
+fn window_connection() -> std::io::Result<std::os::unix::net::UnixStream> {
+    use std::os::unix::fs::PermissionsExt;
+    let owner = fs::read_to_string("/etc/passwd")?
+        .lines()
+        .find_map(|l| {
+            let mut f = l.split(':');
+            (f.next() == Some(WINDOW_ACCOUNT))
+                .then(|| f.nth(1)?.parse::<u32>().ok())
+                .flatten()
+        })
+        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+    fs::create_dir_all("/run/ocinye")?;
+    let _ = fs::remove_file(WINDOW_SOCKET);
+    let listener = std::os::unix::net::UnixListener::bind(WINDOW_SOCKET)?;
+    fs::set_permissions(WINDOW_SOCKET, fs::Permissions::from_mode(0o600))?;
+    std::os::unix::fs::chown(WINDOW_SOCKET, Some(owner), None)?;
+    listener.accept().map(|(stream, _)| stream)
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let code = match args
@@ -565,53 +648,20 @@ fn main() {
         .as_slice()
     {
         ["run", console @ ("--vt" | "--serial")] => {
-            let _ = fs::create_dir_all("/run/ocinye-oie");
             let mut stdin = BufReader::new(std::io::stdin());
             let mut stdout = std::io::stdout();
-            // The mode of this boot: read once, never changed.
-            let cmdline = fs::read_to_string("/proc/cmdline").unwrap_or_default();
-            let boot = ResolvedMode::from_cmdline(&cmdline);
-            let machine = Real {
-                facts: load_facts(),
-                console: std::cell::RefCell::new(None),
-                fault_injected: boot.verifier_fault_injected(),
-            };
-            let mut ui = flow::Ui {
-                lang: initial_lang(&cmdline),
-                serial: *console == "--serial",
-                input: &mut stdin,
-                out: &mut stdout,
-            };
-            // Which device this system booted from, and why it is trusted.
-            if let Ok(medium) = fs::read_to_string(MEDIUM_FILE) {
-                ui.say(&format!("OCINYE-MEDIUM {}", medium.trim()));
-            }
-            match InstallAuthority::from_mode(&boot) {
-                // Only `ocinye.mode=install` reaches the installer.
-                Some(authority) => match flow::run(&mut ui, &machine, &authority) {
-                    flow::Outcome::Installed => 0,
-                    flow::Outcome::Abandoned => 3,
-                    flow::Outcome::Failed(e) => {
-                        let _ = fs::write(
-                            "/run/ocinye-oie/failed.json",
-                            serde_json::to_string(&e).unwrap_or_default(),
-                        );
-                        // Keep the failure on screen until someone acts.
-                        let mut line = String::new();
-                        let _ = std::io::BufRead::read_line(&mut stdin, &mut line);
-                        1
-                    }
-                },
-                None => match session::run(&mut ui, &machine, &boot, storage_safety_evidence()) {
-                    session::SessionOutcome::Abandoned => 3,
-                    session::SessionOutcome::Restarting | session::SessionOutcome::PoweringOff => {
-                        // Leave the screen as it is until the machine goes.
-                        std::thread::sleep(std::time::Duration::from_secs(600));
-                        0
-                    }
-                },
-            }
+            converse(&mut stdin, &mut stdout, *console == "--serial")
         }
+        ["run", "--window"] => match window_connection() {
+            Ok(stream) => match stream.try_clone() {
+                Ok(mut out) => converse(&mut BufReader::new(stream), &mut out, false),
+                Err(_) => 1,
+            },
+            Err(e) => {
+                eprintln!("ocinye-oie: a janela não se ligou: {}", e.kind());
+                1
+            }
+        },
         ["select-medium"] => {
             // Runs in the initramfs, before casper looks for anything: which
             // block device is the medium this system booted from. Mounts

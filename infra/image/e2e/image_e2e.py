@@ -11,6 +11,7 @@ prints one RESULT line: PASS, FAIL or INVALID (harness/infrastructure).
   image_e2e.py raw   --raw-zst F --raw-sha256 H --arch A --work D
   image_e2e.py iso   --iso F --arch A --work D
   image_e2e.py seat  --qcow2 F --arch A --work D [--memory MiB]
+  image_e2e.py window --iso F --arch A --work D
 
 Stdlib only. Test keys are generated per run under --work; no secret is
 printed (codes are redacted in the log, compared in memory).
@@ -1260,9 +1261,93 @@ def scenario_iso(a):
     return r.finish(work, invalid=invalid)
 
 
+def scenario_window(a):
+    """The installer window (ADR-0031): an installation done at the screen.
+
+    The medium is started in a guest with a display; Install is chosen at the
+    keyboard, and the whole conversation — continue, the disk, the typed
+    confirmation — is held in the native window, never on the serial line.
+    The serial line is then asked to continue and is told the installation
+    belongs to another console; the installed disk boots to an unclaimed
+    Ocinye OS. The engine is the one the text installer uses: this scenario
+    is about the window reaching it, not about what it does to a disk, which
+    `iso` proves.
+    """
+    r = Results(f"window-{a.arch}")
+    work = a.work
+    target = os.path.join(work, "target.qcow2")
+    shots = os.path.join(work, "screens")
+    os.makedirs(shots, exist_ok=True)
+    invalid = None
+    try:
+        sh("qemu-img", "create", "-q", "-f", "qcow2", target, "40G")
+        vm = Vm("window", a.arch, work, memory=3072)
+        vm.start([{"file": target, "serial": "OCY-TARGET-7F3A"}], cdrom=a.iso, net=False, screen=True)
+        vm.expect(r"Experimentar o Ocinye OS", 600)
+        time.sleep(10)
+        # Install, chosen on the machine's own keyboard.
+        vm.press("i")
+        vm.expect(r"Instalar o Ocinye OS neste computador", 1800)
+        time.sleep(60)
+        first = vm.screenshot(os.path.join(shots, "1-welcome.png"))
+        r.check("window: the screen shows the installer", png_is_a_picture(first))
+        vm.press("ret")
+        time.sleep(8)
+        vm.screenshot(os.path.join(shots, "2-disks.png"))
+        # The serial line is the other console: it is refused, in words.
+        vm.buf = ""
+        vm.send("\r")
+        try:
+            vm.expect(r"(noutra consola|another console)", 60)
+            other = True
+        except TimeoutError:
+            other = False
+        r.check("window: the installation belongs to the window, and the serial console is told so", other)
+        # One disk can be chosen; its row is the first or the second. A number
+        # that names a protected row lists the disks again, and the token typed
+        # at that prompt is not a number: nothing happens until the right pair.
+        for row in ("1", "2"):
+            vm.type(row)
+            vm.press("ret")
+            time.sleep(4)
+            vm.type("7F3A")
+            vm.press("ret")
+            time.sleep(6)
+        vm.screenshot(os.path.join(shots, "3-installing.png"))
+        time.sleep(90)
+        info = json.loads(sh("qemu-img", "info", "-U", "--output", "json", target).stdout)
+        r.check("window: the confirmation typed in the window started the installation", info.get("actual-size", 0) > (64 << 20), info.get("actual-size"))
+        # When it is done the window asks for Enter and the machine restarts
+        # from the installed disk, whose console says it is unclaimed. Enter is
+        # pressed every half minute: while the installation runs there is no
+        # field for it to land in.
+        vm.buf = ""
+        booted = False
+        end = time.time() + 5400
+        n = 0
+        while time.time() < end:
+            try:
+                vm.expect(UNCLAIMED_RX, 30)
+                booted = True
+                break
+            except TimeoutError:
+                n += 1
+                if n % 10 == 1:
+                    vm.screenshot(os.path.join(shots, f"4-progress-{n // 10}.png"))
+                vm.press("ret")
+        r.check("window: installed from the window, and the installed system started", booted)
+        vm.stop()
+        if booted:
+            ident = installed_root_identity(target)
+            r.check("window: the installed boot configuration resolves to the target's own root", ident["ok"], ident["detail"])
+    except Exception as e:  # noqa: BLE001
+        invalid = f"{type(e).__name__}: {e}"
+    return r.finish(work, invalid=invalid)
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("scenario", choices=["virt", "raw", "iso", "seat"])
+    p.add_argument("scenario", choices=["virt", "raw", "iso", "seat", "window"])
     p.add_argument("--arch", required=True, choices=["amd64", "arm64"])
     p.add_argument("--work", required=True)
     p.add_argument("--qcow2")
@@ -1273,7 +1358,7 @@ def main():
     a = p.parse_args()
     os.makedirs(a.work, exist_ok=True)
     try:
-        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso, "seat": scenario_seat}[a.scenario](a)
+        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso, "seat": scenario_seat, "window": scenario_window}[a.scenario](a)
     finally:
         # No guest outlives its scenario, whatever happened.
         for vm in RUNNING:

@@ -48,6 +48,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mais nada; a janela do Workspace é outro processo, sem comandos.
 - `network.status` passa a dar os endereços de cada interface (lidos de
   `ip -json` pelo executor endurecido); antes vinham sempre vazios.
+- **Janela do instalador**: no suporte de instalação, uma máquina com ecrã
+  mostra o instalador (e o Live e a verificação de hardware) numa janela
+  nativa. É a mesma conversa do Motor de Instalação que os terminais têm
+  (`ocinye-oie run --window`, por um socket que só a conta do ecrã abre): a
+  janela mostra o que ele diz e devolve uma linha; o que se escreve num disco
+  continua a ser decidido onde era. Sem prova numa imagem construída.
 - **Activação local**: uma máquina sem Instância cria-a no seu próprio ecrã,
   sem rede nem outro computador — o System Service (`activation.*`) corre o
   instalador do release que a imagem traz, com sete valores tipados e sem
