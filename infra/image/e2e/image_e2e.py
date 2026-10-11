@@ -11,6 +11,7 @@ prints one RESULT line: PASS, FAIL or INVALID (harness/infrastructure).
   image_e2e.py raw   --raw-zst F --raw-sha256 H --arch A --work D
   image_e2e.py iso   --iso F --arch A --work D
   image_e2e.py seat  --qcow2 F --arch A --work D [--memory MiB]
+  image_e2e.py window --iso F --arch A --work D
 
 Stdlib only. Test keys are generated per run under --work; no secret is
 printed (codes are redacted in the log, compared in memory).
@@ -1260,9 +1261,162 @@ def scenario_iso(a):
     return r.finish(work, invalid=invalid)
 
 
+def scenario_window(a):
+    """The graphical installer (ADR-0031): an installation done with controls.
+
+    The medium is started in a guest with a display; Install is chosen at the
+    keyboard, and from there every step is a control of the installer's own
+    window, reached on the machine's keyboard: Start, the language, the
+    compatibility summary, a disk card, the review, the confirmation dialog and
+    Restart. Nothing is answered on a console: the serial line is tried and is
+    told the installation belongs elsewhere. What the bench waits on is the
+    engine's own trace of the typed exchange (`OCINYE-WINDOW …`), which only
+    the window's host writes — so a step observed there was reached through
+    the window. The engine is the one the text installer uses: this scenario
+    is about the window driving it, not about what it does to a disk, which
+    `iso` proves.
+    """
+    r = Results(f"window-{a.arch}")
+    work = a.work
+    target = os.path.join(work, "target.qcow2")
+    shots = os.path.join(work, "screens")
+    os.makedirs(shots, exist_ok=True)
+    invalid = None
+
+    def reached(vm, what, timeout):
+        try:
+            vm.expect(rf"OCINYE-WINDOW {what}\b", timeout)
+            return True
+        except TimeoutError:
+            return False
+
+    class Stopped(Exception):
+        """A step the window did not reach: what follows cannot be asked."""
+
+    def need(name, ok, detail=""):
+        r.check(name, ok, detail)
+        if not ok:
+            raise Stopped(name)
+
+    def size():
+        return json.loads(sh("qemu-img", "info", "-U", "--output", "json", target).stdout).get("actual-size", 0)
+
+    try:
+        sh("qemu-img", "create", "-q", "-f", "qcow2", target, "40G")
+        vm = Vm("window", a.arch, work, memory=3072)
+        vm.start([{"file": target, "serial": "OCY-TARGET-7F3A"}], cdrom=a.iso, net=False, screen=True)
+        vm.expect(r"Experimentar o Ocinye OS", 600)
+        time.sleep(10)
+        # Install, chosen on the machine's own keyboard.
+        vm.press("i")
+        need("window: the installer's window reached the engine", reached(vm, "step=WELCOME", 1800))
+        time.sleep(20)
+        first = vm.screenshot(os.path.join(shots, "1-welcome.png"))
+        r.check("window: the screen shows the installer", png_is_a_picture(first))
+        # Start, then the language page's Continue: both are the focused control.
+        vm.press("ret")
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "2-language.png"))
+        vm.press("ret")
+        need("window: Continue on the language step asked the engine to begin", reached(vm, "step=COMPATIBILITY", 300))
+        # The window now holds the installation. The serial line is the other
+        # console: an answer there is refused, in words.
+        vm.send("\r")
+        try:
+            vm.expect(r"(noutra consola|another console)", 30)
+            other = True
+        except TimeoutError:
+            other = False
+        r.check("window: the serial console cannot drive the installation and is told so", other)
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "3-compatibility.png"))
+        vm.press("ret")
+        need("window: Continue on the compatibility summary opened storage", reached(vm, "step=STORAGE", 300))
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "4-storage.png"))
+        # No disk is chosen until a card is: Enter on the focused card chooses
+        # it and moves to Continue; Enter there sends the choice.
+        vm.press("ret")
+        time.sleep(3)
+        vm.screenshot(os.path.join(shots, "5-storage-chosen.png"))
+        vm.press("ret")
+        need("window: a disk card was chosen with the keyboard, and the engine selected it", reached(vm, "selected=vd[a-z]", 120))
+        need("window: the engine showed the review", reached(vm, "step=REVIEW", 60))
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "6-review.png"))
+        # The destructive action opens the confirmation dialog.
+        vm.press("ret")
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "7-confirm-empty.png"))
+        # A wrong confirmation: the action stays disabled, and Enter does
+        # nothing — the engine is never asked to confirm, and nothing is written.
+        before = size()
+        vm.type("0000")
+        time.sleep(4)
+        vm.press("ret")
+        time.sleep(12)
+        vm.screenshot(os.path.join(shots, "8-confirm-wrong.png"))
+        with vm.lock:
+            asked = "OCINYE-WINDOW confirmation=" in vm.buf or "OCINYE-WINDOW step=INSTALLING" in vm.buf
+        r.check("window: a wrong confirmation leaves the action disabled; the engine is not asked", not asked)
+        r.check("window: nothing was written after the wrong confirmation", size() == before, f"{before} -> {size()}")
+        for _ in range(4):
+            vm.press("backspace")
+            time.sleep(0.1)
+        vm.type("7F3A")
+        time.sleep(5)
+        vm.screenshot(os.path.join(shots, "9-confirm-right.png"))
+        vm.press("ret")
+        need("window: the confirmation typed in the dialog was accepted by the engine", reached(vm, "confirmation=accepted", 120))
+        need("window: the installation started", reached(vm, "step=INSTALLING", 120))
+        time.sleep(60)
+        vm.screenshot(os.path.join(shots, "10-installing.png"))
+        done = reached(vm, "step=INSTALLED", 5400)
+        r.check("window: the installation wrote the chosen disk", size() > (64 << 20), size())
+        r.check("window: the engine finished and the window was told", done)
+        time.sleep(6)
+        vm.screenshot(os.path.join(shots, "11-installed.png"))
+        # Restart is the focused control: the machine goes down and its
+        # firmware starts again. The window says to remove the medium when it
+        # does; the bench removes it, and the installed disk starts on its own,
+        # its console saying it is unclaimed.
+        restarted = False
+        if done:
+            vm.press("ret")
+            try:
+                vm.expect(r"(Stopped target graphical\.target|Reached target reboot\.target|reboot: Restarting system)", 600)
+                vm.expect(r"(GNU GRUB|BdsDxe|UEFI firmware|EFI stub)", 900)
+                restarted = True
+            except TimeoutError:
+                restarted = False
+        r.check("window: Restart was pressed in the window, and the machine restarted", restarted)
+        vm.stop()
+        booted = False
+        if restarted:
+            # Offline, before the installed disk is started and its journal
+            # is in use: the boot configuration names the target's own root.
+            ident = installed_root_identity(target)
+            r.check("window: the installed boot configuration resolves to the target's own root", ident["ok"], ident["detail"])
+            vm2 = Vm("window", a.arch, work, memory=2048)
+            vm2.start([{"file": target, "serial": "OCY-TARGET-7F3A", "boot": True}])
+            try:
+                vm2.expect(UNCLAIMED_RX, BOOT_BUDGET)
+                booted = True
+            except TimeoutError:
+                booted = False
+            vm2.stop()
+        r.check("window: with the medium removed, the installed system started", booted)
+    except Stopped:
+        vm.screenshot(os.path.join(shots, "stopped.png"))
+        vm.stop()
+    except Exception as e:  # noqa: BLE001
+        invalid = f"{type(e).__name__}: {e}"
+    return r.finish(work, invalid=invalid)
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("scenario", choices=["virt", "raw", "iso", "seat"])
+    p.add_argument("scenario", choices=["virt", "raw", "iso", "seat", "window"])
     p.add_argument("--arch", required=True, choices=["amd64", "arm64"])
     p.add_argument("--work", required=True)
     p.add_argument("--qcow2")
@@ -1273,7 +1427,7 @@ def main():
     a = p.parse_args()
     os.makedirs(a.work, exist_ok=True)
     try:
-        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso, "seat": scenario_seat}[a.scenario](a)
+        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso, "seat": scenario_seat, "window": scenario_window}[a.scenario](a)
     finally:
         # No guest outlives its scenario, whatever happened.
         for vm in RUNNING:

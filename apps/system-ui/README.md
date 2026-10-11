@@ -30,6 +30,38 @@ separado**, com uma janela chamada `workspace` que **nenhuma capacidade nomeia**
 `/var/lib/ocinye/seat/workspace-url`, escrito pela instalação; não é um argumento. Por
 ser outro processo, o compositor não o trata como superfície de confiança.
 
+## O instalador gráfico
+
+`ocinye-system-ui --installer` é o ecrã de uma máquina arrancada do suporte de
+instalação: um assistente (`ui/installer.html`, `installer.js`, `installer.css`,
+`installer-strings.js`) com o desenho da proposta oficial. A janela chama-se
+`installer` e a sua capacidade concede dois comandos — `installer_poll` e
+`installer_send` — e nenhum dos do posto.
+
+É um **cliente** do Motor de Instalação. Recebe `WindowEvent` e envia
+`WindowAction` (`ocinye_image_contracts::window`), tipados nos dois sentidos: o
+anfitrião Rust recusa uma acção que não seja do contrato. O assistente desenha
+o estado que o motor diz — compatibilidade, discos, revisão, progresso — e não
+decide nada sobre discos:
+
+- um disco só é escolhível quando o motor o classifica como `ELIGIBLE`; o
+  suporte de instalação e os protegidos aparecem trancados;
+- nenhum disco vem escolhido;
+- o botão destrutivo do diálogo de confirmação só fica activo depois de o
+  **motor** responder que o texto escrito está certo (`confirmation_checked`),
+  e o motor volta a decidir quando recebe `confirm`;
+- nomes de modelo e números de série entram no documento como texto.
+
+Letra monoespaçada só em números de série, somas, caminhos de dispositivo e
+detalhe de diagnóstico. Um texto com `{…}` por preencher ou uma chave sem
+tradução é contado (`OI_UNRESOLVED`, `OI_MISSING`) e a bancada exige zero.
+
+Bancada sem máquina: `ui-tests/installer.html` com `#ok`, `#blocked`, `#fail`,
+`#elsewhere`, `#key`. Prova numa imagem: `scripts/image-e2e.sh window`.
+
+**Não existe** passo de teclado nem de rede: o motor não os tem. O Live e a
+verificação de hardware ficam nas consolas de texto.
+
 ## Primeiro arranque
 
 Sem Instância, o ecrã de entrada dá lugar a **Configurar este computador**

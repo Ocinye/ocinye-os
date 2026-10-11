@@ -1,0 +1,15 @@
+[Unit]
+Description=Ocinye Installation Environment: bring the screen up on a machine that has one
+ConditionPathExistsGlob=/dev/dri/card*
+# The window is the installer. The non-destructive sessions (Live, Hardware
+# Check, Recovery) keep to the text consoles.
+ConditionKernelCommandLine=ocinye.mode=install
+After=systemd-udev-settle.service systemd-user-sessions.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --no-block start ocinye-oie-display.service
+
+[Install]
+WantedBy=multi-user.target

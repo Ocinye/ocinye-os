@@ -48,13 +48,31 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mais nada; a janela do Workspace é outro processo, sem comandos.
 - `network.status` passa a dar os endereços de cada interface (lidos de
   `ip -json` pelo executor endurecido); antes vinham sempre vazios.
+- **Instalador gráfico**: no suporte de instalação, uma máquina com ecrã
+  instala por um assistente nativo — boas-vindas e idioma, compatibilidade,
+  discos em fichas (o suporte de instalação e os discos protegidos trancados,
+  nenhum escolhido à partida, caminhos de dispositivo só em «Detalhes»),
+  revisão, um diálogo de confirmação destrutiva, progresso por etapas e
+  reinício —, em pt/en/fr, com o desenho da proposta oficial. A janela é um
+  cliente: troca estados e acções tipados com o Motor de Instalação
+  (`ocinye_image_contracts::window`, `ocinye-oie run --window`, por um socket
+  que só a conta do ecrã abre) e não decide nada. É o motor que diz se a
+  confirmação escrita está certa, e volta a decidir quando a recebe; a acção
+  destrutiva só fica disponível depois disso. Os terminais (VT e série)
+  continuam, como recurso. O Live e a verificação de hardware ficam nas
+  consolas de texto. Passos de teclado e de rede **não existem**: o motor não
+  os tem. Provado numa ISO `arm64` construída (`image-e2e.sh window`): a
+  instalação inteira só por controlos da janela, e o arranque do instalado.
+- Corrigido «Apagar o disco {d}?»: o título da confirmação saía com o campo por
+  preencher. Dois testes recusam um texto mostrado com `{…}` ou `${…}` por
+  resolver, e o assistente tem a mesma guarda.
 - **Activação local**: uma máquina sem Instância cria-a no seu próprio ecrã,
   sem rede nem outro computador — o System Service (`activation.*`) corre o
   instalador do release que a imagem traz, com sete valores tipados e sem
   shell; a credencial do primeiro administrador é entregue uma vez. O ecrã
   gráfico passa a arrancar em qualquer máquina com dispositivo de ecrã, a
   consola de texto fica em `Ctrl+Alt+F2`, e o compositor passa essas teclas ao
-  núcleo. Sem prova numa imagem construída.
+  núcleo. Provado numa imagem `arm64` construída (`image-e2e.sh seat`).
 - **Inscrição do segundo factor no ecrã da máquina**: uma conta que o exige e
   ainda não o tem (o primeiro administrador) inscreve-o ali — a chave do
   autenticador, o código, e os códigos de recuperação mostrados uma vez — pelos
@@ -79,7 +97,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **O posto na imagem**: as imagens instaláveis trazem os dois serviços, o
   compositor e a interface, com as suas unidades. O ecrã gráfico só arranca
   depois de haver uma Instância ligada; até lá `tty1` é da consola de texto e
-  do seu código de emparelhamento. Sem prova numa imagem construída.
+  do seu código de emparelhamento. Provado numa imagem `arm64` construída.
 - **Porta da própria máquina**: o proxy publica `127.0.0.1:8480`, só no
   loopback, e por ela passam apenas entrar, o segundo factor, a política de
   sessão e a sua chave, e sair. O Core continua sem porto no host.

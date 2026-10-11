@@ -8,6 +8,8 @@ fn main() {
             "binding",
             "surface",
             "open_workspace",
+            "installer_poll",
+            "installer_send",
         ]),
     ))
     .expect("tauri build");

@@ -22,6 +22,8 @@ tauri-build = { version = "2.7", features = [] }
 [dependencies]
 ocinye-system-contracts = { path = "../../crates/ocinye-system-contracts" }
 ocinye-system-client = { path = "../../crates/ocinye-system-client" }
+# The typed exchange with the Installation Engine (the installer window).
+ocinye-image-contracts = { path = "../../crates/ocinye-image-contracts" }
 tauri = { version = "2.12", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

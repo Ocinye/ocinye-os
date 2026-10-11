@@ -1,0 +1,37 @@
+[Unit]
+Description=Ocinye Installation Environment: the screen (compositor and the installer window)
+# Never part of the boot transaction, for the reason given in the installed
+# system's ocinye-display.service: ocinye-oie-seat-start.service starts it, on
+# a machine with a display device. If the screen cannot be brought up, tty1
+# goes back to the text installer instead of staying dark.
+ConditionPathExistsGlob=/dev/dri/card*
+StartLimitIntervalSec=120
+StartLimitBurst=5
+OnFailure=ocinye-oie@tty1.service
+After=systemd-user-sessions.service seatd.service ocinye-oie-window.service
+Requires=seatd.service
+Wants=ocinye-oie-window.service
+Conflicts=getty@tty1.service ocinye-oie@tty1.service
+After=getty@tty1.service ocinye-oie@tty1.service
+
+[Service]
+User=ocinye-ui
+Environment=LIBSEAT_BACKEND=seatd
+Environment=XDG_RUNTIME_DIR=/run/ocinye-ui
+Environment=XDG_SESSION_TYPE=wayland
+RuntimeDirectory=ocinye-ui
+RuntimeDirectoryMode=0700
+WorkingDirectory=/var/lib/ocinye-ui
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+# The program the compositor starts is fixed here, and nowhere else. With no
+# Session Service on the medium, the compositor shows this window and nothing
+# else, whatever connects to it.
+ExecStart=/usr/lib/ocinye/ocinye-compositor -- /usr/lib/ocinye/ocinye-system-ui --installer
+Restart=always
+RestartSec=2
