@@ -33,7 +33,7 @@ teste que mede isso (`nenhuma_capacidade_e_um_executor_generico`).
 Não se editam à mão. Depois de uma mudança deliberada ao contrato:
 
 ```bash
-OCINYE_UPDATE_BINDINGS=1 cargo test -p ocinye-system-contracts --test bindings
+OCINYE_TEST_UPDATE_BINDINGS=1 cargo test -p ocinye-system-contracts --test bindings
 ```
 
 O mesmo teste, sem a variável, falha quando as ligações versionadas diferem das

@@ -3,7 +3,7 @@
 //! cannot change without its bindings, and nobody edits them by hand.
 //!
 //! To update after a deliberate contract change:
-//!   OCINYE_UPDATE_BINDINGS=1 cargo test -p ocinye-system-contracts --test bindings
+//!   OCINYE_TEST_UPDATE_BINDINGS=1 cargo test -p ocinye-system-contracts --test bindings
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -54,7 +54,7 @@ fn as_ligacoes_typescript_sao_as_geradas_dos_contratos() {
         generated.len()
     );
 
-    if std::env::var_os("OCINYE_UPDATE_BINDINGS").is_some() {
+    if std::env::var_os("OCINYE_TEST_UPDATE_BINDINGS").is_some() {
         let _ = fs::remove_dir_all(&committed);
         fs::create_dir_all(&committed).unwrap();
         for (name, text) in &generated {
@@ -75,6 +75,6 @@ fn as_ligacoes_typescript_sao_as_geradas_dos_contratos() {
     assert!(
         stale.is_empty() && orphan.is_empty(),
         "bindings differ from the contracts (stale or missing: {stale:?}; no longer generated: {orphan:?}); \
-         regenerate with OCINYE_UPDATE_BINDINGS=1"
+         regenerate with OCINYE_TEST_UPDATE_BINDINGS=1"
     );
 }
