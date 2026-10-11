@@ -258,10 +258,11 @@ sem que nada falhe.
   modos, e os quatro achados de segurança do ambiente de arranque da instalação
   (D013-SF-01 a 04) mais o da cópia do suporte num disco interno ficaram
   resolvidos nessa bancada (L0-H). A frase «nada é escrito nos discos internos»
-  **não** está certificada: falta o hardware físico. Sem interface gráfica: os modos não
-  destrutivos têm só uma sessão de texto provisória.
-- **Ocinye System Service: primeiro bloco `IMPLEMENTED`, sem prova numa
-  imagem** ([ADR-0031](docs/adrs/0031-rust-system-authority-and-native-system-surfaces.md),
+  **não** está certificada: falta o hardware físico. Os modos não
+  destrutivos têm só uma sessão de texto provisória; a instalação tem um
+  assistente gráfico (abaixo).
+- **Ocinye System Service: primeiro bloco `IMPLEMENTED`, provado numa imagem
+  `arm64` construída** ([ADR-0031](docs/adrs/0031-rust-system-authority-and-native-system-surfaces.md),
   `Proposed`). A autoridade sobre a máquina instalada é um serviço Rust
   privilegiado com um catálogo fechado de capacidades tipadas
   (`ocinye-system-contracts`): nenhuma recebe um comando, e um teste mede isso.
@@ -273,7 +274,7 @@ sem que nada falhe.
   (`ocinye-system`). Fazem trabalho real o estado e o inventário, a rede
   (leitura), energia, brilho, hora, idioma, teclado e acesso remoto; **Wi-Fi,
   Bluetooth, som, ecrãs e aplicação de actualizações respondem
-  `NOT_IMPLEMENTED`**. O **Session Service** está `IMPLEMENTED`, sem prova numa imagem: entrar
+  `NOT_IMPLEMENTED`**. O **Session Service** está `IMPLEMENTED`: entrar
   com política assinada pelo Core, bloquear, desbloquear sem o Core dentro da
   política (verificador Argon2id local), espera crescente, prova fresca de uso
   único consumida só pelo System Service. A **ligação ao Core** existe: o Session Service entra pelo
@@ -288,9 +289,22 @@ sem que nada falhe.
   mais nenhuma é mostrada. A **permissão de operador** vem do Core: a política de sessão assinada
   diz se o membro administra a plataforma (com segundo factor satisfeito,
   ADR-0107), e é só isso que o System Service pergunta antes de uma capacidade
-  de operador. As imagens instaláveis trazem o posto e as suas unidades, **sem
-  prova numa imagem construída**; nada disto correu em `amd64` nem em hardware
-  físico.
+  de operador. As imagens instaláveis trazem o posto e as suas unidades, e
+  uma máquina sem Instância cria-a no seu próprio ecrã (**activação local**,
+  `activation.*`, com o instalador do release que a imagem traz). Provado numa
+  imagem QCOW2 `arm64` construída (`scripts/image-e2e.sh seat`): configuração
+  no primeiro arranque, credencial do primeiro administrador entregue uma vez,
+  primeiro acesso com mudança de palavra-passe e inscrição do segundo factor,
+  sessão de operador, janela do Workspace, bloqueio e desbloqueio, reinício. O
+  suporte de instalação traz um **instalador gráfico** — um assistente que é
+  cliente tipado do Motor de Instalação (`ocinye_image_contracts::window`) e
+  não decide nada sobre discos —, provado numa ISO `arm64` construída
+  (`scripts/image-e2e.sh window`): instalação completa só por controlos da
+  janela, confirmação errada recusada sem escrita, e arranque do sistema
+  instalado. O assistente **não tem** passos de teclado nem de rede; o Live e a
+  verificação de hardware ficam em consolas de texto; o Workspace pede a sua
+  própria entrada (sem sessão única com o posto). Nada disto correu em
+  hardware físico; o leitor de ecrã não foi certificado.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
   `ocinye upgrade` faz checkpoint da base, troca o release, passa um portão de

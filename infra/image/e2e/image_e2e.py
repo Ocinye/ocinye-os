@@ -1393,6 +1393,10 @@ def scenario_window(a):
         vm.stop()
         booted = False
         if restarted:
+            # Offline, before the installed disk is started and its journal
+            # is in use: the boot configuration names the target's own root.
+            ident = installed_root_identity(target)
+            r.check("window: the installed boot configuration resolves to the target's own root", ident["ok"], ident["detail"])
             vm2 = Vm("window", a.arch, work, memory=2048)
             vm2.start([{"file": target, "serial": "OCY-TARGET-7F3A", "boot": True}])
             try:
@@ -1402,9 +1406,6 @@ def scenario_window(a):
                 booted = False
             vm2.stop()
         r.check("window: with the medium removed, the installed system started", booted)
-        if booted:
-            ident = installed_root_identity(target)
-            r.check("window: the installed boot configuration resolves to the target's own root", ident["ok"], ident["detail"])
     except Stopped:
         vm.screenshot(os.path.join(shots, "stopped.png"))
         vm.stop()
