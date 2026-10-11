@@ -40,4 +40,3 @@ ExecStart=/usr/lib/ocinye/ocinye-compositor -- /usr/lib/ocinye/ocinye-system-ui
 Restart=always
 RestartSec=2
 NoNewPrivileges=yes
-

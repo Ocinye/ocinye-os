@@ -20,4 +20,3 @@ ExecStartPost=/usr/bin/systemctl try-restart ocinye-session.service
 ExecStartPost=/usr/bin/systemctl --no-block start ocinye-display.service
 Restart=on-failure
 RestartSec=15
-
