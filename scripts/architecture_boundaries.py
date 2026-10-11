@@ -131,6 +131,10 @@ NORMAIS = {
     "ocinye-system-contracts": set(),
     "ocinye-system-client": {"ocinye-system-contracts"},
     "ocinye-system-service": {"ocinye-system-contracts", "ocinye-system-client"},
+    # O Session Service: a autoridade da sessão local. Conhece os contratos do
+    # sistema e a forma canónica (para a assinatura da política); não liga o
+    # Core — fala com ele por um contrato, como qualquer outro cliente.
+    "ocinye-session-service": {"ocinye-system-contracts", "ocinye-installer-contracts"},
 }
 
 # Dependências de desenvolvimento. Um teste pode levantar o sistema todo; é

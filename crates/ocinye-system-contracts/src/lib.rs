@@ -20,6 +20,7 @@ pub mod capability;
 pub mod event;
 pub mod reason;
 pub mod request;
+pub mod session;
 pub mod state;
 pub mod wire;
 

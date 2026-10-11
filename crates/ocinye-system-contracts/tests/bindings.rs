@@ -10,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ocinye_system_contracts::capability::CapabilitySpec;
+use ocinye_system_contracts::session::{SessionReply, SessionRequest, SignedSessionPolicy};
 use ocinye_system_contracts::wire::{ClientFrame, ServerFrame};
 use ts_rs::{Config, TS};
 
@@ -37,12 +38,15 @@ fn as_ligacoes_typescript_sao_as_geradas_dos_contratos() {
     let fresh = std::env::temp_dir().join(format!("ocinye-bindings-{}", std::process::id()));
     let _ = fs::remove_dir_all(&fresh);
     fs::create_dir_all(&fresh).unwrap();
-    // Everything a client can send or receive hangs off these three roots.
+    // Everything a client can send or receive hangs off these roots.
     // Every integer in the contract fits a JavaScript number.
     let cfg = Config::new().with_out_dir(&fresh).with_large_int("number");
     ClientFrame::export_all(&cfg).unwrap();
     ServerFrame::export_all(&cfg).unwrap();
     CapabilitySpec::export_all(&cfg).unwrap();
+    SessionRequest::export_all(&cfg).unwrap();
+    SessionReply::export_all(&cfg).unwrap();
+    SignedSessionPolicy::export_all(&cfg).unwrap();
     let generated = tree(&fresh);
     assert!(
         generated.len() > 40,

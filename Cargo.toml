@@ -21,6 +21,7 @@ members = [
     "services/oie",
     "services/image-builder",
     "services/system-service",
+    "services/session-service",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them

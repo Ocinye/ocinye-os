@@ -9,28 +9,66 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use ocinye_system_client::SessionClient;
 use ocinye_system_contracts::capability::{Family, FreshAuthClass};
+use ocinye_system_contracts::session::{
+    SessionReply, SessionRequest, SessionState, SESSION_SOCKET_PATH,
+};
 use ocinye_system_contracts::SOCKET_PATH;
 use ocinye_system_service::audit::FileAudit;
 use ocinye_system_service::authority::{CoreAnswer, CoreAuthority, Peer, Session, SessionView};
 use ocinye_system_service::linux::{Linux, Roots};
 use ocinye_system_service::server::{serve, Accounts, Shared};
 
-/// Until the Session Service exists, nobody is signed in as far as this
-/// service can prove, and no grant can be honoured: capabilities that need a
-/// member or fresh proof are refused, never assumed.
-struct NoSession;
+/// The Session Service, asked over its socket for every request. When it
+/// cannot be reached nobody is signed in as far as this service can prove,
+/// and no grant can be honoured: refused, never assumed.
+struct SessionOverSocket;
 
-impl SessionView for NoSession {
-    fn session(&self) -> Session {
-        Session::SignedOut
+impl SessionOverSocket {
+    fn ask(request: &SessionRequest) -> Option<SessionReply> {
+        SessionClient::connect(Path::new(SESSION_SOCKET_PATH))
+            .ok()?
+            .ask(request)
+            .ok()
     }
-    fn consume_grant(&self, _: &str, _: &str, _: &str, _: FreshAuthClass) -> bool {
-        false
+}
+
+impl SessionView for SessionOverSocket {
+    fn session(&self) -> Session {
+        match Self::ask(&SessionRequest::State {}) {
+            Some(SessionReply::State {
+                state: SessionState::Active { member_id, .. },
+            }) => Session::Active { member: member_id },
+            Some(SessionReply::State {
+                state: SessionState::Locked { member_name, .. },
+            }) => Session::Locked {
+                member: member_name,
+            },
+            _ => Session::SignedOut,
+        }
+    }
+    fn consume_grant(
+        &self,
+        grant: &str,
+        actor: &str,
+        binding: &str,
+        class: FreshAuthClass,
+    ) -> bool {
+        let request = SessionRequest::ConsumeGrant {
+            grant: grant.to_owned(),
+            actor: actor.to_owned(),
+            binding: binding.to_owned(),
+            class,
+        };
+        matches!(
+            Self::ask(&request),
+            Some(SessionReply::Consumed { valid: true })
+        )
     }
 }
 
@@ -87,7 +125,7 @@ fn main() -> ExitCode {
     let accounts = Accounts::from_passwd(&fs::read_to_string("/etc/passwd").unwrap_or_default());
     let shared = Arc::new(Shared {
         platform: Box::new(Linux::new(Roots::system())),
-        session: Box::new(NoSession),
+        session: Box::new(SessionOverSocket),
         core: Box::new(CoreUnreachable),
         audit: Box::new(FileAudit::new("/var/log/ocinye/system-audit.jsonl".into())),
     });

@@ -4085,6 +4085,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocinye-session-service"
+version = "0.1.0"
+dependencies = [
+ "argon2 0.5.3",
+ "ed25519-dalek",
+ "hex",
+ "ocinye-installer-contracts",
+ "ocinye-system-contracts",
+ "password-hash 0.5.0",
+ "rustix",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ocinye-system-client"
 version = "0.1.0"
 dependencies = [

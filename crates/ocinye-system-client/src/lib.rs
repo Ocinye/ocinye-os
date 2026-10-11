@@ -18,6 +18,7 @@ use std::time::Duration;
 
 use ocinye_system_contracts::reason::Reason;
 use ocinye_system_contracts::request::{Outcome, Request};
+use ocinye_system_contracts::session::{SessionReply, SessionRequest};
 use ocinye_system_contracts::wire::{read_frame, write_frame, ClientFrame, ServerFrame, WireError};
 use ocinye_system_contracts::CONTRACT_VERSION;
 
@@ -121,5 +122,49 @@ impl<S: Read + Write> Client<S> {
                 _ => return Err(ClientError::Protocol),
             }
         }
+    }
+}
+
+/// A connection to the Session Service that has completed the handshake.
+///
+/// Same wire and same handshake as [`Client`]; after it, one
+/// [`SessionRequest`] per frame and one [`SessionReply`] back.
+pub struct SessionClient<S = UnixStream> {
+    stream: S,
+}
+
+impl SessionClient<UnixStream> {
+    /// Connect to the Session Service's socket and shake hands.
+    ///
+    /// # Errors
+    ///
+    /// As [`Client::connect`].
+    pub fn connect(socket: &Path) -> Result<Self, ClientError> {
+        let stream = UnixStream::connect(socket).map_err(|_| ClientError::Unreachable)?;
+        // Signing in asks the Core and derives a key; nothing waits longer.
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
+        Self::over(stream)
+    }
+}
+
+impl<S: Read + Write> SessionClient<S> {
+    /// Shake hands over an established stream.
+    ///
+    /// # Errors
+    ///
+    /// As [`Client::connect`].
+    pub fn over(stream: S) -> Result<Self, ClientError> {
+        Client::over(stream).map(|c| Self { stream: c.stream })
+    }
+
+    /// Ask one thing of the Session Service.
+    ///
+    /// # Errors
+    ///
+    /// A [`ClientError`] when no reply came back. A refusal is a reply.
+    pub fn ask(&mut self, request: &SessionRequest) -> Result<SessionReply, ClientError> {
+        write_frame(&mut self.stream, request)?;
+        Ok(read_frame::<_, SessionReply>(&mut self.stream)?)
     }
 }

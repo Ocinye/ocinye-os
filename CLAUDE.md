@@ -94,9 +94,9 @@ sem que nada falhe.
   `ocinye-domain`, `ocinye-observability`, `ocinye-core`, `ocinye-capabilities`,
   `ocinye-installer-contracts`, `ocinye-installer-controller`,
   `ocinye-image-contracts`, `ocinye-system-contracts`, `ocinye-system-client`),
-  10 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`,
+  11 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`,
   `installer-bootstrap`, `release-tool`, `firstboot`, `oie`, `image-builder`,
-  `system-service`) e 1 aplicação (`apps/workspace`). Fora
+  `system-service`, `session-service`) e 1 aplicação (`apps/workspace`). Fora
   da workspace do host: a janela do Installer (`apps/installer`, Tauri) e uma
   capacidade WASM (`wasm/capabilities/bibtex-import`).
 - **Ocinye Core: `IMPLEMENTED` e em produção.** 254 caminhos e 302 operações
@@ -271,9 +271,12 @@ sem que nada falhe.
   (`ocinye-system`). Fazem trabalho real o estado e o inventário, a rede
   (leitura), energia, brilho, hora, idioma, teclado e acesso remoto; **Wi-Fi,
   Bluetooth, som, ecrãs e aplicação de actualizações respondem
-  `NOT_IMPLEMENTED`**. **Não existem ainda** o Session Service, a ligação ao
-  Core, o compositor, a interface gráfica do sistema nem a integração na imagem:
-  o serviço trata todos como presença e recusa o que precisa de membro, operador
+  `NOT_IMPLEMENTED`**. O **Session Service** está `IMPLEMENTED`, sem prova numa imagem: entrar
+  com política assinada pelo Core, bloquear, desbloquear sem o Core dentro da
+  política (verificador Argon2id local), espera crescente, prova fresca de uso
+  único consumida só pelo System Service. **Não existem ainda** a ligação ao
+  Core (sem ela ninguém consegue entrar), o compositor, a interface gráfica do sistema nem a integração na imagem:
+  até lá o System Service trata todos como presença e recusa o que precisa de membro, operador
   ou prova fresca.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
@@ -670,7 +673,7 @@ sem que nada falhe.
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
 - **117 ADRs** em `docs/adrs/`, **13 runbooks** em `docs/runbooks/`,
-  **62 READMEs**, `docs/` povoado — incluindo
+  **63 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -686,7 +689,7 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **2165 funções de teste** escritas na árvore, e **zero falhas** na última
+- **2197 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
@@ -1338,7 +1341,7 @@ services/installer-bootstrap    services/release-tool
 crates/ocinye-image-contracts   services/firstboot
 services/oie                    services/image-builder
 crates/ocinye-system-contracts  crates/ocinye-system-client
-services/system-service
+services/system-service         services/session-service
 apps/installer (fora da workspace)
 wasm/capabilities/bibtex-import
 docs    infra    migrations    scripts
