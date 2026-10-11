@@ -17,13 +17,15 @@ path = "src/main.rs"
 
 [dependencies]
 ocinye-system-contracts = { workspace = true }
-ocinye-installer-contracts = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 argon2 = { workspace = true }
 password-hash = { workspace = true }
 ed25519-dalek = { workspace = true }
 hex = { workspace = true }
+# The Core is asked over HTTP, from a service that has no async runtime of its
+# own: one blocking request at a time.
+reqwest = { workspace = true, features = ["blocking"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { workspace = true }

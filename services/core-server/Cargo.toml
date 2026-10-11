@@ -20,6 +20,11 @@ ocinye-contracts = { workspace = true }
 ocinye-core = { workspace = true }
 ocinye-domain = { workspace = true }
 ocinye-observability = { workspace = true }
+# A política de sessão que o Core assina para uma máquina com o Ocinye OS: o
+# tipo é o contrato do Session Service, e a assinatura é Ed25519 (ADR-0031).
+ocinye-system-contracts = { workspace = true }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
 
 axum = { workspace = true }
 tokio = { workspace = true }

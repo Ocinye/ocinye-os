@@ -47,7 +47,44 @@ pub struct SessionPolicy {
     pub issued_at: i64,
 }
 
-/// A policy with the Core's signature over its canonical JSON (Ed25519, hex).
+impl SessionPolicy {
+    /// The bytes the Core's signature covers.
+    ///
+    /// A fixed, versioned encoding of this exact structure — a domain label,
+    /// then every field in declaration order, strings length-prefixed and
+    /// integers big-endian — so that the signer and the verifier cannot
+    /// disagree through a serialiser's settings, and no two different
+    /// policies share an encoding.
+    #[must_use]
+    pub fn signed_bytes(&self) -> Vec<u8> {
+        let mut out = b"ocinye/session-policy/v1\0".to_vec();
+        for text in [
+            &self.member_id,
+            &self.member_name,
+            &self.session_id,
+            &self.machine_id,
+        ] {
+            out.extend_from_slice(&(text.len() as u64).to_be_bytes());
+            out.extend_from_slice(text.as_bytes());
+        }
+        out.extend_from_slice(&self.revocation_epoch.to_be_bytes());
+        out.push(u8::from(self.offline_unlock));
+        match self.max_offline_secs {
+            None => out.push(0),
+            Some(secs) => {
+                out.push(1);
+                out.extend_from_slice(&secs.to_be_bytes());
+            }
+        }
+        out.extend_from_slice(&self.max_unlock_attempts.to_be_bytes());
+        out.extend_from_slice(&self.idle_lock_secs.to_be_bytes());
+        out.extend_from_slice(&self.issued_at.to_be_bytes());
+        out
+    }
+}
+
+/// A policy with the Core's signature over [`SessionPolicy::signed_bytes`]
+/// (Ed25519, hex).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct SignedSessionPolicy {
@@ -174,6 +211,9 @@ pub enum SessionReason {
     InvalidCredentials,
     /// The Core asks for a second factor.
     SecondFactorRequired,
+    /// The member must set a password in the Workspace before a session can
+    /// open here.
+    PasswordChangeRequired,
     /// Too many attempts: wait.
     Throttled {
         /// Seconds to wait.

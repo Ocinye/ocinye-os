@@ -99,7 +99,7 @@ sem que nada falhe.
   `system-service`, `session-service`) e 1 aplicação (`apps/workspace`). Fora
   da workspace do host: a janela do Installer (`apps/installer`, Tauri) e uma
   capacidade WASM (`wasm/capabilities/bibtex-import`).
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 254 caminhos e 302 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 256 caminhos e 304 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -274,10 +274,13 @@ sem que nada falhe.
   `NOT_IMPLEMENTED`**. O **Session Service** está `IMPLEMENTED`, sem prova numa imagem: entrar
   com política assinada pelo Core, bloquear, desbloquear sem o Core dentro da
   política (verificador Argon2id local), espera crescente, prova fresca de uso
-  único consumida só pelo System Service. **Não existem ainda** a ligação ao
-  Core (sem ela ninguém consegue entrar), o compositor, a interface gráfica do sistema nem a integração na imagem:
-  até lá o System Service trata todos como presença e recusa o que precisa de membro, operador
-  ou prova fresca.
+  único consumida só pelo System Service. A **ligação ao Core** existe: o Session Service entra pelo
+  login e pelo segundo factor do próprio Core e pede-lhe a política em
+  `POST /auth/machine-session`, assinada com uma chave Ed25519 derivada da raiz
+  de selagem (`GET /auth/machine-session/key` publica a parte pública).
+  **Não existem ainda** a resposta do Core ao System Service sobre permissão
+  institucional (capacidades de operador respondem `AUTHORITY_UNAVAILABLE`), o compositor, a interface gráfica do sistema nem a integração na imagem:
+  nada disto correu ainda numa máquina.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
   provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
   `ocinye upgrade` faz checkpoint da base, troca o release, passa um portão de
@@ -673,7 +676,7 @@ sem que nada falhe.
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
 - **117 ADRs** em `docs/adrs/`, **13 runbooks** em `docs/runbooks/`,
-  **63 READMEs**, `docs/` povoado — incluindo
+  **64 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -689,14 +692,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **2197 funções de teste** escritas na árvore, e **zero falhas** na última
+- **2206 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **737 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **741 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic

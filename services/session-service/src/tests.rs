@@ -730,3 +730,185 @@ mod socket {
         );
     }
 }
+
+mod core_link {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+    use crate::core_link::HttpCore;
+
+    /// What the fake Core is told to answer, and what it was asked.
+    #[derive(Default)]
+    struct Script {
+        /// The state `/auth/login` reports for the right password.
+        login_state: &'static str,
+        /// Whether `/auth/machine-session` still knows the session.
+        revoked: bool,
+        asked: Vec<String>,
+    }
+
+    /// A Core that speaks just enough HTTP for the link, on a loopback port.
+    fn fake_core(script: Arc<Mutex<Script>>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { return };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let path = line.split(' ').nth(1).unwrap_or("").to_owned();
+                let (mut length, mut cookie) = (0, String::new());
+                loop {
+                    let mut header = String::new();
+                    reader.read_line(&mut header).unwrap();
+                    let header = header.trim().to_ascii_lowercase();
+                    if header.is_empty() {
+                        break;
+                    }
+                    if let Some(v) = header.strip_prefix("content-length:") {
+                        length = v.trim().parse().unwrap();
+                    }
+                    if let Some(v) = header.strip_prefix("cookie:") {
+                        v.trim().clone_into(&mut cookie);
+                    }
+                }
+                let mut body = vec![0; length];
+                reader.read_exact(&mut body).unwrap();
+                let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                let mut script = script.lock().unwrap();
+                script.asked.push(path.clone());
+                let (status, answer) = match path.as_str() {
+                    "/auth/login" if body["password"] == PASSWORD => (
+                        200,
+                        serde_json::json!({ "session_token": "gate", "state": script.login_state })
+                            .to_string(),
+                    ),
+                    "/auth/mfa/challenge"
+                        if cookie.ends_with("=gate") && body["code"] == "123456" =>
+                    {
+                        (
+                            200,
+                            serde_json::json!({ "session_token": "assured", "state": "active" })
+                                .to_string(),
+                        )
+                    }
+                    "/auth/machine-session"
+                        if !script.revoked && body["machine_id"] == "machine-a" =>
+                    {
+                        (200, serde_json::to_string(&sign(policy(1))).unwrap())
+                    }
+                    "/auth/logout" => (204, String::new()),
+                    _ => (401, "{}".to_owned()),
+                };
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
+                    answer.len()
+                );
+            }
+        });
+        base
+    }
+
+    fn link(state: &'static str) -> (HttpCore, Arc<Mutex<Script>>, PathBuf) {
+        let script = Arc::new(Mutex::new(Script {
+            login_state: state,
+            ..Script::default()
+        }));
+        let path = bench().path.with_file_name("core-link.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let core =
+            HttpCore::new(&fake_core(Arc::clone(&script)), "machine-a", path.clone()).unwrap();
+        (core, script, path)
+    }
+
+    #[test]
+    fn entrar_usa_o_login_do_core_e_pede_a_politica_assinada() {
+        let (core, script, path) = link("active");
+        assert_eq!(
+            core.sign_in("pessoa", "errada", None),
+            Err(CoreRefusal::InvalidCredentials)
+        );
+        let signed = core.sign_in("pessoa", PASSWORD, None).unwrap();
+        assert_eq!(signed, sign(policy(1)));
+        // The token is kept where only the service reads it, and survives it.
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let again = HttpCore::new(&core_base(&script), "machine-a", path).unwrap();
+        assert_eq!(again.refresh("s-1"), Refresh::Unreachable);
+        assert_eq!(core.refresh("s-1"), Refresh::Current(sign(policy(1))));
+    }
+
+    /// A base nothing listens on: the reloaded link has the token but no Core.
+    fn core_base(_: &Arc<Mutex<Script>>) -> String {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        format!("http://127.0.0.1:{port}")
+    }
+
+    #[test]
+    fn o_segundo_factor_e_pedido_e_depois_satisfeito() {
+        let (core, script, _) = link("mfa_required");
+        assert_eq!(
+            core.sign_in("pessoa", PASSWORD, None),
+            Err(CoreRefusal::SecondFactorRequired)
+        );
+        // The gate session is not left open at the Core.
+        assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
+        assert_eq!(
+            core.sign_in("pessoa", PASSWORD, Some("000000")),
+            Err(CoreRefusal::InvalidCredentials)
+        );
+        assert!(core.sign_in("pessoa", PASSWORD, Some("123456")).is_ok());
+    }
+
+    #[test]
+    fn quem_tem_de_mudar_a_palavra_passe_nao_abre_sessao_aqui() {
+        let (core, script, _) = link("password_change_required");
+        assert_eq!(
+            core.sign_in("pessoa", PASSWORD, None),
+            Err(CoreRefusal::PasswordChangeRequired)
+        );
+        assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
+    }
+
+    #[test]
+    fn uma_sessao_revogada_no_core_e_esquecida_e_sair_avisa_o_core() {
+        let (core, script, _) = link("active");
+        core.sign_in("pessoa", PASSWORD, None).unwrap();
+        script.lock().unwrap().revoked = true;
+        assert_eq!(core.refresh("s-1"), Refresh::Revoked);
+        // Forgotten: the Core is not asked again about a session it ended.
+        assert_eq!(core.refresh("s-1"), Refresh::Unreachable);
+
+        script.lock().unwrap().revoked = false;
+        core.sign_in("pessoa", PASSWORD, None).unwrap();
+        core.sign_out("s-1");
+        assert_eq!(script.lock().unwrap().asked.last().unwrap(), "/auth/logout");
+        assert_eq!(core.refresh("s-1"), Refresh::Unreachable);
+    }
+
+    #[test]
+    fn sem_core_nao_ha_resposta_inventada() {
+        let script = Arc::new(Mutex::new(Script::default()));
+        let core = HttpCore::new(
+            &core_base(&script),
+            "machine-a",
+            bench().path.with_file_name("x.json"),
+        )
+        .unwrap();
+        assert_eq!(
+            core.sign_in("pessoa", PASSWORD, None),
+            Err(CoreRefusal::Unreachable)
+        );
+    }
+}

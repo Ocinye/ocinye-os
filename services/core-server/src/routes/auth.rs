@@ -41,6 +41,9 @@ pub fn routes() -> Router<AppState> {
             post(revoke_own_session),
         )
         .route("/auth/password/assess", post(assess_password))
+        // ── A sessão local de uma máquina com o Ocinye OS (ADR-0031) ───────
+        .route("/auth/machine-session", post(machine_session))
+        .route("/auth/machine-session/key", get(machine_session_key))
         // ── O segundo factor (ADR-0107) ─────────────────────────────────────
         // Todos operam sobre uma sessão restrita — a `mfa_required` que o login
         // deixou —, e o sucesso de um desafio fecha o portão emitindo uma sessão
@@ -854,4 +857,133 @@ async fn reauthenticate(
         .await
         .map(|()| axum::http::StatusCode::NO_CONTENT)
         .map_err(|error| ApiError::new(error, &ids))
+}
+
+/// O que o Session Service de uma máquina envia para pedir a sua política.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MachineSessionRequest {
+    /// O identificador da máquina (`/etc/machine-id`).
+    machine_id: String,
+}
+
+/// A chave Ed25519 com que esta Instância assina políticas de sessão.
+///
+/// Sem raiz de selagem não há chave — e sem chave não se assina nada: uma
+/// Instância que não consegue assinar não abre sessões em máquinas, em vez de
+/// as abrir com uma chave que não sobreviveria a um reinício.
+fn machine_session_signer(
+    state: &AppState,
+    ids: &ocinye_observability::CorrelationIds,
+) -> Result<ed25519_dalek::SigningKey, ApiError> {
+    state
+        .config
+        .sealing_key
+        .as_ref()
+        .map(|raiz| ed25519_dalek::SigningKey::from_bytes(&raiz.machine_session_seed()))
+        .ok_or_else(|| {
+            ApiError::new(
+                CoreError::CapabilityUnavailable(
+                    "Esta Instância não tem chave de selagem configurada: não pode assinar \
+                     sessões de máquinas."
+                        .to_owned(),
+                ),
+                ids,
+            )
+        })
+}
+
+/// `POST /auth/machine-session`
+///
+/// A política de sessão **desta** sessão do Core, assinada para a máquina que a
+/// pede. É a única coisa que o Session Service de uma máquina com o Ocinye OS
+/// precisa do Core e que mais nenhum cliente precisa: quem a pessoa é, e o que
+/// a Instância deixa a sessão local fazer enquanto o Core não responde.
+///
+/// O Session Service chama-a ao entrar e de cada vez que volta a falar com o
+/// Core. Uma sessão revogada, expirada ou de uma pessoa suspensa não chega
+/// aqui — o extractor recusa-a com `401` —, e é assim que a máquina fica a
+/// saber que a sessão acabou.
+///
+/// Só uma sessão de trabalho normal a recebe: quem ainda deve uma palavra-passe
+/// ou um segundo factor não abre uma sessão numa máquina.
+async fn machine_session(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    RestrictedSession { session, person }: RestrictedSession,
+    Json(request): Json<MachineSessionRequest>,
+) -> Result<Response, ApiError> {
+    use ed25519_dalek::Signer as _;
+    use ocinye_system_contracts::session::{SessionPolicy, SignedSessionPolicy};
+
+    if !session.state.permits_ordinary_work() {
+        return Err(ApiError::new(
+            CoreError::PermissionDenied(
+                "Esta sessão ainda não pode abrir uma sessão numa máquina.".to_owned(),
+            ),
+            &ids,
+        ));
+    }
+    // Tal como veio: aparar seria assinar um identificador que ninguém enviou.
+    let machine_id = request.machine_id.as_str();
+    if machine_id.is_empty()
+        || machine_id.len() > 64
+        || !machine_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
+        return Err(ApiError::new(
+            CoreError::Validation("O identificador da máquina não é válido.".to_owned()),
+            &ids,
+        ));
+    }
+    let signer = machine_session_signer(&state, &ids)?;
+    let regras = state.config.machine_session;
+
+    let policy = SessionPolicy {
+        member_id: person.id.to_string(),
+        member_name: person.preferred_name().to_owned(),
+        session_id: session.id.to_string(),
+        machine_id: machine_id.to_owned(),
+        // A revogação é por sessão e pergunta-se aqui: uma sessão revogada
+        // deixa de receber política. A época fica para uma revogação que tenha
+        // de valer sem o Core — que esta versão ainda não emite.
+        revocation_epoch: 0,
+        offline_unlock: regras.offline_unlock,
+        max_offline_secs: Some(regras.max_offline_secs),
+        max_unlock_attempts: regras.max_unlock_attempts,
+        idle_lock_secs: regras.idle_lock_secs,
+        issued_at: chrono::Utc::now().timestamp(),
+    };
+    let signature = hex::encode(signer.sign(&policy.signed_bytes()).to_bytes());
+
+    let mut response = Json(SignedSessionPolicy { policy, signature }).into_response();
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, private"),
+    );
+    Ok(response)
+}
+
+/// A parte pública da chave de assinatura, em hexadecimal.
+#[derive(Serialize)]
+struct MachineSessionKey {
+    /// Ed25519, 32 bytes, hexadecimal.
+    public_key: String,
+}
+
+/// `GET /auth/machine-session/key`
+///
+/// A chave **pública** com que uma máquina verifica as políticas de sessão.
+/// Responde sem sessão porque uma máquina a pede quando é ligada à Instância,
+/// antes de alguém ter entrado nela — e porque uma chave pública não revela
+/// nada: serve só para verificar o que a Instância assinou.
+async fn machine_session_key(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+) -> Result<Json<MachineSessionKey>, ApiError> {
+    let signer = machine_session_signer(&state, &ids)?;
+    Ok(Json(MachineSessionKey {
+        public_key: hex::encode(signer.verifying_key().to_bytes()),
+    }))
 }

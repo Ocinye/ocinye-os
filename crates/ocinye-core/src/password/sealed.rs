@@ -122,6 +122,23 @@ impl SealingKey {
         base64::engine::general_purpose::STANDARD.encode(bytes)
     }
 
+    /// A semente da chave com que a Instância **assina** a política de sessão
+    /// de uma máquina com o Ocinye OS (ADR-0031).
+    ///
+    /// Não é uma subchave de selagem: nada é cifrado com ela. É derivada da
+    /// mesma raiz, por HKDF-SHA256 com etiqueta própria e versionada, para que
+    /// a Instância tenha uma só raiz de material durável — a continuidade
+    /// transporta-a, e a chave de assinatura vem com ela. Quem a recebe faz
+    /// dela uma chave Ed25519; a parte pública pode ser mostrada a qualquer um.
+    #[must_use]
+    pub fn machine_session_seed(&self) -> [u8; CHAVE_BYTES] {
+        let hk = Hkdf::<Sha256>::new(None, self.0.as_slice());
+        let mut okm = [0_u8; CHAVE_BYTES];
+        hk.expand(b"ocinye/signing/machine-session/v1", &mut okm)
+            .expect("HKDF-SHA256 de 32 bytes está sempre dentro do limite");
+        okm
+    }
+
     /// Deriva a subchave efectiva de um domínio, por HKDF-SHA256.
     ///
     /// A raiz é o IKM; a etiqueta do domínio é o `info`. Domínios diferentes dão

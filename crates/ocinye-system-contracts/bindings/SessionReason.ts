@@ -3,7 +3,7 @@
 /**
  * Why the Session Service refused.
  */
-export type SessionReason = { "code": "MALFORMED" } | { "code": "NOT_AUTHORIZED" } | { "code": "INVALID_CREDENTIALS" } | { "code": "SECOND_FACTOR_REQUIRED" } | { "code": "THROTTLED",
+export type SessionReason = { "code": "MALFORMED" } | { "code": "NOT_AUTHORIZED" } | { "code": "INVALID_CREDENTIALS" } | { "code": "SECOND_FACTOR_REQUIRED" } | { "code": "PASSWORD_CHANGE_REQUIRED" } | { "code": "THROTTLED",
 /**
  * Seconds to wait.
  */

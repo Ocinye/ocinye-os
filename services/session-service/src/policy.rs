@@ -1,19 +1,12 @@
 //! The session policy the Core signs, and its verification.
 //!
 //! The Instance's public key is learned once, when the machine is claimed. A
-//! policy is accepted only when the signature over its canonical JSON verifies
+//! policy is accepted only when the signature over its signed bytes verifies
 //! with that key **and** it names this machine: a valid policy for another
 //! machine is not a policy for this one.
 
 use ed25519_dalek::{Signature, VerifyingKey};
-use ocinye_installer_contracts::canonical::to_canonical;
 use ocinye_system_contracts::session::{SessionPolicy, SignedSessionPolicy};
-
-/// The bytes a policy's signature covers.
-#[must_use]
-pub fn signed_bytes(policy: &SessionPolicy) -> Option<Vec<u8>> {
-    to_canonical(policy).ok().map(String::into_bytes)
-}
 
 /// Verify a signed policy for this machine.
 #[must_use]
@@ -25,7 +18,7 @@ pub fn verify<'a>(
     let key = VerifyingKey::from_bytes(instance_key).ok()?;
     let raw: [u8; 64] = hex::decode(&signed.signature).ok()?.try_into().ok()?;
     let signature = Signature::from_bytes(&raw);
-    let message = signed_bytes(&signed.policy)?;
+    let message = signed.policy.signed_bytes();
     key.verify_strict(&message, &signature).ok()?;
     (signed.policy.machine_id == machine_id && signed.policy.max_unlock_attempts > 0)
         .then_some(&signed.policy)
@@ -58,7 +51,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn sign(policy: SessionPolicy) -> SignedSessionPolicy {
-        let sig = SigningKey::from_bytes(&SEED).sign(&signed_bytes(&policy).unwrap());
+        let sig = SigningKey::from_bytes(&SEED).sign(&policy.signed_bytes());
         SignedSessionPolicy {
             policy,
             signature: hex::encode(sig.to_bytes()),

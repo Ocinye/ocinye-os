@@ -32,6 +32,8 @@ pub enum CoreRefusal {
     InvalidCredentials,
     /// A second factor is needed.
     SecondFactorRequired,
+    /// The member must first set a password.
+    PasswordChangeRequired,
     /// The Core cannot be reached.
     Unreachable,
 }
@@ -274,6 +276,9 @@ impl<C: Core, K: Clock> Engine<C, K> {
                 return Self::refused(SessionReason::SecondFactorRequired)
             }
             Err(CoreRefusal::Unreachable) => return Self::refused(SessionReason::CoreUnreachable),
+            Err(CoreRefusal::PasswordChangeRequired) => {
+                return Self::refused(SessionReason::PasswordChangeRequired)
+            }
         };
         if policy::verify(&signed, &self.instance_key, &self.machine_id).is_none() {
             self.core.sign_out(&signed.policy.session_id);

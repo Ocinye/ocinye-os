@@ -13,29 +13,11 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use ocinye_session_service::engine::{Clock, Config, Core, CoreRefusal, Engine, Refresh};
+use ocinye_session_service::core_link::HttpCore;
+use ocinye_session_service::engine::{Clock, Config, Engine};
 use ocinye_session_service::server::{serve, Peer};
 use ocinye_session_service::verifier::Cost;
-use ocinye_system_contracts::session::{SignedSessionPolicy, SESSION_SOCKET_PATH};
-
-/// Until the Core issues signed session policies, signing in is not possible:
-/// the service says so, and never opens a session on its own word.
-struct CoreNotLinked;
-
-impl Core for CoreNotLinked {
-    fn sign_in(
-        &self,
-        _: &str,
-        _: &str,
-        _: Option<&str>,
-    ) -> Result<SignedSessionPolicy, CoreRefusal> {
-        Err(CoreRefusal::Unreachable)
-    }
-    fn refresh(&self, _: &str) -> Refresh {
-        Refresh::Unreachable
-    }
-    fn sign_out(&self, _: &str) {}
-}
+use ocinye_system_contracts::session::SESSION_SOCKET_PATH;
 
 struct Monotonic(Instant);
 
@@ -82,7 +64,7 @@ fn main() -> ExitCode {
     };
     // The Instance's public key is written when the machine is claimed.
     // Without it no policy can verify, so no session can open: fail closed.
-    let instance_key: [u8; 32] = fs::read("/etc/ocinye/instance-session.pub")
+    let instance_key: [u8; 32] = hex::decode(read("/etc/ocinye/instance-session.pub"))
         .ok()
         .and_then(|b| b.try_into().ok())
         .unwrap_or([0; 32]);
@@ -93,8 +75,17 @@ fn main() -> ExitCode {
         instance_key,
         cost: Cost::calibrate(Duration::from_millis(250)),
     };
+    // Where the Core's API is. On an Ocinye OS machine the Core is local; the
+    // unit file says where, and nothing else is read from the environment.
+    let base = std::env::var("OCINYE_CORE_API")
+        .unwrap_or_else(|_| "http://127.0.0.1:8080/api/v1".to_owned());
+    let link = "/var/lib/ocinye/session/core-link.json".into();
+    let Ok(core) = HttpCore::new(&base, &config.machine_id, link) else {
+        eprintln!("cannot build the Core link");
+        return ExitCode::FAILURE;
+    };
     let engine = Arc::new(Mutex::new(Engine::new(
-        CoreNotLinked,
+        core,
         Monotonic(Instant::now()),
         config,
     )));

@@ -417,6 +417,9 @@ pub struct CoreConfig {
     /// recusa com a razão dita — o comportamento correcto de uma instalação sem
     /// chave, e não um sítio por preencher.
     pub sealing_key: Option<crate::password::sealed::SealingKey>,
+    /// O que a Instância deixa uma sessão local de uma máquina com o Ocinye OS
+    /// fazer enquanto o Core não pode ser perguntado (ADR-0031).
+    pub machine_session: MachineSessionRules,
     /// Origins permitted to call the API from a browser.
     pub cors_allowed_origins: Vec<String>,
     /// Onde estão os componentes do Capability Runtime.
@@ -451,6 +454,34 @@ impl std::fmt::Debug for CoreConfig {
                 &self.sealing_key.as_ref().map(|_| "<present>"),
             )
             .finish_non_exhaustive()
+    }
+}
+
+/// As regras de uma sessão local numa máquina com o Ocinye OS.
+///
+/// São política da Instância, não constantes do sistema: o Core assina-as em
+/// cada política de sessão, e a máquina aplica o que recebeu assinado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MachineSessionRules {
+    /// Se a sessão pode ser desbloqueada sem o Core responder.
+    pub offline_unlock: bool,
+    /// Quanto tempo, em segundos, uma sessão pode durar sem o Core a confirmar.
+    /// Zero: desbloquear sem o Core nunca é aceite depois de o perder.
+    pub max_offline_secs: u64,
+    /// Tentativas falhadas de desbloqueio até a sessão local ser destruída.
+    pub max_unlock_attempts: u32,
+    /// Segundos de inactividade até a sessão se bloquear.
+    pub idle_lock_secs: u32,
+}
+
+impl Default for MachineSessionRules {
+    fn default() -> Self {
+        Self {
+            offline_unlock: true,
+            max_offline_secs: 72 * 60 * 60,
+            max_unlock_attempts: 10,
+            idle_lock_secs: 300,
+        }
     }
 }
 
@@ -670,6 +701,28 @@ impl CoreConfig {
                     (None, None) => None,
                 }
             },
+            machine_session: {
+                let padrao = MachineSessionRules::default();
+                MachineSessionRules {
+                    offline_unlock: parse_flag(
+                        "OCINYE_MACHINE_SESSION_OFFLINE_UNLOCK",
+                        padrao.offline_unlock,
+                    ),
+                    max_offline_secs: parse_number(
+                        "OCINYE_MACHINE_SESSION_MAX_OFFLINE_SECS",
+                        padrao.max_offline_secs,
+                    ),
+                    max_unlock_attempts: parse_number(
+                        "OCINYE_MACHINE_SESSION_MAX_UNLOCK_ATTEMPTS",
+                        padrao.max_unlock_attempts,
+                    )
+                    .max(1),
+                    idle_lock_secs: parse_number(
+                        "OCINYE_MACHINE_SESSION_IDLE_LOCK_SECS",
+                        padrao.idle_lock_secs,
+                    ),
+                }
+            },
             cors_allowed_origins: or_default("OCINYE_CORS_ALLOWED_ORIGINS", "")
                 .split(',')
                 .map(str::trim)
@@ -865,6 +918,7 @@ mod tests {
                 max_message_bytes: 1024,
             },
             sealing_key: None,
+            machine_session: MachineSessionRules::default(),
             cors_allowed_origins: vec![],
             capability_components_dir: "target/wasm32-wasip1/release".to_owned(),
         }

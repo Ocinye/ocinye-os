@@ -31,6 +31,9 @@ com o mesmo fio e o mesmo aperto de mão do
 
 ## Estado
 
-`IMPLEMENTED`, sem prova numa imagem. A ligação ao Core (emissão da política
-assinada) ainda não existe: até lá o daemon responde `CORE_UNREACHABLE` a quem
-tenta entrar e nunca abre uma sessão por palavra própria.
+`IMPLEMENTED`, sem prova numa imagem. A ligação ao Core (`core_link`) usa o
+login e o segundo factor do próprio Core e pede a política assinada em
+`POST /auth/machine-session`; o token da sessão do Core fica em
+`/var/lib/ocinye/session/core-link.json` (0600) e nunca chega à interface. A
+chave pública da Instância lê-se de `/etc/ocinye/instance-session.pub`
+(hexadecimal); sem ela nenhuma política verifica e ninguém entra.

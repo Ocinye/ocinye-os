@@ -22,13 +22,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   executor endurecido de ferramentas, os leitores e acções Linux do primeiro
   bloco, e o cliente sem ecrã `ocinye-system`.
 - Wi-Fi, Bluetooth, som, ecrãs e aplicação de actualizações: no catálogo,
-  `NOT_IMPLEMENTED`. Ligação ao Core: por fazer.
+  `NOT_IMPLEMENTED`. Permissão institucional pedida ao Core: por fazer.
 - **`ocinye-session-service`**: sessão local — entrar com `SessionPolicy`
   assinada pelo Core e ligada à máquina, bloquear, desbloquear sem o Core
   dentro da política (Argon2id calibrado), espera crescente, concessões de
   prova fresca de uso único. O System Service passa a perguntar-lhe a sessão e
-  a consumir nele as concessões. Sem a ligação ao Core responde
-  `CORE_UNREACHABLE` a quem tenta entrar.
+  a consumir nele as concessões.
+- **Core**: `POST /auth/machine-session` assina a política de sessão de uma
+  máquina (Ed25519, chave derivada da raiz de selagem por HKDF com etiqueta
+  própria) e `GET /auth/machine-session/key` publica a chave pública. As
+  regras vêm de `OCINYE_MACHINE_SESSION_*`. O Session Service entra pelo login
+  e pelo MFA existentes do Core — não há um segundo caminho de autenticação.
 - Dependências novas: `ts-rs` (geração das ligações) e `rustix` (credenciais do
   par do socket, só em Linux).
 

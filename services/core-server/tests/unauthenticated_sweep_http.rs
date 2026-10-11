@@ -191,6 +191,12 @@ const PUBLICAS: &[(&str, &str, &str)] = &[
         "D010 · o Workspace resolve o anfitrião antes de haver sessão: devolve só o \
          destino e o nome da Instância que a entrada mostra; desconhecido é 404 (ADR-0020)",
     ),
+    (
+        "GET",
+        "/auth/machine-session/key",
+        "a chave pública com que uma máquina verifica o que a Instância assinou: \
+         não revela nada, e é pedida antes de alguém ter entrado na máquina (ADR-0031)",
+    ),
 ];
 
 /// As rotas que se autenticam por outra coisa que não uma sessão de membro.

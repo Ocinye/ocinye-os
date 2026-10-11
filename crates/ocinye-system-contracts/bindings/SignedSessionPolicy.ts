@@ -2,7 +2,8 @@
 import type { SessionPolicy } from "./SessionPolicy";
 
 /**
- * A policy with the Core's signature over its canonical JSON (Ed25519, hex).
+ * A policy with the Core's signature over [`SessionPolicy::signed_bytes`]
+ * (Ed25519, hex).
  */
 export type SignedSessionPolicy = {
 /**

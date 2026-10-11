@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod core_link;
 pub mod engine;
 pub mod policy;
 pub mod server;
