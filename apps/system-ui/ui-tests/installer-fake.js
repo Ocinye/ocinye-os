@@ -68,7 +68,13 @@
   }
 
   window.OI_FAKE = async (cmd, args) => {
-    if (cmd === 'installer_poll') { const events = F.out; F.out = []; return { state: 'OPEN', events }; }
+    // Como na máquina: o motor ainda não está lá nas primeiras perguntas, e a
+    // acção de começar só aparece depois do primeiro desenho.
+    if (cmd === 'installer_poll') {
+      F.polls = (F.polls || 0) + 1;
+      if (F.polls <= 2) return { state: 'WAITING', events: [] };
+      const events = F.out; F.out = []; return { state: 'OPEN', events };
+    }
     if (cmd === 'installer_send') { act(args.action); return true; }
     return null;
   };

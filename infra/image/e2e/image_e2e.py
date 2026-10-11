@@ -1290,6 +1290,14 @@ def scenario_window(a):
         except TimeoutError:
             return False
 
+    class Stopped(Exception):
+        """A step the window did not reach: what follows cannot be asked."""
+
+    def need(name, ok, detail=""):
+        r.check(name, ok, detail)
+        if not ok:
+            raise Stopped(name)
+
     def size():
         return json.loads(sh("qemu-img", "info", "-U", "--output", "json", target).stdout).get("actual-size", 0)
 
@@ -1301,7 +1309,7 @@ def scenario_window(a):
         time.sleep(10)
         # Install, chosen on the machine's own keyboard.
         vm.press("i")
-        r.check("window: the installer's window reached the engine", reached(vm, "step=WELCOME", 1800))
+        need("window: the installer's window reached the engine", reached(vm, "step=WELCOME", 1800))
         time.sleep(20)
         first = vm.screenshot(os.path.join(shots, "1-welcome.png"))
         r.check("window: the screen shows the installer", png_is_a_picture(first))
@@ -1310,7 +1318,7 @@ def scenario_window(a):
         time.sleep(4)
         vm.screenshot(os.path.join(shots, "2-language.png"))
         vm.press("ret")
-        r.check("window: Continue on the language step asked the engine to begin", reached(vm, "step=COMPATIBILITY", 300))
+        need("window: Continue on the language step asked the engine to begin", reached(vm, "step=COMPATIBILITY", 300))
         # The window now holds the installation. The serial line is the other
         # console: an answer there is refused, in words.
         vm.send("\r")
@@ -1323,7 +1331,7 @@ def scenario_window(a):
         time.sleep(4)
         vm.screenshot(os.path.join(shots, "3-compatibility.png"))
         vm.press("ret")
-        r.check("window: Continue on the compatibility summary opened storage", reached(vm, "step=STORAGE", 300))
+        need("window: Continue on the compatibility summary opened storage", reached(vm, "step=STORAGE", 300))
         time.sleep(4)
         vm.screenshot(os.path.join(shots, "4-storage.png"))
         # No disk is chosen until a card is: Enter on the focused card chooses
@@ -1332,9 +1340,8 @@ def scenario_window(a):
         time.sleep(3)
         vm.screenshot(os.path.join(shots, "5-storage-chosen.png"))
         vm.press("ret")
-        chosen = reached(vm, "selected=vd[a-z]", 120)
-        r.check("window: a disk card was chosen with the keyboard, and the engine selected it", chosen)
-        r.check("window: the engine showed the review", reached(vm, "step=REVIEW", 60))
+        need("window: a disk card was chosen with the keyboard, and the engine selected it", reached(vm, "selected=vd[a-z]", 120))
+        need("window: the engine showed the review", reached(vm, "step=REVIEW", 60))
         time.sleep(4)
         vm.screenshot(os.path.join(shots, "6-review.png"))
         # The destructive action opens the confirmation dialog.
@@ -1360,8 +1367,8 @@ def scenario_window(a):
         time.sleep(5)
         vm.screenshot(os.path.join(shots, "9-confirm-right.png"))
         vm.press("ret")
-        r.check("window: the confirmation typed in the dialog was accepted by the engine", reached(vm, "confirmation=accepted", 120))
-        r.check("window: the installation started", reached(vm, "step=INSTALLING", 120))
+        need("window: the confirmation typed in the dialog was accepted by the engine", reached(vm, "confirmation=accepted", 120))
+        need("window: the installation started", reached(vm, "step=INSTALLING", 120))
         time.sleep(60)
         vm.screenshot(os.path.join(shots, "10-installing.png"))
         r.check("window: the installation is writing the chosen disk", size() > (64 << 20), size())
@@ -1384,6 +1391,9 @@ def scenario_window(a):
         if booted:
             ident = installed_root_identity(target)
             r.check("window: the installed boot configuration resolves to the target's own root", ident["ok"], ident["detail"])
+    except Stopped:
+        vm.screenshot(os.path.join(shots, "stopped.png"))
+        vm.stop()
     except Exception as e:  # noqa: BLE001
         invalid = f"{type(e).__name__}: {e}"
     return r.finish(work, invalid=invalid)

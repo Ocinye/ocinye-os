@@ -278,6 +278,9 @@
     else {
       if (root.querySelector('.oi-body')) root.querySelector('.oi-body').scrollTop = scroll;
       if (keep) target = document.getElementById(keep.id);
+      // Nada tinha o foco (o controlo deste passo só agora apareceu, ou o que
+      // o tinha deixou de existir): o foco vai para a acção natural do passo.
+      if (!target || target.disabled) target = scope.querySelector('[data-af]:not([disabled])');
     }
     S.focusNext = null;
     if (target) {
