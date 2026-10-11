@@ -1,6 +1,7 @@
 //! `ocinye-session-service`: the daemon.
 //!
 //!   ocinye-session-service serve
+//!   ocinye-session-service link-instance
 //!
 //! Started by systemd under its own service account. It listens on
 //! `/run/ocinye/session.sock`, keeps its record in
@@ -15,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use ocinye_session_service::core_link::HttpCore;
 use ocinye_session_service::engine::{Clock, Config, Engine};
+use ocinye_session_service::link;
 use ocinye_session_service::server::{serve, Peer};
 use ocinye_session_service::verifier::Cost;
 use ocinye_system_contracts::session::SESSION_SOCKET_PATH;
@@ -51,11 +53,43 @@ fn interface_uid() -> Option<u32> {
         })
 }
 
+/// Where the Core's API is. On an Ocinye OS machine the Core is local; the
+/// unit file says where, and nothing else is read from the environment.
+fn core_api() -> String {
+    std::env::var("OCINYE_CORE_API").unwrap_or_else(|_| "http://127.0.0.1:8480/api/v1".to_owned())
+}
+
+/// `link-instance`: see [`ocinye_session_service::link`].
+fn link_instance() -> ExitCode {
+    let Ok(core) = HttpCore::new(&core_api(), "", "/nonexistent".into()) else {
+        eprintln!("the Core address is not a loopback address");
+        return ExitCode::FAILURE;
+    };
+    match link::link(&link::Paths::system(), || core.instance_key()) {
+        Ok(link::Linked::Fresh) => {
+            println!("linked: the Core answered");
+            ExitCode::SUCCESS
+        }
+        Ok(link::Linked::Kept) => {
+            println!("linked: the Core did not answer, the key learned before stays");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("not linked: {e:?}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
-    if args.next().as_deref() != Some("serve") || args.next().is_some() {
-        eprintln!("usage: ocinye-session-service serve");
-        return ExitCode::from(64);
+    match (args.next().as_deref(), args.next()) {
+        (Some("serve"), None) => {}
+        (Some("link-instance"), None) => return link_instance(),
+        _ => {
+            eprintln!("usage: ocinye-session-service serve | link-instance");
+            return ExitCode::from(64);
+        }
     }
     let read = |p: &str| {
         fs::read_to_string(p)
@@ -75,10 +109,7 @@ fn main() -> ExitCode {
         instance_key,
         cost: Cost::calibrate(Duration::from_millis(250)),
     };
-    // Where the Core's API is. On an Ocinye OS machine the Core is local; the
-    // unit file says where, and nothing else is read from the environment.
-    let base = std::env::var("OCINYE_CORE_API")
-        .unwrap_or_else(|_| "http://127.0.0.1:8080/api/v1".to_owned());
+    let base = core_api();
     let link = "/var/lib/ocinye/session/core-link.json".into();
     let Ok(core) = HttpCore::new(&base, &config.machine_id, link) else {
         eprintln!("cannot build the Core link");

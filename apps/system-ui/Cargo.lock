@@ -2099,12 +2099,14 @@ dependencies = [
 name = "ocinye-system-ui"
 version = "0.1.0"
 dependencies = [
+ "gio",
  "ocinye-system-client",
  "ocinye-system-contracts",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "webkit2gtk",
 ]
 
 [[package]]

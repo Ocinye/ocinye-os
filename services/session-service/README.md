@@ -9,6 +9,11 @@ Não é um fornecedor de identidade. Quem é membro, e o que pode, decide o Core
 este serviço guarda apenas o que a máquina precisa para reconhecer, enquanto a
 política da Instância o permitir, a pessoa que já entrou.
 
+`ocinye-session-service link-instance` — liga o posto à Instância instalada
+nesta máquina: escreve a chave pública de sessão que o Core publica, o endereço
+do Workspace e o nome da Instância a apontar para o loopback. Corre como root,
+em cada arranque, pela `ocinye-seat-link.service`.
+
 `ocinye-session-service serve` — o daemon. Escuta em `/run/ocinye/session.sock`
 com o mesmo fio e o mesmo aperto de mão do
 [`ocinye-system-contracts`](../../crates/ocinye-system-contracts/README.md).
@@ -35,7 +40,7 @@ com o mesmo fio e o mesmo aperto de mão do
 (`infra/system-ui/bench/`). A ligação ao Core (`core_link`) usa o login e o
 segundo factor do próprio Core e pede a política assinada em
 `POST /auth/machine-session`. Fala **só com o loopback** (`OCINYE_CORE_API`,
-por omissão `http://127.0.0.1:8080/api/v1`): o Core de uma máquina com o
+por omissão `http://127.0.0.1:8480/api/v1`, a porta de loopback do proxy): o Core de uma máquina com o
 Ocinye OS corre nela, um endereço que não seja de loopback é recusado ao
 arrancar, e por isso o serviço que guarda tokens de sessão não traz uma pilha
 de TLS; o token da sessão do Core fica em

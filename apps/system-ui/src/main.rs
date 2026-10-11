@@ -33,6 +33,39 @@ const WORKSPACE_ADDRESS: &str = "/etc/ocinye/workspace-url";
 /// not treat as the trusted surface, with a window that has no command at all.
 const WORKSPACE_MODE: &str = "--workspace";
 
+/// The certificate this machine's own Instance serves, where the installation
+/// put it. Public by nature: it is what the proxy hands every client.
+const INSTANCE_CERTIFICATE: &str = "/etc/ocinye/tls/instance.pem";
+
+/// Open the Workspace in its window, trusting this machine's own Instance.
+///
+/// An Instance installed without a publicly issued certificate serves one
+/// that no authority vouches for, and the webview would refuse the machine's
+/// own Workspace. So the window is told that this exact certificate — the
+/// file on this machine, read by this process — is acceptable for this exact
+/// host, and for nothing else: any other certificate, and any other host,
+/// is judged as usual.
+#[cfg(target_os = "linux")]
+fn open_trusting_instance(window: &WebviewWindow, address: &Url) {
+    use webkit2gtk::{WebContextExt, WebViewExt};
+    let pem = std::fs::read_to_string(INSTANCE_CERTIFICATE).ok();
+    let host = address.host_str().unwrap_or_default().to_owned();
+    let address = address.to_string();
+    let _ = window.with_webview(move |webview| {
+        let view = webview.inner();
+        let certificate = pem.and_then(|pem| gio::TlsCertificate::from_pem(&pem).ok());
+        if let (Some(certificate), Some(context)) = (certificate, view.context()) {
+            context.allow_tls_certificate_for_host(&certificate, &host);
+        }
+        view.load_uri(&address);
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_trusting_instance(window: &WebviewWindow, address: &Url) {
+    let _ = window.navigate(address.clone());
+}
+
 /// The Workspace's address, when the installation recorded a usable one:
 /// HTTPS, or plain HTTP to this machine only.
 fn workspace_address() -> Option<Url> {
@@ -159,11 +192,14 @@ fn main() {
                 // The window is called `workspace`: no capability names it, so
                 // none of the commands above exists for it. It stays on the
                 // Workspace's own origin.
-                WebviewWindowBuilder::new(app, "workspace", WebviewUrl::External(address))
-                    .title("Ocinye Workspace")
-                    .decorations(false)
-                    .on_navigation(move |to| to.origin() == origin)
-                    .build()?;
+                let blank: Url = "about:blank".parse()?;
+                let window =
+                    WebviewWindowBuilder::new(app, "workspace", WebviewUrl::External(blank))
+                        .title("Ocinye Workspace")
+                        .decorations(false)
+                        .on_navigation(move |to| to.scheme() == "about" || to.origin() == origin)
+                        .build()?;
+                open_trusting_instance(&window, &address);
             } else {
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("Ocinye OS")

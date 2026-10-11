@@ -48,6 +48,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mais nada; a janela do Workspace é outro processo, sem comandos.
 - `network.status` passa a dar os endereços de cada interface (lidos de
   `ip -json` pelo executor endurecido); antes vinham sempre vazios.
+- **O posto na imagem**: as imagens instaláveis trazem os dois serviços, o
+  compositor e a interface, com as suas unidades. O ecrã gráfico só arranca
+  depois de haver uma Instância ligada; até lá `tty1` é da consola de texto e
+  do seu código de emparelhamento. Sem prova numa imagem construída.
+- **Porta da própria máquina**: o proxy publica `127.0.0.1:8480`, só no
+  loopback, e por ela passam apenas entrar, o segundo factor, a política de
+  sessão e a sua chave, e sair. O Core continua sem porto no host.
+- A janela do Workspace confia no certificado que a Instância desta máquina
+  serve (`/etc/ocinye/tls/instance.pem`), para o nome dela e para mais nenhum.
 - Bancada gráfica (`infra/system-ui/bench/`): entrada de teclado e ponteiro e
   capturas pelo monitor do QEMU, um Core de substituição e um posto completo
   dentro da VM.

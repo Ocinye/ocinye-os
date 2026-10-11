@@ -16,7 +16,9 @@
 #   release/             the D011 bundle without images/ (MANIFEST.json, install/, …)
 #   images/*.tar         the release images (docker save)
 #   third-party.txt      one `repo:tag@sha256:digest` per line
-#   bin/                 ocinye-firstboot, ocinye-oie (static, target arch)
+#   bin/                 ocinye-firstboot, ocinye-oie, ocinye-system-service,
+#                        ocinye-session-service, ocinye-system (static, target arch);
+#                        ocinye-compositor, ocinye-system-ui (built on this base, target arch)
 #   rootfs.tar           infra/image/rootfs
 # Outputs under /root/ocinye-build/out (read back by the builder before finalize):
 #   oci.json  dpkg-runtime.txt
@@ -48,6 +50,17 @@ apt_update() {
   done
   echo "PACKAGE_INSTALL_FAILED apt-update" >&2
   return 22
+}
+
+# The seat (ADR-0031): the two services, their headless client, the compositor
+# and the native system interface. Installed by `common` and again at
+# `finalize`, so that a reused common layer never carries older ones.
+install_seat_binaries() {
+  install -m 0755 "$B/bin/ocinye-system-service" /usr/lib/ocinye/ocinye-system-service
+  install -m 0755 "$B/bin/ocinye-session-service" /usr/lib/ocinye/ocinye-session-service
+  install -m 0755 "$B/bin/ocinye-system" /usr/bin/ocinye-system
+  install -m 0755 "$B/bin/ocinye-compositor" /usr/lib/ocinye/ocinye-compositor
+  install -m 0755 "$B/bin/ocinye-system-ui" /usr/lib/ocinye/ocinye-system-ui
 }
 
 stage_common() {
@@ -111,6 +124,27 @@ SRC
   systemctl stop docker.socket docker containerd
   systemctl disable docker.socket docker containerd
   rm -f /var/lib/docker/engine-id
+
+  log "the seat: display stack, system webview, the account the screen runs as"
+  # What the compositor and the interface link against, and nothing a desktop
+  # would add: no display manager, no session of another environment, no
+  # NetworkManager, no automounter (no recommends).
+  policy_on
+  "${APT[@]}" install --no-install-recommends \
+    libseat1 libinput10 libudev1 libdrm2 libgbm1 libegl1 libgles2 libgl1-mesa-dri \
+    libxkbcommon0 xkb-data libwayland-server0 libwayland-client0 \
+    libwebkit2gtk-4.1-0 libgtk-3-0 libpam-systemd dbus iproute2 rfkill
+  policy_off
+  install -d -m 0755 /usr/lib/ocinye
+  install_seat_binaries
+  # No password, no shell, and no group that reaches a device by itself:
+  # logind hands the session its display and input, and takes them back.
+  id ocinye-ui >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib/ocinye-ui --shell /usr/sbin/nologin ocinye-ui
+  usermod -p '*' ocinye-ui
+  # Every binary of the seat finds what it links against on this root.
+  for b in /usr/lib/ocinye/ocinye-compositor /usr/lib/ocinye/ocinye-system-ui; do
+    if ldd "$b" | grep -q 'not found'; then ldd "$b" | grep 'not found' >&2; echo "SEAT_LIBRARY_MISSING $b" >&2; exit 22; fi
+  done
 
   log "release payload and ocinye-firstboot"
   dest="/usr/lib/ocinye/release/$RELEASE_ID"
@@ -291,12 +325,17 @@ stage_finalize() {
   # The binaries and fragments of this run (a reused common layer may carry
   # older ones).
   install -m 0755 "$B/bin/ocinye-firstboot" /usr/lib/ocinye/ocinye-firstboot
+  install_seat_binaries
   tar -C / --no-same-owner -xf "$B/rootfs.tar"
   chmod 0440 /etc/sudoers.d/60-ocinye-image
   visudo -c >/dev/null
   case "$profile" in
     virt|metal)
-      systemctl enable ocinye-firstboot.service ocinye-console@tty1.service "ocinye-console@$SERIAL.service" ;;
+      systemctl enable ocinye-firstboot.service ocinye-console@tty1.service "ocinye-console@$SERIAL.service"
+      # The seat's services, and the watch for an Instance being installed.
+      # The screen itself (ocinye-display.service) is never enabled: the link
+      # starts it, once there is an Instance to sign in to.
+      systemctl enable ocinye-system.service ocinye-session.service ocinye-seat-link.path ;;
     oie)
       systemctl disable ssh.service ssh.socket cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
       systemctl enable ocinye-oie@tty1.service "ocinye-oie@$SERIAL.service"

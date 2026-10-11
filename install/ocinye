@@ -326,6 +326,10 @@ fase_proxy() {  # tls cert chave dominio [host…]
         > "$CONFIG/nginx/30-instance.conf"
     cp "$RAIZ/current/infra/nginx/instance/00-comum.conf" "$CONFIG/nginx/00-comum.conf"
     cp "$RAIZ/current/infra/nginx/instance/10-default.conf" "$CONFIG/nginx/10-default.conf"
+    # A porta da própria máquina (ADR-0031). Um release anterior não a traz.
+    if [ -f "$RAIZ/current/infra/nginx/instance/20-machine.conf" ]; then
+        cp "$RAIZ/current/infra/nginx/instance/20-machine.conf" "$CONFIG/nginx/20-machine.conf"
+    fi
     if [ "$tls" = provided ]; then
         [ -r "$cert" ] && [ -r "$chave" ] || fatal "--tls provided exige --cert e --key legíveis"
         install -m 644 "$cert" "$CONFIG/tls/instance.pem"
@@ -677,6 +681,14 @@ trocar_para() {  # sha
     # O proxy vem do release para onde se vai, e não do que lá estava.
     local nginx="$RAIZ/releases/$destino/infra/nginx/instance"
     cp "$nginx/00-comum.conf" "$nginx/10-default.conf" "$CONFIG/nginx/"
+    # A porta da própria máquina vem com o release que a tem, e sai com o que
+    # não a tem: uma configuração que sobrasse apontaria para um Compose que já
+    # não publica o porto.
+    if [ -f "$nginx/20-machine.conf" ]; then
+        cp "$nginx/20-machine.conf" "$CONFIG/nginx/20-machine.conf"
+    else
+        rm -f "$CONFIG/nginx/20-machine.conf"
+    fi
     # Os nomes que o proxy já servia continuam a ser servidos (D011: vários pontos).
     local nomes
     nomes="$(sed -n 's/^ *server_name \(.*\);$/\1/p' "$CONFIG/nginx/30-instance.conf" | head -1)"

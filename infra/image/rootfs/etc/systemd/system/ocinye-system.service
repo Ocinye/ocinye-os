@@ -1,0 +1,28 @@
+[Unit]
+Description=Ocinye System Service (the authority over this machine)
+Documentation=file:///usr/share/doc/ocinye/images.md
+After=local-fs.target dbus.service
+
+[Service]
+ExecStart=/usr/lib/ocinye/ocinye-system-service serve
+# /run/ocinye is shared with the Session Service: neither removes it on stop.
+RuntimeDirectory=ocinye
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+StateDirectory=ocinye/system
+LogsDirectory=ocinye
+Restart=always
+RestartSec=2
+# The authority is root on purpose: it restarts the machine, sets the clock
+# and enables remote access. What it does not need, it does not have.
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -26,7 +26,7 @@ fi
 python3 "$dir/fake_core.py" 8080 /etc/ocinye/instance-session.pub "$idle" &
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s /etc/ocinye/instance-session.pub ] && break; sleep 0.5; done
 /opt/sx/ocinye-system-service serve &
-/opt/sx/ocinye-session-service serve &
+OCINYE_CORE_API=http://127.0.0.1:8080/api/v1 /opt/sx/ocinye-session-service serve &
 seatd -g video &
 sleep 1
 exec runuser -u ocinye-ui -- env ${SX_ENV:-} XDG_RUNTIME_DIR=/run/sx LIBSEAT_BACKEND=seatd HOME=/home/ocinye-ui \

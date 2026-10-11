@@ -26,6 +26,13 @@ tauri = { version = "2.12", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# The Workspace's window trusts exactly one certificate beyond the system's:
+# the one this machine's own Instance serves (see `trust_instance`). The
+# versions are the ones Tauri's webview already links.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+gio = "0.18"
+
 [profile.release]
 lto = true
 codegen-units = 1

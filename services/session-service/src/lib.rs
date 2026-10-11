@@ -16,6 +16,7 @@
 
 pub mod core_link;
 pub mod engine;
+pub mod link;
 pub mod policy;
 pub mod server;
 pub mod verifier;

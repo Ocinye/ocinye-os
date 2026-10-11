@@ -111,14 +111,40 @@ impl HttpCore {
         })
     }
 
+    /// The Instance's public session key, as the Core publishes it: 32 bytes,
+    /// hexadecimal. `None` when the Core does not answer with one.
+    #[must_use]
+    pub fn instance_key(&self) -> Option<String> {
+        #[derive(Deserialize)]
+        struct Key {
+            public_key: String,
+        }
+        let answer = self.send("GET", "/auth/machine-session/key", None, None)?;
+        let key = answer.ok().then(|| answer.json::<Key>())??.public_key;
+        (key.len() == 64 && key.bytes().all(|b| b.is_ascii_hexdigit())).then_some(key)
+    }
+
     /// One `POST` with a JSON body, one answer, one connection.
     fn post(&self, path: &str, token: Option<&str>, body: &serde_json::Value) -> Option<Answer> {
+        self.send("POST", path, token, Some(body))
+    }
+
+    fn send(
+        &self,
+        method: &str,
+        path: &str,
+        token: Option<&str>,
+        body: Option<&serde_json::Value>,
+    ) -> Option<Answer> {
         // A token is the Core's own hexadecimal; anything else is not sent as
         // a header.
         if token.is_some_and(|t| t.is_empty() || !t.bytes().all(|b| b.is_ascii_alphanumeric())) {
             return None;
         }
-        let body = serde_json::to_vec(body).ok()?;
+        let body = match body {
+            Some(body) => serde_json::to_vec(body).ok()?,
+            None => Vec::new(),
+        };
         let mut stream = TcpStream::connect_timeout(&self.address, Duration::from_secs(3)).ok()?;
         stream
             .set_read_timeout(Some(Duration::from_secs(10)))
@@ -130,7 +156,7 @@ impl HttpCore {
             .map(|t| format!("Cookie: {SESSION_COOKIE}={t}\r\n"))
             .unwrap_or_default();
         let head = format!(
-            "POST {}{path} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n\
+            "{method} {}{path} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n\
              Content-Length: {}\r\n{cookie}Connection: close\r\n\r\n",
             self.prefix,
             self.address,

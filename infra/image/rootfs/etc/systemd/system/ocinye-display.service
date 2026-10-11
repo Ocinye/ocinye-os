@@ -1,0 +1,43 @@
+[Unit]
+Description=Ocinye OS screen (compositor and the native system interface)
+Documentation=file:///usr/share/doc/ocinye/images.md
+# The screen belongs to the text console until an Instance is linked: an
+# unclaimed machine shows its pairing code there, and only there. A machine
+# without a display device keeps the text console too.
+#
+# Not enabled at boot on purpose. A unit that conflicts with the console and
+# is part of the boot transaction would stop the console even when its own
+# conditions then fail — and an unclaimed machine would have no screen at all.
+# ocinye-seat-link.service starts this one, once there is something to show.
+ConditionPathExists=/etc/ocinye/instance-session.pub
+ConditionPathExistsGlob=/dev/dri/card*
+After=systemd-user-sessions.service systemd-logind.service ocinye-system.service ocinye-session.service ocinye-firstboot.service
+Wants=ocinye-system.service ocinye-session.service
+Conflicts=getty@tty1.service ocinye-console@tty1.service
+After=getty@tty1.service ocinye-console@tty1.service
+
+[Service]
+User=ocinye-ui
+# A real session on seat0: logind hands the compositor the display and the
+# input devices, and takes them back when it stops. The account has no
+# password, no shell and no group that reaches a device by itself.
+PAMName=ocinye-display
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_SESSION_CLASS=user
+Environment=XDG_SEAT=seat0
+Environment=XDG_VTNR=1
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+# The program the compositor starts is fixed here, and nowhere else.
+ExecStart=/usr/lib/ocinye/ocinye-compositor -- /usr/lib/ocinye/ocinye-system-ui
+Restart=always
+RestartSec=2
+NoNewPrivileges=yes
+
