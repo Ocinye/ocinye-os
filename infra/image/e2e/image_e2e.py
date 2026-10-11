@@ -579,10 +579,13 @@ def png_is_a_picture(path):
 def scenario_seat(a):
     """The seat of an installed machine (ADR-0031), end to end on the image.
 
-    The machine is claimed, an Instance is installed on it from the release the
-    image carries (no network needed for it), the seat links itself to that
-    Instance, and a person signs in at the machine's own screen — replacing
-    the temporary credential there — with the keyboard.
+    Everything a person does happens at the machine's own screen, with the
+    guest's keyboard: the first-start set-up creates the Instance from the
+    release the image carries, the first administrator's credential is shown
+    once, and the administrator signs in — replacing that credential — locks,
+    unlocks and restarts. The machine is also claimed, only so that the bench
+    has a way in to look: what it asserts comes from the services and the
+    units, never from pixels.
     """
     r = Results(f"seat-{a.arch}")
     work = a.work
@@ -601,55 +604,99 @@ def scenario_seat(a):
         if not facts:
             return r.finish(work)
         run = lambda command, timeout=120: ssh(vm.port, "ocinye", k1, command, timeout=timeout)
-        units = run("systemctl is-active ocinye-system.service ocinye-session.service; systemctl is-enabled ocinye-seat-link.path; systemctl is-active ocinye-display.service; systemctl is-active ocinye-console@tty1.service").stdout.decode().split()
+        units = run("systemctl is-active ocinye-system.service ocinye-session.service ocinye-display.service ocinye-console@tty2.service; systemctl is-enabled ocinye-seat-link.path; systemctl is-active ocinye-console@tty1.service").stdout.decode().split()
         r.check("seat: the two services run before any Instance exists", units[:2] == ["active", "active"], units)
-        r.check("seat: the link waits for an Instance", units[2:3] == ["enabled"], units)
-        r.check("seat: no graphical screen on an unlinked machine; the text console has tty1", units[3:5] == ["inactive", "active"], units)
+        r.check("seat: the screen is up on a machine with a display, and the text console is on tty2", units[2:4] == ["active", "active"], units)
+        r.check("seat: the link waits for an Instance", units[4:5] == ["enabled"], units)
+        r.check("seat: tty1 belongs to the screen", units[5:6] == ["inactive"], units)
         st = session_state(vm.port, k1)
         r.check("seat: nobody is signed in", st.get("state") == "SIGNED_OUT", st)
-        # The Instance, from the release on the image.
-        rel = run("ls /usr/lib/ocinye/release").stdout.decode().split()
-        r.check("seat: the image carries one release", len(rel) == 1, rel)
-        install = run(
-            f"sudo -n /usr/lib/ocinye/release/{rel[0]}/install/ocinye install --domain ocinye-seat.test "
-            "--instance-name 'Bancada do posto' --distribution research "
-            "--name 'Pessoa de Prova' --email pessoa@ocinye-seat.test "
-            "--admin-name 'Admin de Prova' --admin-email admin@ocinye-seat.test "
-            "--tls self-signed --credential-file /root/first-admin 2>&1 | tail -40", timeout=3600)
-        out = install.stdout.decode(errors="replace")
-        open(os.path.join(work, "install.log"), "w").write(redact(out))
-        health = run("sudo -n test -s /root/first-admin && sudo -n test -f /etc/ocinye/release.env && echo installed").stdout
-        r.check("seat: the Instance installs from the image's own release", b"installed" in health, out[-600:])
-        if b"installed" not in health:
+
+        def activation():
+            out = run("sudo -n ocinye-system --json activation status").stdout.decode(errors="replace")
+            try:
+                return json.loads(out)["value"]
+            except (ValueError, KeyError):
+                return {"phase": "UNKNOWN", "detail": out[-200:]}
+
+        ready = activation()
+        r.check("seat: the machine offers to create its Instance from the release it carries", ready.get("phase") == "READY" and ready.get("release_id"), ready)
+        time.sleep(20)
+        r.check("seat: the screen shows the first-start set-up", png_is_a_picture(vm.screenshot(os.path.join(shots, "1-set-up.png"))))
+        # The whole set-up, at the keyboard: the form's fields in order, the
+        # four distribution boxes passed over (research is ticked), Enter.
+        vm.type("Bancada do posto")
+        vm.press("tab")
+        vm.type("ocinye-seat.test")
+        for _ in range(5):
+            vm.press("tab")
+        vm.type("Pessoa de Prova")
+        vm.press("tab")
+        vm.type("pessoa@ocinye-seat.test")
+        vm.press("tab")
+        vm.type("Admin de Prova")
+        vm.press("tab")
+        vm.type("admin@ocinye-seat.test")
+        time.sleep(1)
+        vm.screenshot(os.path.join(shots, "2-set-up-filled.png"))
+        vm.press("ret")
+        time.sleep(15)
+        started = activation()
+        r.check("seat: the set-up started the installation", started.get("phase") in ("RUNNING", "ACTIVATED"), started)
+        vm.screenshot(os.path.join(shots, "3-creating.png"))
+        done = started
+        for _ in range(240):
+            if done.get("phase") != "RUNNING":
+                break
+            time.sleep(15)
+            done = activation()
+        log_tail = run("sudo -n tail -c 1500 /var/lib/ocinye/system/activation/install.log").stdout.decode(errors="replace")
+        open(os.path.join(work, "install.log"), "w").write(redact(log_tail))
+        r.check("seat: the Instance was created on the machine, by the machine", done.get("phase") == "ACTIVATED" and done.get("credential_waiting") is True, (done, log_tail[-500:]))
+        if done.get("phase") != "ACTIVATED":
             return r.finish(work)
-        # The link: the key, the address, the name, and then the screen.
+        audit = run("sudo -n grep -c activation.start /var/log/ocinye/system-audit.jsonl; sudo -n grep -c 'pessoa@' /var/log/ocinye/system-audit.jsonl").stdout.decode().split()
+        r.check("seat: the activation is in the audit record, by its administrator and not by the person's address", audit[:1] == ["1"] and audit[1:2] == ["0"], audit)
+        # The link: the key, the address, the name.
         linked = False
         for _ in range(60):
-            got = run("test -s /etc/ocinye/instance-session.pub && systemctl is-active ocinye-display.service").stdout.decode().strip()
-            if got == "active":
+            got = run("test -s /etc/ocinye/instance-session.pub && echo linked").stdout.decode().strip()
+            if got == "linked":
                 linked = True
                 break
             time.sleep(10)
-        link = run("cat /etc/ocinye/workspace-url; grep -c 'ocinye-seat$' /etc/hosts; systemctl is-active ocinye-console@tty1.service; sudo -n journalctl -u ocinye-seat-link -u ocinye-display --no-pager -n 30").stdout.decode(errors="replace")
-        r.check("seat: linked to the Instance, and the screen started", linked, link[-900:])
+        link = run("cat /etc/ocinye/workspace-url; grep -c 'ocinye-seat$' /etc/hosts; sudo -n journalctl -u ocinye-seat-link --no-pager -n 20").stdout.decode(errors="replace")
+        r.check("seat: linked to the Instance it created", linked, link[-900:])
         r.check("seat: the Workspace address is the Instance's own name", link.startswith("https://ocinye-seat.test/"), link[:80])
         r.check("seat: the name resolves to this machine", link.splitlines()[1:2] == ["1"], link[:120])
-        r.check("seat: the text console gave tty1 to the screen", link.splitlines()[2:3] == ["inactive"], link[:160])
         door = run("curl -s -o /dev/null -w '%{http_code} ' http://127.0.0.1:8480/api/v1/auth/machine-session/key http://127.0.0.1:8480/api/v1/people http://127.0.0.1:8480/; "
                    "ss -ltnH 'sport = :8480' | awk '{print $4}'").stdout.decode().split()
         r.check("seat: the loopback door answers for the session key and for nothing else", door[:3] == ["200", "404", "404"], door)
         r.check("seat: the door listens on the loopback only", door[3:] == ["127.0.0.1:8480"], door)
-        time.sleep(25)
-        first = vm.screenshot(os.path.join(shots, "1-sign-in.png"))
+        # The first administrator's credential: on the screen once, then gone.
+        # The bench cannot read a screen, so it reads the file the screen is
+        # about to be given — as root, over the claim's SSH — and then checks
+        # that showing it removed it.
+        secret = run("sudo -n cat /var/lib/ocinye/system/activation/credential").stdout.decode().strip()
+        r.check("seat: a temporary credential is waiting to be shown", len(secret) >= 12)
+        time.sleep(8)
+        vm.screenshot(os.path.join(shots, "4-instance-created.png"))
+        vm.press("ret")
+        time.sleep(4)
+        vm.screenshot(os.path.join(shots, "5-credential.png"))
+        gone = run("sudo -n test -e /var/lib/ocinye/system/activation/credential && echo there || echo gone").stdout.decode().strip()
+        r.check("seat: once shown, the credential is no longer on the machine", gone == "gone" and activation().get("credential_waiting") is False, gone)
+        vm.press("ret")
+        time.sleep(3)
+        first = vm.screenshot(os.path.join(shots, "6-sign-in.png"))
         r.check("seat: the screen shows the sign-in", png_is_a_picture(first))
-        # Sign in at the keyboard, with the temporary credential, and replace it.
-        secret = run("sudo -n cat /root/first-admin").stdout.decode().strip()
-        vm.type("admin@ocinye-seat.test")
+        # Sign in at the keyboard, with the temporary credential, and replace
+        # it. The address is already in its field: the screen put it there.
         vm.press("tab")
         vm.type(secret)
         vm.press("ret")
         time.sleep(12)
-        vm.screenshot(os.path.join(shots, "2-first-access.png"))
+        vm.screenshot(os.path.join(shots, "7-first-access.png"))
         st = session_state(vm.port, k1)
         r.check("seat: a temporary credential opens no session", st.get("state") == "SIGNED_OUT", st)
         vm.type(chosen)
@@ -665,7 +712,7 @@ def scenario_seat(a):
         r.check("seat: signed in at the machine's own screen", active.get("state") == "ACTIVE" and active.get("core") == "ONLINE", active)
         r.check("seat: the member is the Instance's administrator", active.get("member_name") == "Admin de Prova", active.get("member_name"))
         time.sleep(20)
-        vm.screenshot(os.path.join(shots, "3-session.png"))
+        vm.screenshot(os.path.join(shots, "8-session.png"))
         procs = run("pgrep -af ocinye-system-ui | grep -c -- --workspace; pgrep -u ocinye-ui -c ocinye-compositor").stdout.decode().split()
         r.check("seat: the Workspace has its own window process", procs[:1] == ["1"], procs)
         r.check("seat: the compositor runs as the unprivileged screen account", procs[1:2] == ["1"], procs)
@@ -673,7 +720,7 @@ def scenario_seat(a):
         lock = run("sudo -n python3 - <<'PY'\n" + SESSION_PROBE.replace('{"request": "state"}', '{"request": "lock"}') + "\nPY")
         r.check("seat: locked", b'"LOCKED"' in lock.stdout, lock.stdout[-200:])
         time.sleep(6)
-        vm.screenshot(os.path.join(shots, "4-locked.png"))
+        vm.screenshot(os.path.join(shots, "9-locked.png"))
         vm.type(secret)
         vm.press("ret")
         time.sleep(6)
@@ -682,7 +729,7 @@ def scenario_seat(a):
         vm.press("ret")
         time.sleep(8)
         r.check("seat: unlocked with the chosen password", session_state(vm.port, k1).get("state") == "ACTIVE")
-        vm.screenshot(os.path.join(shots, "5-unlocked.png"))
+        vm.screenshot(os.path.join(shots, "10-unlocked.png"))
         # A restart ends the session and brings the screen back by itself.
         run("sudo -n systemctl reboot", timeout=30)
         time.sleep(20)
@@ -697,7 +744,7 @@ def scenario_seat(a):
         r.check("seat: after a restart the screen is back and nobody is signed in", back.get("state") == "SIGNED_OUT", back)
         r.check("seat: the previous session is said to have ended with the restart", back.get("ended") == "RESTARTED", back)
         time.sleep(20)
-        vm.screenshot(os.path.join(shots, "6-after-restart.png"))
+        vm.screenshot(os.path.join(shots, "11-after-restart.png"))
         vm.stop()
     except Exception as e:  # noqa: BLE001 — the harness reports, never hides
         return r.finish(work, invalid=f"{type(e).__name__}: {e}")
