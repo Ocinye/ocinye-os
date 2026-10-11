@@ -237,9 +237,8 @@ sem que nada falhe.
   final exige ainda uma VM `amd64` externa, e é um comando
   ([runbook](docs/runbooks/certify-installer-on-external-amd64-vm.md), `NOT_RUN`). ACME `DEFERRED`; assinatura do
   release `NOT_IMPLEMENTED`; modo fornecedor de computação não existe.
-- **Imagens do Ocinye OS (D013): fase A de código em
-  `feat/d013-image-builder-phase-a`, `PROVISIONAL_PENDING_D011_CERTIFICATION`,
-  não mergeada** ([ADR-0026](docs/adrs/0026-release-and-image-signing.md) a
+- **Imagens do Ocinye OS (D013): fase A de código e endurecimento do
+  armazenamento (L0-H) em `main`, `PROVISIONAL_PENDING_D011_CERTIFICATION`** ([ADR-0026](docs/adrs/0026-release-and-image-signing.md) a
   [ADR-0029](docs/adrs/0029-image-machine-instance-identity.md), `Proposed`;
   [imagens](docs/install/images.md)). Construtor de ISO/QCOW2/RAW numa VM
   descartável, primeiro arranque com reclamação por SSH (código de 125 bits na

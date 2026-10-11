@@ -7,6 +7,14 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Integração em `main` — 2026-10-11
+
+- O Installer (D011) entrou em `main` (PR #195), como
+  `D011_READY_FOR_FINAL_AMD64_CERTIFICATION`: falta só a VM `amd64` externa.
+- As imagens do Ocinye OS (D013, fase A e L0-H) entram em `main` a seguir, ainda
+  `PROVISIONAL_PENDING_D011_CERTIFICATION`: só construções de desenvolvimento,
+  hardware físico por correr, ADR-0026 a ADR-0030 `Proposed`.
+
 ### D013 — Endurecimento do armazenamento na instalação (L0-H) — 2026-10-10 (ramo `feat/d013-image-builder-phase-a`)
 
 Não mergeado, não publicado; só construções de desenvolvimento
