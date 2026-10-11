@@ -642,7 +642,15 @@ def scenario_seat(a):
         ready = activation()
         r.check("seat: the machine offers to create its Instance from the release it carries", ready.get("phase") == "READY" and ready.get("release_id"), ready)
         time.sleep(20)
-        r.check("seat: the screen shows the first-start set-up", png_is_a_picture(vm.screenshot(os.path.join(shots, "1-set-up.png"))))
+        shown = png_is_a_picture(vm.screenshot(os.path.join(shots, "1-set-up.png")))
+        r.check("seat: the screen shows the first-start set-up", shown)
+        if not shown:
+            # What the machine says of its own screen: the devices, the
+            # drivers, and the display unit's journal. Evidence, not a check.
+            why = run("ls -l /dev/dri 2>&1; lsmod | grep -E 'drm|gpu|bochs|virtio' 2>&1; "
+                      "sudo -n journalctl -b -u ocinye-display.service -u seatd.service --no-pager -o cat 2>&1 | tail -n 80; "
+                      "pgrep -a -f 'ocinye-|WebKit' 2>&1; id ocinye-ui 2>&1; sudo -n dmesg | grep -iE 'segfault|traps:|killed process|oom' | tail -n 10").stdout.decode(errors="replace")
+            log("seat: display diagnosis\n" + why)
         # The whole set-up, at the keyboard: the form's fields in order, the
         # four distribution boxes passed over (research is ticked), Enter.
         vm.type("Bancada do posto")

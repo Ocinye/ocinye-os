@@ -57,6 +57,12 @@ que a política lhe dá.
   que o ecrã prefere. **Uma saída na v1.**
 - Desenho em OpenGL ES sobre GBM, que o Mesa também dá em software: uma máquina
   sem GPU acelerada continua a ter ecrã.
+- Ao cliente dá memória partilhada (`wl_shm`) e nenhum `linux-dmabuf`; arranca-o
+  com `WEBKIT_DISABLE_DMABUF_RENDERER=1` e `WEBKIT_DISABLE_COMPOSITING_MODE=1`,
+  para que a interface nunca dependa de GL no processo web. Numa imagem `amd64`
+  construída, sem estas variáveis, o processo web do WebKitGTK 2.52 morria no
+  `llvmpipe` e a janela ficava em branco com o compositor levantado; qualquer
+  uma das duas, sozinha, fazia a interface aparecer na mesma imagem.
 - Entrada pelo `libinput`: teclado para a superfície com foco, ponteiro para a
   superfície por baixo dele.
 - Sobre a biblioteca [Smithay](https://github.com/Smithay/smithay) 0.7 (MIT).
