@@ -304,3 +304,16 @@ class SeatBench(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_esp_boot_artifacts_asks_for_a_pair_in_one_vendor_directory_and_the_fallback():
+    amd = {"EFI/BOOT/BOOTX64.EFI", "EFI/grub/grubx64.efi", "EFI/grub/shimx64.efi"}
+    arm = {"EFI/BOOT/BOOTAA64.EFI", "EFI/ubuntu/grubaa64.efi", "EFI/ubuntu/shimaa64.efi"}
+    assert m.esp_boot_artifacts(amd, "x64")
+    assert m.esp_boot_artifacts(arm, "aa64")
+    # The other architecture's files are not this one's.
+    assert not m.esp_boot_artifacts(amd, "aa64")
+    # No fallback loader; shim and grub in different directories; no shim.
+    assert not m.esp_boot_artifacts(amd - {"EFI/BOOT/BOOTX64.EFI"}, "x64")
+    assert not m.esp_boot_artifacts({"EFI/BOOT/BOOTX64.EFI", "EFI/a/grubx64.efi", "EFI/b/shimx64.efi"}, "x64")
+    assert not m.esp_boot_artifacts(amd - {"EFI/grub/shimx64.efi"}, "x64")

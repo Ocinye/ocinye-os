@@ -1133,6 +1133,14 @@ def preserve_iso_failure(work, target, collector=None):
         return None
 
 
+def esp_boot_artifacts(files, suffix):
+    """Shim and grub of one architecture in one vendor directory, and the
+    removable fallback loader."""
+    vendors = {f.split("/")[1] for f in files if f.startswith("EFI/") and f.count("/") == 2} - {"BOOT"}
+    paired = any(f"EFI/{v}/shim{suffix}.efi" in files and f"EFI/{v}/grub{suffix}.efi" in files for v in vendors)
+    return paired and f"EFI/BOOT/BOOT{suffix.upper()}.EFI" in files
+
+
 def scenario_iso(a):
     r = Results(f"iso-{a.arch}")
     work = a.work
@@ -1230,10 +1238,12 @@ def scenario_iso(a):
                 # curtin log must show the offline install fetched nothing — a
                 # zero count over the fetch/resolution-failure and in-target
                 # install signatures proves no network package op was needed.
-                efi_expect = {
-                    "amd64": ["EFI/grub/shimx64.efi", "EFI/grub/grubx64.efi", "EFI/BOOT/BOOTX64.EFI"],
-                    "arm64": ["EFI/grub/shimaa64.efi", "EFI/grub/grubaa64.efi", "EFI/BOOT/BOOTAA64.EFI"],
-                }[a.arch]
+                # The vendor directory is the distributor's name as grub
+                # derives it, and it is not the same on the two architectures
+                # (`grub` on amd64, `ubuntu` on arm64): what is asked is the
+                # shim and grub of this architecture in one vendor directory,
+                # and the removable fallback.
+                efi_suffix = {"amd64": "x64", "arm64": "aa64"}[a.arch]
                 p = ssh(vm2.port, "ocinye", k1,
                         "sudo -n find /boot/efi -maxdepth 3 -type f -printf '%P\\n' 2>/dev/null; "
                         "echo '---LOG---'; "
@@ -1243,7 +1253,7 @@ def scenario_iso(a):
                 esp_part, _, log_part = p.stdout.decode().partition("---LOG---")
                 esp_files = set(esp_part.split())
                 r.check("ISO: ESP carries the UEFI boot artifacts for the architecture",
-                        all(f in esp_files for f in efi_expect), sorted(esp_files))
+                        esp_boot_artifacts(esp_files, efi_suffix), sorted(esp_files))
                 hit = re.search(r"\b(\d+)\b", log_part)
                 r.check("ISO: offline install required no package fetch (empty curtin apt)",
                         hit is not None and hit.group(1) == "0", log_part.strip()[:200])
