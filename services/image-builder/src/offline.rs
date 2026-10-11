@@ -86,10 +86,18 @@ impl Mounted {
             mnt: mnt.to_path_buf(),
         };
         let _ = cmd::run(step, "partprobe", &[&dev], || asm(step));
+        // The labels are published by udev, one partition at a time: the
+        // root's can be there before `BOOT`'s is. Mounting on the first
+        // sight of the root left `/boot` unmounted and `/boot/efi` without a
+        // mount point (amd64, where `/boot` is its own partition). So the
+        // labels are read until udev has settled and two readings agree.
         let mut parts = vec![];
         for _ in 0..30 {
-            parts = by_label(&dev);
-            if parts.iter().any(|(l, _)| l == "cloudimg-rootfs") {
+            let _ = cmd::run(step, "udevadm", &["settle", "--timeout=10"], || asm(step));
+            let seen = by_label(&dev);
+            let stable = seen == parts;
+            parts = seen;
+            if stable && parts.iter().any(|(l, _)| l == "cloudimg-rootfs") {
                 break;
             }
             std::thread::sleep(Duration::from_millis(500));
