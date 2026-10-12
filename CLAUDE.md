@@ -90,13 +90,14 @@ sem que nada falhe.
 
 **Existe e funciona hoje:**
 
-- **Monorepo Rust**, Cargo workspace com 10 crates (`ocinye-contracts`,
+- **Monorepo Rust**, Cargo workspace com 12 crates (`ocinye-contracts`,
   `ocinye-domain`, `ocinye-observability`, `ocinye-core`, `ocinye-capabilities`,
   `ocinye-installer-contracts`, `ocinye-installer-controller`,
-  `ocinye-image-contracts`, `ocinye-system-contracts`, `ocinye-system-client`),
-  11 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`,
+  `ocinye-image-contracts`, `ocinye-system-contracts`, `ocinye-system-client`,
+  `ocinye-update-contracts`, `ocinye-update-repository`),
+  12 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`,
   `installer-bootstrap`, `release-tool`, `firstboot`, `oie`, `image-builder`,
-  `system-service`, `session-service`) e 1 aplicação (`apps/workspace`). Fora
+  `system-service`, `session-service`, `update-engine`) e 1 aplicação (`apps/workspace`). Fora
   da workspace do host: a janela do Installer (`apps/installer`, Tauri), o
   compositor (`apps/compositor`), a interface do sistema (`apps/system-ui`,
   Tauri) e uma
@@ -258,9 +259,11 @@ sem que nada falhe.
   modos, e os quatro achados de segurança do ambiente de arranque da instalação
   (D013-SF-01 a 04) mais o da cópia do suporte num disco interno ficaram
   resolvidos nessa bancada (L0-H). A frase «nada é escrito nos discos internos»
-  **não** está certificada: falta o hardware físico. Os modos não
-  destrutivos têm só uma sessão de texto provisória; a instalação tem um
-  assistente gráfico (abaixo).
+  **não** está certificada: falta o hardware físico. Os modos não destrutivos
+  (Experimentar, Verificar o hardware, Recuperação) mostram na janela um
+  relatório só de leitura — o que não se lê aparece como desconhecido — e
+  mantêm a sessão de texto nas consolas; a instalação tem um assistente
+  gráfico (abaixo).
 - **Ocinye System Service: primeiro bloco `IMPLEMENTED`, provado numa imagem
   `arm64` construída** ([ADR-0031](docs/adrs/0031-rust-system-authority-and-native-system-surfaces.md),
   `Proposed`). A autoridade sobre a máquina instalada é um serviço Rust
@@ -271,10 +274,13 @@ sem que nada falhe.
   exacto; ferramentas do sistema só por um executor com caminho fixo, sem shell
   e com ambiente limpo; auditoria sem segredos. As ligações TypeScript são
   geradas dos tipos Rust e um teste falha se divergirem. Há um cliente sem ecrã
-  (`ocinye-system`). Fazem trabalho real o estado e o inventário, a rede
-  (leitura), energia, brilho, hora, idioma, teclado e acesso remoto; **Wi-Fi,
-  Bluetooth, som, ecrãs e aplicação de actualizações respondem
-  `NOT_IMPLEMENTED`**. O **Session Service** está `IMPLEMENTED`: entrar
+  (`ocinye-system`). Fazem trabalho real, provado numa imagem, o estado e o
+  inventário, a rede (leitura), energia, brilho, hora, idioma, teclado e acesso
+  remoto. **Wi-Fi (iwd), Bluetooth (BlueZ), som (ALSA), leitura dos ecrãs,
+  endereçamento com fios (netplan) e privacidade de microfone e câmara estão
+  implementados e testados contra duplos, sem prova numa máquina**;
+  `display.configure` e `audio.set_input` continuam `NOT_IMPLEMENTED`. As
+  actualizações passam ao Update Engine (abaixo). O **Session Service** está `IMPLEMENTED`: entrar
   com política assinada pelo Core, bloquear, desbloquear sem o Core dentro da
   política (verificador Argon2id local), espera crescente, prova fresca de uso
   único consumida só pelo System Service. A **ligação ao Core** existe: o Session Service entra pelo
@@ -291,7 +297,8 @@ sem que nada falhe.
   ADR-0107), e é só isso que o System Service pergunta antes de uma capacidade
   de operador. As imagens instaláveis trazem o posto e as suas unidades, e
   uma máquina sem Instância cria-a no seu próprio ecrã (**activação local**,
-  `activation.*`, com o instalador do release que a imagem traz). Provado em
+  `activation.*`, com o instalador do release que a imagem traz), em cinco
+  passos: idioma e região, rede, Instância, pessoas, rever e criar. Provado em
   imagens QCOW2 `arm64` e `amd64` construídas (`scripts/image-e2e.sh seat`): configuração
   no primeiro arranque, credencial do primeiro administrador entregue uma vez,
   primeiro acesso com mudança de palavra-passe e inscrição do segundo factor,
@@ -320,6 +327,22 @@ sem que nada falhe.
   MinIO → Garage; um release cuja segunda migração rebenta, recusado e revertido
   sem restos no esquema; reversão manual de volta ao MinIO; e backup e restauro
   noutro anfitrião, recusado sem a raiz de selagem e com uma errada.
+- **Actualizações do sistema instalado: `IMPLEMENTED`, `RELEASE_SIGNING =
+  DEV_ONLY`** ([ADR-0032](docs/adrs/0032-ocinye-update-engine.md),
+  `Proposed`; [actualizações](docs/update/README.md)). Um serviço Rust dedicado,
+  o **Update Engine**, aplica releases assinados por TUF (biblioteca `tough`)
+  sem reinstalar: canais `development`/`candidate`/`stable`, versão
+  `<id>-r<n>` com número que nunca recua, descarga retomável, camada nativa
+  versionada com ponteiros `current`/`previous`, a Instância pelo
+  `install/ocinye upgrade` do release novo, portão de saúde, reversão
+  automática, validação depois de um reinício, diário que um corte de energia
+  em qualquer passo não deixa a meio, pacote offline `.ocu`, manutenção da base
+  Ubuntu sem reversão atómica (dito), e uma entrada de recuperação no menu de
+  arranque. Pedido pelas Definições, pela CLI ou pelo Nye, sempre através do
+  System Service. Provado em integração contra um repositório TUF real servido
+  por HTTP; toda a imagem instalável traz o motor e a raiz pública do seu
+  canal. Só chaves de desenvolvimento existem; o repositório público, a
+  cerimónia de chaves e o servidor são `NOT_RUN`.
 - **Hardware medido: `MINIMUM_SUPPORTED` 2 vCPU · 4 GB, `RECOMMENDED` 4 vCPU ·
   8 GB**, sem GPU, pela viagem de browser inteira em anfitriões com esses
   limites ([resultados](docs/install/hardware-results.md)). Medido em `arm64`;
@@ -701,8 +724,8 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **117 ADRs** em `docs/adrs/`, **13 runbooks** em `docs/runbooks/`,
-  **65 READMEs**, `docs/` povoado — incluindo
+- **118 ADRs** em `docs/adrs/`, **13 runbooks** em `docs/runbooks/`,
+  **70 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -718,7 +741,7 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **2243 funções de teste** escritas na árvore, e **zero falhas** na última
+- **2336 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
@@ -1371,6 +1394,8 @@ crates/ocinye-image-contracts   services/firstboot
 services/oie                    services/image-builder
 crates/ocinye-system-contracts  crates/ocinye-system-client
 services/system-service         services/session-service
+crates/ocinye-update-contracts  crates/ocinye-update-repository
+services/update-engine
 apps/installer (fora da workspace)
 apps/compositor · apps/system-ui (fora da workspace)
 wasm/capabilities/bibtex-import
@@ -2416,7 +2441,8 @@ docs/domain          docs/feature-status docs/identity       docs/instance
 docs/install         docs/knowledge       docs/nodes
 docs/mail            docs/node-protocol  docs/operations     docs/password-policy
 docs/runbooks        docs/search         docs/security       docs/storage
-docs/testing         docs/threat-model   docs/ui-core-contract docs/wasm
+docs/testing         docs/threat-model   docs/ui-core-contract docs/update
+docs/wasm
 ```
 
 Usa **Mermaid** quando um diagrama esclarecer mais do que texto.

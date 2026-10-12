@@ -7,6 +7,37 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Actualizações, primeiro arranque e instalação — 2026-10-12 (ramo `feat/ocinye-os-v1-updates`)
+
+- **Update Engine** ([ADR-0032](docs/adrs/0032-ocinye-update-engine.md),
+  [docs/update](docs/update/README.md)): `services/update-engine`,
+  `crates/ocinye-update-contracts`, `crates/ocinye-update-repository` e o
+  publicador `ocinye-release`. Releases assinados por TUF (`tough`), aplicados
+  sem reinstalar, com reversão automática, validação depois de um reinício,
+  diário resistente a cortes de energia, pacote offline e manutenção da base
+  Ubuntu. Toda a imagem instalável traz o motor, a camada nativa versionada e a
+  raiz pública do canal. `RELEASE_SIGNING = DEV_ONLY`. Novas dependências:
+  `tough`, `aws-lc-rs` (pelo `tough`), `reqwest` no repositório.
+- **Recuperação**: o menu de arranque do sistema instalado tem `Ocinye OS -
+  release anterior` (`ocinye.update=rollback`), que o motor honra uma vez por
+  arranque; a auditoria de um compromisso, de uma instalação falhada e de uma
+  reversão passa a dizer quem e para quê.
+- **Definições › Actualizações**: estado, descarga, instalação com a
+  palavra-passe local, histórico, reversão (avisa que a base volta ao checkpoint),
+  base Ubuntu, avisos que não se repetem. `network.configure` passa a pedir a
+  palavra-passe local em vez de uma prova do Core que o ecrã não oferece.
+- **Primeiro arranque**: idioma e região, rede, Instância, pessoas, rever e
+  criar; `activation.configure` (presença, só antes de haver Instância).
+- **Instalador gráfico**: passos de teclado, rede e opções (nome da máquina),
+  validados pelo motor e gravados no disco instalado; protocolo da janela 2.
+- **Suporte de instalação**: Experimentar, Verificar o hardware e Recuperação
+  mostram na janela um relatório só de leitura em que o desconhecido fica
+  desconhecido.
+- **Guarda `release_strings.py`** (no `verify.sh` e na CI): nenhum texto das
+  superfícies gráficas chega ao ecrã com um campo por preencher.
+- **E2E das imagens**: cenário `update`, numa máquina instalada a partir da ISO,
+  com `scripts/update-e2e-repos.sh`.
+
 ### Capacidades do sistema — 2026-10-12 (ramo `feat/ocinye-os-v1-system-caps`)
 
 - **System Service**: Wi-Fi (iwd por D-Bus, palavra-passe provisionada no
