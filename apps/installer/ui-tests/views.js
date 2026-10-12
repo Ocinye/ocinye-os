@@ -11,7 +11,7 @@
   const base = () => ({
     screen: 'welcome', lang: 'pt', alert: null, field_errors: {}, busy: false, stopping: false,
     app: { version: '0.1.0', platform: 'macos · aarch64' },
-    draft: { host: '192.0.2.10', port: '22', user: 'operador', auth: 'agent', key_path: null, instance_name: 'Empresa Exemplo', distributions: ['business', 'research'], endpoints: [{ host: 'os.empresa.test', distribution: null, dns: 'DNS_OK', seen: ['192.0.2.10'] }, { host: 'business.empresa.test', distribution: 'business', dns: 'DNS_OK', seen: ['192.0.2.10'] }, { host: 'research.empresa.test', distribution: 'research', dns: 'DNS_OK', seen: ['192.0.2.10'] }], tls_mode: 'provided', tls_cert: '/exemplo/empresa-test.crt.pem', tls_key: '/exemplo/empresa-test.key.pem', tls_chain: '/exemplo/empresa-test.chain.pem', admin: ['Ana Exemplo', 'ana@empresa.test', 'Ana Exemplo (Admin)', 'ana.admin@empresa.test'] },
+    draft: { host: '192.0.2.10', port: '22', user: 'operador', auth: 'agent', key_path: null, instance_name: 'Empresa Exemplo', distributions: ['business', 'research'], endpoints: [{ host: 'os.empresa.com', distribution: null, dns: 'DNS_OK', seen: ['192.0.2.10'] }, { host: 'business.empresa.com', distribution: 'business', dns: 'DNS_OK', seen: ['192.0.2.10'] }, { host: 'research.empresa.com', distribution: 'research', dns: 'DNS_OK', seen: ['192.0.2.10'] }], tls_mode: 'provided', tls_cert: '/exemplo/empresa-test.crt.pem', tls_key: '/exemplo/empresa-test.key.pem', tls_chain: '/exemplo/empresa-test.chain.pem', admin: ['Ana Exemplo', 'ana@empresa.com', 'Ana Exemplo (Admin)', 'ana.admin@empresa.com'] },
     sudo_dialog: false, presented_key: null, pinned_key: ['ssh-ed25519', FP], mismatch: null,
     release: { id: '3f9c2a7d1e04', commit: '3f9c2a7d1e04b7c19e6a5d20f81c4e7a9b03d6f2', build: 'release', arch: 'amd64', migrations: { count: 64, latest: '0064' }, artifacts: ['source.tar.gz', 'install/ocinye', 'ocinye-bootstrap', 'images/ocinye-core-server.tar', 'images/ocinye-workspace.tar', 'images/ocinye-worker.tar', 'images/ocinye-conversion-runner.tar', 'images/ocinye-converter.tar'], files: 12, package: 'ocinye-os-3f9c2a7d1e04' },
     probe: { uid: 1000, groups: ['operador', 'sudo'], sudo_nopasswd: false, machine: 'x86_64', os: 'ubuntu 24.04', pretty: 'Ubuntu 24.04.5 LTS', hostname: 'srv-01' },
@@ -73,7 +73,7 @@
     plan_id: 'pl-5d0a910000000000', installation_id: 'inst-7c41e20000000000', created_at: '2026-10-04T14:16:31Z',
     release: { id: '3f9c2a7d1e04', commit: '3f9c2a7d1e04b7c19e6a5d20f81c4e7a9b03d6f2', build: 'release', arch: 'amd64', manifest_sha256: H('a') },
     target: { host: { kind: 'v4', value: '192.0.2.10' }, port: 22, user: 'operador', host_key_algorithm: 'ssh-ed25519', host_key_sha256: FP },
-    configuration: { instance_name: 'Empresa Exemplo', distributions: ['business', 'research'], endpoints: { canonical: 'os.empresa.test', bound: [{ host: 'business.empresa.test', distribution: 'business' }, { host: 'research.empresa.test', distribution: 'research' }] }, tls: tls === 'self' ? { mode: 'SELF_SIGNED_TEST' } : { mode: 'OPERATOR_SUPPLIED', cert_sha256: H('c'), not_after: '2027-09-30T00:00:00Z', covers: ['os.empresa.test', '*.empresa.test'], chain: true }, admin: { person: { name: 'Ana Exemplo', email: 'ana@empresa.test' }, privileged: { name: 'Ana Exemplo (Admin)', email: 'ana.admin@empresa.test' } } },
+    configuration: { instance_name: 'Empresa Exemplo', distributions: ['business', 'research'], endpoints: { canonical: 'os.empresa.com', bound: [{ host: 'business.empresa.com', distribution: 'business' }, { host: 'research.empresa.com', distribution: 'research' }] }, tls: tls === 'self' ? { mode: 'SELF_SIGNED_TEST' } : { mode: 'OPERATOR_SUPPLIED', cert_sha256: H('c'), not_after: '2027-09-30T00:00:00Z', covers: ['os.empresa.com', '*.empresa.com'], chain: true }, admin: { person: { name: 'Ana Exemplo', email: 'ana@empresa.com' }, privileged: { name: 'Ana Exemplo (Admin)', email: 'ana.admin@empresa.com' } } },
     system_changes: [{ op: 'install_docker_from_official_repo', target: 'ubuntu-24.04', arch: 'amd64', packages: ['docker-ce', 'docker-ce-cli', 'containerd.io', 'docker-compose-plugin'], repo_key_fingerprint: '9DC858229FC7DD38854AE2D88D81803C0EBFCD88' }, { op: 'firewall_allow', manager: 'ufw', port: 80, proto: 'tcp', comment: 'ocinye' }, { op: 'firewall_allow', manager: 'ufw', port: 443, proto: 'tcp', comment: 'ocinye' }],
     preflight: [], hardware: { threads: 48, memory_mb: 131072, gpus: 1, compute_readiness: 'GPU_FUTURE_CANDIDATE', provider_mode: 'OFF' },
     phases: ['P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P13', 'P14', 'P15', 'P16'].map((p) => ({ phase: p, skip: false })),
@@ -84,7 +84,7 @@
   const ver = (mode) => {
     const p = (id, ev) => ({ id, status: 'PASS', evidence: ev });
     const server = [p('V01', 'SERVICES_HEALTHY'), p('V02', 'DATABASE_REACHABLE'), p('V03', 'SCHEMA_0064_0'), p('V04', 'READY_READY'), p('V05', 'INSTANCE_MATCHES'), p('V06', 'DISTRIBUTIONS_MATCH'), p('V07', 'APPLICATIONS_20_28'), p('V08', 'STORAGE_AVAILABLE'), p('V09', 'HTTP_303_200'), p('V12b', 'ENDPOINTS_MATCH'), p('V16', 'FIRST_ACCESS_PENDING')];
-    const local = [mode === 'dns' ? { id: 'V10', status: 'PENDING', evidence: 'DNS_UNRESOLVED:research.empresa.test' } : p('V10', 'DNS_OK'), p('VFw', 'PORTS_REACHABLE'), p('V11', mode === 'test' ? 'TLS_SELF_SIGNED_PINNED' : 'TLS_VALID'), p('V12', 'ENDPOINTS_ANSWER'), p('V13', 'LOGIN_200')];
+    const local = [mode === 'dns' ? { id: 'V10', status: 'PENDING', evidence: 'DNS_UNRESOLVED:research.empresa.com' } : p('V10', 'DNS_OK'), p('VFw', 'PORTS_REACHABLE'), p('V11', mode === 'test' ? 'TLS_SELF_SIGNED_PINNED' : 'TLS_VALID'), p('V12', 'ENDPOINTS_ANSWER'), p('V13', 'LOGIN_200')];
     if (mode === 'fail') { server[3] = { id: 'V04', status: 'FAIL', evidence: 'READY_BLOCKED' }; return { items: server.slice(0, 4) }; }
     return { items: server.concat(local) };
   };
@@ -100,7 +100,7 @@
   set('release-target', (v) => { v.screen = 'server'; v.alert = { code: 'RELEASE_UNSUPPORTED_TARGET', params: { release: 'amd64', server: 'aarch64' } }; v.probe = null; });
   set('server', (v) => { v.screen = 'server'; });
   set('server-key', (v) => { v.screen = 'server'; v.draft.auth = 'key'; v.draft.key_path = '/Users/exemplo/.ssh/id_ed25519'; v.probe = null; });
-  set('server-invalid', (v) => { v.screen = 'server'; v.draft.host = 'srv-01.empresa.test; rm'; v.field_errors = { host: 'INPUT_INVALID_HOST' }; v.probe = null; });
+  set('server-invalid', (v) => { v.screen = 'server'; v.draft.host = 'srv-01.empresa.com; rm'; v.field_errors = { host: 'INPUT_INVALID_HOST' }; v.probe = null; });
   set('server-unreachable', (v) => { v.screen = 'server'; v.alert = { code: 'SSH_UNREACHABLE', params: {} }; v.probe = null; });
   set('server-auth', (v) => { v.screen = 'server'; v.alert = { code: 'SSH_AUTH_REFUSED', params: {} }; v.probe = null; });
   set('host-trust', (v) => { v.screen = 'host-trust'; v.presented_key = ['ssh-ed25519', FP]; v.probe = null; });
@@ -125,12 +125,12 @@
   set('endpoints', (v) => { v.screen = 'endpoints'; });
   set('endpoints-dns-pending', (v) => { v.screen = 'endpoints'; v.draft.endpoints[1].dns = 'DNS_UNRESOLVED'; v.draft.endpoints[1].seen = []; v.draft.endpoints[2].dns = 'DNS_REQUIRED'; });
   set('endpoints-dns-wrong', (v) => { v.screen = 'endpoints'; v.draft.endpoints[2].dns = 'DNS_WRONG_TARGET'; v.draft.endpoints[2].seen = ['198.51.100.7']; });
-  const tlsv = (bad) => ({ checks: [['PARSE', true], ['KEY_MATCH', !bad], ['NOT_EXPIRED', true], ['COVERS_NAMES', !bad], ['CHAIN', true], ['STRONG_SIGNATURE', !bad]], not_after: '2027-09-30T00:00:00Z', expiring_soon: false, names: ['os.empresa.test', '*.empresa.test'], uncovered: bad ? ['research.empresa.test'] : [] });
+  const tlsv = (bad) => ({ checks: [['PARSE', true], ['KEY_MATCH', !bad], ['NOT_EXPIRED', true], ['COVERS_NAMES', !bad], ['CHAIN', true], ['STRONG_SIGNATURE', !bad]], not_after: '2027-09-30T00:00:00Z', expiring_soon: false, names: ['os.empresa.com', '*.empresa.com'], uncovered: bad ? ['research.empresa.com'] : [] });
   set('tls-provided-valid', (v) => { v.screen = 'tls'; v.tls_validation = tlsv(false); });
   set('tls-invalid', (v) => { v.screen = 'tls'; v.tls_validation = tlsv(true); });
   set('tls-self-signed', (v) => { v.screen = 'tls'; v.draft.tls_mode = 'self'; });
   set('admin', (v) => { v.screen = 'admin'; });
-  set('admin-invalid', (v) => { v.screen = 'admin'; v.draft.admin[3] = 'ana@empresa.test'; v.field_errors = { ae: 'ADMIN_NOT_DISTINCT' }; });
+  set('admin-invalid', (v) => { v.screen = 'admin'; v.draft.admin[3] = 'ana@empresa.com'; v.field_errors = { ae: 'ADMIN_NOT_DISTINCT' }; });
   set('review', (v) => { v.screen = 'review'; v.hardware = hw('one-gpu'); v.plan = plan(); });
   const ev = (at, phase, event, extra) => ({ at: '2026-10-04T' + at + 'Z', event: Object.assign({ event, phase }, extra || {}) });
   const EV = [ev('14:19:02', 'P06', 'StepCompleted'), ev('14:19:40', 'P10', 'StepWarning', { code: 'IMAGE_PULL_SLOW' }), ev('14:20:15', 'P10', 'StepCompleted'), ev('14:20:16', 'P11', 'StepStarted'), ev('14:20:21', 'P11', 'StepProgress', { operation: { op: 'create_instance' } })];
@@ -144,12 +144,12 @@
   failed('admin-bootstrap-failed', 10, 'P11', 'ADMIN_BOOTSTRAP_REFUSED', false, [ev('14:20:30', 'P11', 'StepFailed', { code: 'ADMIN_BOOTSTRAP_REFUSED' })]);
   failed('prereq-failed', 3, 'P04', 'PREREQUISITE_INSTALL_FAILED', true, [ev('14:13:20', 'P04', 'StepFailed', { code: 'PREREQUISITE_INSTALL_FAILED', detail: 'apt docker-ce' })]);
   set('verifying', (v) => { v.screen = 'verifying'; v.plan = plan(); v.busy = true; v.live = live(14, { P15: 'active' }, { current: 'P15', verification: ver().items.slice(0, 6) }); });
-  set('verify-failed', (v) => { v.screen = 'verifying'; v.plan = plan(); v.alert = { code: 'VERIFICATION_FAILED', params: {} }; v.verification = ver('fail'); v.credential = { user: 'ana.admin@empresa.test', expires_at: '2026-10-05 14:21 UTC' }; });
-  const done = (name, mode) => set(name, (v) => { v.screen = 'complete'; v.plan = plan(mode === 'test' ? 'self' : null); v.hardware = hw('one-gpu'); v.verification = ver(mode); v.lifecycle = mode === 'dns' ? { state: 'ACTIVATION_PENDING', reasons: ['DNS'] } : mode === 'test' ? { state: 'INSTALLED_TEST_MODE' } : { state: 'OPERATIONAL' }; v.credential = { user: 'ana.admin@empresa.test', expires_at: '2026-10-05 14:21 UTC' }; });
+  set('verify-failed', (v) => { v.screen = 'verifying'; v.plan = plan(); v.alert = { code: 'VERIFICATION_FAILED', params: {} }; v.verification = ver('fail'); v.credential = { user: 'ana.admin@empresa.com', expires_at: '2026-10-05 14:21 UTC' }; });
+  const done = (name, mode) => set(name, (v) => { v.screen = 'complete'; v.plan = plan(mode === 'test' ? 'self' : null); v.hardware = hw('one-gpu'); v.verification = ver(mode); v.lifecycle = mode === 'dns' ? { state: 'ACTIVATION_PENDING', reasons: ['DNS'] } : mode === 'test' ? { state: 'INSTALLED_TEST_MODE' } : { state: 'OPERATIONAL' }; v.credential = { user: 'ana.admin@empresa.com', expires_at: '2026-10-05 14:21 UTC' }; });
   done('complete', 'ok');
   done('complete-test-mode', 'test');
   done('complete-dns-pending', 'dns');
-  set('credential', (v) => { v.screen = 'credential'; v.plan = plan(); v.credential = { user: 'ana.admin@empresa.test', expires_at: '2026-10-05 14:21 UTC' }; });
+  set('credential', (v) => { v.screen = 'credential'; v.plan = plan(); v.credential = { user: 'ana.admin@empresa.com', expires_at: '2026-10-05 14:21 UTC' }; });
   set('receipt', (v) => { v.screen = 'receipt'; v.plan = plan(); v.receipt = { schema: 1, installation_id: 'inst-7c41e20000000000', plan_id: 'pl-5d0a910000000000', plan_sha256: H('4'), release: '3f9c2a7d1e04', commit: '3f9c2a7d1e04b7c19e6a5d20f81c4e7a9b03d6f2', build: 'release', manifest_sha256: H('a'), artifacts: [{ path: 'source.tar.gz', sha256: H('7'), bytes: 1 }, { path: 'images/ocinye-core-server.tar', sha256: H('0'), bytes: 1 }, { path: 'install/ocinye', sha256: H('2'), bytes: 1 }], target_host: '192.0.2.10', host_key_sha256: FP, instance_name: 'Empresa Exemplo', instance_slug: 'empresa-exemplo', distributions: ['business', 'research'], endpoints: plan().configuration.endpoints, tls_mode: 'OPERATOR_SUPPLIED', tls_not_after: '2027-09-30T00:00:00Z', hardware: hw('one-gpu'), provider_mode: 'OFF', installed_packages: [], firewall_rules: ['80/tcp', '443/tcp'], warnings: [], started_at: '2026-10-04T14:16:31Z', ended_at: '2026-10-04T14:21:33Z', verification: ver(), lifecycle: { state: 'OPERATIONAL' }, first_access_pending: true }; });
   window.OI_VIEWS = V;
 })();
