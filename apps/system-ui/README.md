@@ -55,6 +55,10 @@ decide nada sobre discos:
 Letra monoespaçada só em números de série, somas, caminhos de dispositivo e
 detalhe de diagnóstico. Um texto com `{…}` por preencher ou uma chave sem
 tradução é contado (`OI_UNRESOLVED`, `OI_MISSING`) e a bancada exige zero.
+Fora da bancada, `scripts/release_strings.py` (no `verify.sh` e na CI) lê os
+catálogos e quem os chama sem os correr: três línguas com os mesmos campos,
+nenhum `${…}`, cada chamada a preencher os campos da chave, e nenhum prompt de
+terminal numa superfície gráfica.
 
 Bancada sem máquina: `ui-tests/installer.html` com `#ok`, `#blocked`, `#fail`,
 `#elsewhere`, `#key`. Prova numa imagem: `scripts/image-e2e.sh window`.

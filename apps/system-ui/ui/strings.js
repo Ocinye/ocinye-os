@@ -89,7 +89,6 @@ window.SX_T = {
   'lock.out': ['Sair e trocar de membro', 'Sign out and switch member', 'Se déconnecter et changer de membre'],
   'lock.wait': ['Aguarde {n} s antes de tentar outra vez.', 'Wait {n} s before trying again.', 'Attendez {n} s avant de réessayer.'],
 
-  'ended.SIGNED_OUT': ['', '', ''],
   'ended.REVOKED': ['A Instância terminou a sessão anterior.', 'The Instance ended the previous session.', 'L’Instance a mis fin à la session précédente.'],
   'ended.OFFLINE_POLICY_EXHAUSTED': ['A sessão anterior terminou: esteve demasiado tempo sem a Instância a confirmar.', 'The previous session ended: it went too long without the Instance confirming it.', 'La session précédente a pris fin : trop longtemps sans confirmation de l’Instance.'],
   'ended.TOO_MANY_ATTEMPTS': ['A sessão anterior terminou depois de demasiadas tentativas de desbloqueio.', 'The previous session ended after too many unlock attempts.', 'La session précédente a pris fin après trop de tentatives de déverrouillage.'],
