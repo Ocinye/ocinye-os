@@ -1762,6 +1762,8 @@ def scenario_update(a):
         native = run("readlink /usr/lib/ocinye/current /usr/lib/ocinye/previous").stdout.decode().split()
         r.check("update: the native layer points at N+1, with N kept to return to",
                 len(native) == 2 and native[0].endswith(versions["GOOD"]) and native[1].endswith(versions["N"]), native)
+        engine = run("sudo -n readlink /proc/$(pidof ocinye-update-engine)/exe").stdout.decode().strip()
+        r.check("update: the engine restarted itself into N+1's own binary", f"/releases/{versions['GOOD']}/" in engine, engine)
 
         # 4. Offline, with the power cut during the install.
         run(f"sudo -n install -d -m 0700 /var/lib/ocinye/update/inbox && sudo -n curl -sf -o /var/lib/ocinye/update/inbox/next.ocu {base}/offline.ocu", timeout=1800)
@@ -1786,10 +1788,24 @@ def scenario_update(a):
         whole = version(st) in (versions["GOOD"], versions["GOOD2"]) and st.get("phase") not in ("RECOVERY_REQUIRED", "UNKNOWN")
         native = run("readlink /usr/lib/ocinye/current").stdout.decode().strip()
         r.check("update: after the cut the machine runs one whole release, and its native layer agrees", whole and native.endswith(version(st) or "?"), (st, native))
-        if version(st) != versions["GOOD2"]:
+        def through_reboot(st):
+            # GOOD2 asks for a restart: it is committed only after a healthy
+            # start of the new release.
+            if st.get("phase") == "AWAITING_REBOOT":
+                run("sudo -n systemctl reboot", timeout=30)
+                time.sleep(20)
+                wait_ssh_port(vm.port, 900)
+                st = settle()
+            return st
+
+        st = through_reboot(st)
+        if version(st) != versions["GOOD2"] or st.get("phase") != "COMPLETED":
             run("sudo -n ocinye-system update install", timeout=3600)
-            st = settle()
-        r.check("update: the offline release finished installing", version(st) == versions["GOOD2"], st)
+            st = through_reboot(settle())
+        hist = history()
+        r.check("update: the offline release finished installing, committed after a healthy restart",
+                version(st) == versions["GOOD2"] and hist[:1] and hist[0].get("outcome") == "COMMITTED" and hist[0].get("rebooted") is True,
+                (st, hist[:1]))
         r.check("update: the Instance survived the cut, the same",
                 sql("select id from instance_identity") == facts["instance"] and sql("select count(*) from people") == facts["people"])
         hist = history()

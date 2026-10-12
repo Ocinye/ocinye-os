@@ -12,8 +12,8 @@
 #                               once: it passes every signature and fails the
 #                               health gate, so the machine rolls back
 #   good/       unhealthy, then GOOD  = PACOTE_N1 -r2: the real N+1
-#   offline/    good, then GOOD2 = PACOTE_N1 -r3, and offline.ocu, its offline
-#                               bundle
+#   offline/    good, then GOOD2 = PACOTE_N1 -r3, which asks for a restart,
+#                               and offline.ocu, its offline bundle
 #   foreign/    GOOD2 in a repository whose root is signed by other keys: the
 #                               installed machine must refuse it
 #   versions.env               N, BAD, GOOD, GOOD2
@@ -56,7 +56,7 @@ publish() { # repo bin_dir revision what synthetic number [keys]
   "$rel" stage --bundle "$BUNDLES/$pacote" --native "$work/native-$rv.tar" --out "$work/staged-$rv" \
     --channel development --number "$num" --minimum 0 --revision "$rv" --migrations expand \
     --notes-pt "Release de teste $what (sintético)." --notes-en "Test release $what (synthetic)." \
-    --notes-fr "Version de test $what (synthétique)." --synthetic "$synthetic" >&2
+    --notes-fr "Version de test $what (synthétique)." --synthetic "$synthetic" ${REBOOT:+--reboot} >&2
   "$rel" publish --repo "$repo" --channel development --keys "${7:-$keys}" --staged "$work/staged-$rv" >&2
   echo "$v"
 }
@@ -72,7 +72,7 @@ bad="$(publish "$OUT/unhealthy" "$bad_bins" 1 "unhealthy" "rollback: the session
 cp -a "$OUT/unhealthy" "$OUT/good"
 good="$(publish "$OUT/good" "$bins" 2 "N+1" "update: N to N+1 with an expand migration" $(( $(latest "$OUT/good") + 1 )))"
 cp -a "$OUT/good" "$OUT/offline"
-good2="$(publish "$OUT/offline" "$bins" 3 "offline" "offline bundle and power loss during install" $(( $(latest "$OUT/offline") + 1 )))"
+good2="$(REBOOT=1 publish "$OUT/offline" "$bins" 3 "offline" "offline bundle and power loss during install" $(( $(latest "$OUT/offline") + 1 )))"
 "$rel" bundle --repo "$OUT/offline" --channel development --version "$good2" --out "$OUT/offline.ocu" >&2
 # FOREIGN: a whole repository under keys the machine has never trusted.
 "$rel" keys init "$work/foreign-keys" >&2
