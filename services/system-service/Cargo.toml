@@ -24,6 +24,8 @@ ocinye-system-contracts = { workspace = true }
 ocinye-system-client = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+zbus = { workspace = true }
+zeroize = { workspace = true }
 
 # Who is on the other end of the socket, by the kernel's word (SO_PEERCRED).
 # Linux only: the service is the authority of an installed Ocinye OS.
