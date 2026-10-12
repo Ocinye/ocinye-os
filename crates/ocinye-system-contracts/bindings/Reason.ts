@@ -3,6 +3,7 @@ import type { AdapterFailure } from "./AdapterFailure";
 import type { AuthorizationClass } from "./AuthorizationClass";
 import type { FreshAuthClass } from "./FreshAuthClass";
 import type { Unavailable } from "./Unavailable";
+import type { UpdateReason } from "./UpdateReason";
 
 /**
  * Why a request was not carried out. One taxonomy for the interface, the
@@ -32,4 +33,8 @@ cause: Unavailable, } | { "code": "VALUE_OUT_OF_RANGE" } | { "code": "NOT_FOUND"
 /**
  * Which class of failure.
  */
-cause: AdapterFailure, } | { "code": "WIFI_AUTHENTICATION_FAILED" } | { "code": "WIFI_TIMEOUT" } | { "code": "OPERATION_IN_PROGRESS" } | { "code": "NOT_IMPLEMENTED" } | { "code": "NOT_OFFERED_HERE" };
+cause: AdapterFailure, } | { "code": "WIFI_AUTHENTICATION_FAILED" } | { "code": "WIFI_TIMEOUT" } | { "code": "OPERATION_IN_PROGRESS" } | { "code": "NOT_IMPLEMENTED" } | { "code": "NOT_OFFERED_HERE" } | { "code": "UPDATE_REFUSED",
+/**
+ * The engine's reason.
+ */
+update: UpdateReason, };
