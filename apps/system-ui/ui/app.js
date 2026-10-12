@@ -65,8 +65,8 @@
 
   // ── serviços
   const got = (cap) => { const v = S.sys[cap]; return v && !v.refused ? v : null; };
-  const refusedText = (reason) => t('r.' + ((reason && reason.code) || 'SYSTEM_SERVICE'));
-  const STATUS_OF = { health: 'system.health', info: 'system.info', inventory: 'system.capabilities', network: 'network.status', audio: 'audio.status', display: 'display.status', power: 'power.status', locale: 'locale.status', time: 'time.status', keyboard: 'keyboard.status', accessibility: 'accessibility.status', privacy: 'privacy.status', storage: 'storage.status', update: 'update.status', remote_access: 'remote_access.status', recovery: 'recovery.status', bluetooth: 'bluetooth.status', activation: 'activation.status' };
+  const refusedText = (reason) => (reason && reason.code === 'UPDATE_REFUSED' ? t('ur.' + reason.update) : t('r.' + ((reason && reason.code) || 'SYSTEM_SERVICE')));
+  const STATUS_OF = { health: 'system.health', info: 'system.info', inventory: 'system.capabilities', network: 'network.status', audio: 'audio.status', display: 'display.status', power: 'power.status', locale: 'locale.status', time: 'time.status', keyboard: 'keyboard.status', accessibility: 'accessibility.status', privacy: 'privacy.status', storage: 'storage.status', update: 'update.status', update_history: 'update.history', base: 'base.status', remote_access: 'remote_access.status', recovery: 'recovery.status', bluetooth: 'bluetooth.status', activation: 'activation.status' };
 
   async function call(capability, args, grant) {
     const request = Object.assign({ capability }, args || {});
@@ -302,7 +302,7 @@
           <button class="sx-btn sx-btn--glass sx-lock__out" type="button" data-act="signout">${t('lock.out')}</button>
         </div>
       </div>
-      <div class="sx-cornerleft">${u && u.phase === 'RESTART_REQUIRED' ? `<div class="sx-pill" data-tone="warn">${ic('update')}${t('k.phase.RESTART_REQUIRED')}</div>` : ''}${langButton()}</div>${overlay()}</main>`;
+      <div class="sx-cornerleft">${u && u.phase === 'AWAITING_REBOOT' ? `<div class="sx-pill" data-tone="warn">${ic('update')}${t('up.AWAITING_REBOOT')}</div>` : ''}${langButton()}</div>${overlay()}</main>`;
   }
 
   // ── a sessão: barra, painel rápido, Sistema
@@ -317,7 +317,7 @@
         <button class="sx-bar__btn" type="button" data-act="workspace">${ic('grid', 'sx-icon--sm')}${t('bar.apps')}</button>
         <button class="sx-bar__btn sx-bar__btn--line" type="button" data-act="open-system"${S.panel === 'system' ? ' aria-current="true"' : ''}>${ic('gear', 'sx-icon--sm')}${t('bar.system')}</button>
       </div>${banner}
-      <div class="sx-bar__right">
+      <div class="sx-bar__right">${updNotice() ? `<button class="sx-chip" type="button" data-act="upd-pop" aria-haspopup="dialog">${ic('update', 'sx-icon--sm')}${t('u.chip')}</button>` : ''}
         <button class="sx-bar__tray" type="button" data-act="tray" aria-expanded="${S.panel === 'quick'}" aria-label="${t('bar.tray')}">
           <span>${ic(n.icon)}${n.label}</span>${o ? `<span>${ic('sound')}${o.muted ? t('k.muted') : o.volume + '%'}</span>` : ''}${b ? `<span>${ic('battery')}${b.charge}%</span>` : ''}
           <span class="sx-bar__clock">${clock()}</span><span class="sx-bar__me" aria-hidden="true">${esc(initials(s.member_name))}</span>
@@ -356,18 +356,93 @@
   const READS = {
     home: ['system.health', 'network.status', 'power.status', 'update.status'], network: ['network.status'], sound: ['audio.status'], displays: ['display.status'],
     power: ['power.status'], input: ['keyboard.status'], language: ['locale.status'], time: ['time.status'], accessibility: ['accessibility.status'],
-    privacy: ['privacy.status'], security: ['system.info', 'remote_access.status', 'recovery.status'], storage: ['storage.status'], updates: ['update.status', 'recovery.status'],
+    privacy: ['privacy.status'], security: ['system.info', 'remote_access.status', 'recovery.status'], storage: ['storage.status'], updates: ['update.status', 'update.history', 'base.status', 'recovery.status'],
     diagnostics: ['system.health', 'system.capabilities'], about: ['system.info'],
   };
   // O que uma leitura dá: o valor, ou a razão dita em vez dele.
   const need = (cap, draw) => { const v = S.sys[cap]; return !v ? [note(t('k.loading'))] : v.refused ? [note(refusedText(v.refused))] : draw(v); };
   const yes = (b, y, n) => t(b ? y : n);
 
+  // ── actualizações (ADR-0032): o motor decide; esta página mostra e pede
+  const BUSY_PHASES = ['CHECKING', 'DOWNLOADING', 'DOWNLOADED', 'VERIFYING', 'VERIFIED', 'PREFLIGHT', 'STAGED', 'INSTALLING', 'ACTIVATING', 'BOOT_VALIDATING', 'COMMITTING', 'ROLLING_BACK'];
+  const FAILED_PHASES = ['DOWNLOAD_FAILED', 'VERIFICATION_FAILED', 'PREFLIGHT_FAILED', 'INSTALL_FAILED', 'ACTIVATION_FAILED', 'BOOT_VALIDATION_FAILED'];
+  const AT_REST_QUIET = ['IDLE', 'COMPLETED'];
+  const phaseTone = (p) => (AT_REST_QUIET.includes(p) ? 'ok' : p === 'RECOVERY_REQUIRED' || FAILED_PHASES.includes(p) ? 'bad' : 'warn');
+  const when = (iso) => (iso ? new Intl.DateTimeFormat(LOCALE(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)) : '');
+  const note3 = (n) => (n ? esc(n[S.lang] || n.pt) : '');
+  // A notificação de actualização: uma por estado e versão, nunca repetida.
+  const updKey = (u) => (u ? u.phase + ':' + (u.available ? u.available.version : '') : '');
+  const NOTIFY_PHASES = ['UPDATE_AVAILABLE', 'AWAITING_INSTALL', 'AWAITING_REBOOT', 'ROLLED_BACK', 'RECOVERY_REQUIRED'].concat(FAILED_PHASES);
+  const updNotice = () => { const u = got('update.status'); return u && NOTIFY_PHASES.includes(u.phase) && S.updSeen !== updKey(u) ? u : null; };
+
+  function updatesPage() {
+    const u = got('update.status');
+    const busy = u && BUSY_PHASES.includes(u.phase);
+    const a = u && u.available;
+    const acts = (u) => {
+      const p = u.phase;
+      if (p === 'UPDATE_AVAILABLE') return btn('gold', t('u.download'), 'upd-download', { icon: 'down' });
+      if (p === 'AWAITING_INSTALL') return btn('ghost', t('u.cancel'), 'upd-cancel') + btn('gold', t('u.install'), 'upd-install', { icon: 'update' });
+      if (p === 'AWAITING_REBOOT') return btn('ghost', t('u.later'), 'upd-later') + btn('gold', t('u.restart'), 'power-ask', { arg: 'restart', icon: 'restart' });
+      if (p === 'DOWNLOADING') return btn('ghost', t('u.cancel'), 'upd-cancel');
+      if (FAILED_PHASES.includes(p) && a) return btn('', t('u.retry'), p === 'INSTALL_FAILED' || p === 'ACTIVATION_FAILED' || p === 'BOOT_VALIDATION_FAILED' ? 'upd-check' : 'upd-download', { icon: 'restart' });
+      if (busy) return '';
+      return btn('', t('u.check'), 'upd-check', { icon: 'restart', disabled: !u.repository_configured });
+    };
+    const state = need('update.status', (u) => {
+      const title = u.phase === 'UPDATE_AVAILABLE' && a ? t('u.available', { v: a.version }) : t('up.' + u.phase);
+      const sub = u.phase === 'IDLE' || u.phase === 'COMPLETED'
+        ? (u.last_check ? t('u.lastcheck', { when: when(u.last_check) }) : u.repository_configured ? t('u.nocheck') : t('u.norepo'))
+        : u.reason ? t('ur.' + u.reason) : '';
+      const pct = u.progress && u.progress.total ? Math.min(100, Math.round((u.progress.done / u.progress.total) * 100)) : null;
+      const meter = u.progress ? `<div class="sx-row"><div class="sx-row__l sx-grow"><div class="sx-row__s">${t('u.progress', { pct: pct == null ? '…' : pct, done: bytes(u.progress.done), total: bytes(u.progress.total) })}</div><div class="sx-meter"><progress max="${u.progress.total || 1}" value="${u.progress.done}" aria-label="${t('up.' + u.phase)}"></progress></div></div></div>` : busy ? `<div class="sx-row"><div class="sx-row__l sx-grow"><div class="sx-meter sx-meter--busy"><progress aria-label="${t('up.' + u.phase)}"></progress></div></div></div>` : '';
+      const actions = acts(u);
+      const head = `<div class="sx-row sx-row--hero"><div class="sx-row__l"><div class="sx-row__t">${status(phaseTone(u.phase), '')} ${title}</div>${sub ? `<div class="sx-row__s">${sub}</div>` : ''}</div>${actions ? `<div class="sx-acts">${actions}</div>` : ''}</div>`;
+      const extra = [];
+      if (u.phase === 'RECOVERY_REQUIRED') extra.push(alert('bad', t('u.recovery')));
+      if (u.phase === 'ROLLED_BACK') extra.push(alert('info', t('u.rolledback')));
+      if (u.signing === 'DEV_ONLY') extra.push(note(`${t('k.signing')}: ${status('warn', t('k.signing.dev'))}`));
+      return [head, meter].concat(extra);
+    });
+    const release = a ? group(t('u.g.available'), [
+      row(t('u.version'), `<span class="sx-mono">${esc(a.version)}</span>`, { sub: t('u.number', { n: a.release_number }) }),
+      row(t('u.size'), bytes(a.download_bytes), { sub: t('u.space', { n: bytes(a.install_bytes) }) }),
+      row(t('u.restartq'), a.reboot_required ? status('warn', t('u.yes')) : t('u.no')),
+      a.security ? row(t('u.security'), status('warn', t('u.yes'))) : '',
+      row(t('u.migrations'), t('um.' + a.migrations.kind)),
+      a.synthetic ? row(t('u.synthetic'), status('warn', t('u.synthetic.v'))) : '',
+      `<div class="sx-row"><div class="sx-row__l sx-grow"><div class="sx-row__t">${t('u.notes')}</div><div class="sx-row__s">${note3(a.notes)}</div></div></div>`,
+      row(t('u.source'), t('us.' + a.source)),
+    ]) : '';
+    const version = group(t('u.g.version'), need('update.status', (u) => [
+      row(t('u.current'), `<span class="sx-mono">${esc(u.current ? u.current.version : t('k.unknown'))}</span>`, { sub: u.current ? t('u.number', { n: u.current.release_number }) + (u.current.activated_at ? ' · ' + when(u.current.activated_at) : '') : '' }),
+      row(t('u.channel'), `<span class="sx-nowrap">${t('ch.' + u.channel)}</span>`, { op: true, sub: t('u.channel.sub') }),
+    ]));
+    const details = u ? group(t('u.g.details'), [row(t('u.details'), btn('ghost', t(S.updDetails ? 'u.details.hide' : 'u.details.show'), 'upd-details', { icon: 'chev' })),
+      S.updDetails ? `<div class="sx-row"><dl class="sx-kv"><dt>${t('k.phase')}</dt><dd class="sx-mono">${esc(u.phase)}</dd><dt>${t('u.reason')}</dt><dd class="sx-mono">${esc(u.reason || '—')}</dd><dt>${t('u.outcome')}</dt><dd>${u.last_outcome ? t('uo.' + u.last_outcome) : '—'}</dd><dt>${t('u.repo')}</dt><dd>${t(u.repository_configured ? 'u.yes' : 'u.no')}</dd></dl></div>` : '']) : '';
+    const offline = u && u.offline_bundles.length ? group(t('u.g.offline'), u.offline_bundles.map((b) => row(`<span class="sx-mono">${esc(b.name)}</span>`, btn('', t('u.import'), 'upd-import', { arg: b.name, disabled: busy }), { op: true, sub: bytes(b.bytes) + ' · ' + t(b.removable ? 'u.removable' : 'u.inbox') }))) : '';
+    const back = u && u.previous ? group(t('u.g.back'), [row(t('u.previous'), btn('', t('u.rollback'), 'upd-rollback', { disabled: busy || !['IDLE', 'COMPLETED', 'ROLLED_BACK', 'UPDATE_AVAILABLE', 'RECOVERY_REQUIRED'].includes(u.phase), icon: 'restart' }), { op: true, sub: `<span class="sx-mono">${esc(u.previous.version)}</span>` })]) : '';
+    const history = group(t('u.g.history'), need('update.history', (h) => (h.entries.length ? h.entries.slice(0, 10).map((e) => row(`<span class="sx-mono">${esc(e.version)}</span>`, status(e.outcome === 'COMMITTED' ? 'ok' : e.outcome === 'ROLLED_BACK' ? 'warn' : 'bad', t('uo.' + e.outcome)), { sub: when(e.finished_at) + (e.from ? ' · ' + t('u.from', { v: e.from }) : '') + (e.reason ? ' · ' + t('ur.' + e.reason) : '') })) : [note(t('u.history.none'))])));
+    const base = group(t('u.g.base'), need('base.status', (b) => [
+      row(t('u.base.pending'), b.last_check ? t('u.base.count', { n: b.pending, s: b.security }) : t('u.nocheck'), { sub: b.last_check ? t('u.lastcheck', { when: when(b.last_check) }) : t('u.base.sub') }),
+      b.reboot_required ? row(t('u.restartq'), status('warn', t('u.base.reboot'))) : '',
+      b.phase === 'INTERRUPTED' ? alert('bad', t('u.base.interrupted')) : '',
+      !b.sources_approved ? alert('bad', t('u.base.sources')) : '',
+      row(t('u.base.actions'), `<div class="sx-acts">${btn('', t('u.check'), 'base-check', { disabled: busy || !b.sources_approved })}${btn('', t('u.base.apply'), 'base-apply', { disabled: busy || !b.sources_approved || !b.pending })}</div>`, { op: true }),
+      note(t('u.base.limits')),
+    ]));
+    const auto = u ? group(t('u.g.auto'), [
+      row(t('u.autocheck'), toggle(u.auto_check, 'upd-autocheck', { label: t('u.autocheck'), disabled: !u.repository_configured }), { op: true, sub: t('u.autocheck.sub') }),
+      row(t('u.autodownload'), toggle(u.auto_download, 'upd-autodownload', { label: t('u.autodownload'), disabled: !u.repository_configured }), { op: true, sub: t('u.autodownload.sub') }),
+    ]) : '';
+    return [group(t('u.g.state'), state), release, version, offline, back, history, base, auto, details].filter(Boolean);
+  }
+
   const PAGES = {
     home: () => [
       group(t('g.health'), need('system.health', (h) => h.items.map((i) => row(t('part.' + i.part), status(TONE[i.health], t('health.' + i.health)))))),
       group(t('g.session'), [row(t('k.member'), esc(S.session.member_name)), row(t('k.instance'), status(S.session.core === 'ONLINE' ? 'ok' : 'warn', t(S.session.core === 'ONLINE' ? 'k.online' : 'k.offline'))), row(t('k.lock.now'), btn('', t('q.lock'), 'lock', { icon: 'lock' }))]),
-      group(t('g.release'), need('update.status', (u) => [row(t('k.current'), `<span class="sx-mono">${esc(u.current_release || t('k.unknown'))}</span>`), row(t('k.phase'), status(u.phase === 'UP_TO_DATE' ? 'ok' : 'warn', t('k.phase.' + u.phase)))])),
+      group(t('g.release'), need('update.status', (u) => [row(t('u.current'), `<span class="sx-mono">${esc(u.current ? u.current.version : t('k.unknown'))}</span>`), row(t('k.phase'), status(phaseTone(u.phase), t('up.' + u.phase)), { sub: u.available && !AT_REST_QUIET.includes(u.phase) ? `<span class="sx-mono">${esc(u.available.version)}</span>` : '' })])),
     ],
     network: () => [
       group(t('g.connections'), need('network.status', (n) => n.interfaces.map((i) => row(`${esc(i.name)} · ${t('k.kind.' + i.kind)}`, status(i.carrier ? 'ok' : 'mute', t(i.carrier ? 'k.carrier.yes' : 'k.carrier.no')), { sub: `<span class="sx-mono">${i.addresses.length ? i.addresses.map(esc).join(' · ') : t('k.noaddr')}${i.mac ? ' · ' + esc(i.mac) : ''}</span>` })))),
@@ -406,10 +481,7 @@
       group(t('g.volumes'), need('storage.status', (s) => (s.volumes.length ? s.volumes.map((v) => `<div class="sx-row"><div class="sx-row__l sx-grow"><div class="sx-row__t"><span class="sx-mono">${esc(v.mount_point)}</span> · ${esc(v.filesystem)}</div><div class="sx-row__s">${t('k.free', { free: bytes(v.free_bytes), total: bytes(v.total_bytes) })}</div><div class="sx-meter"><progress max="${v.total_bytes}" value="${v.total_bytes - v.free_bytes}" aria-label="${esc(v.mount_point)}"></progress></div></div></div>`) : [note(t('k.none'))]))),
       group(t('g.disks'), need('storage.status', (s) => (s.disks.length ? s.disks.map((d) => row(`<span class="sx-mono">${esc(d.name)}</span>${d.model ? ' · ' + esc(d.model) : ''}`, bytes(d.size_bytes), { sub: d.removable ? t('k.removable') : '' })) : [note(t('k.none'))]))),
     ],
-    updates: () => [
-      group(t('g.release'), need('update.status', (u) => [row(t('k.current'), `<span class="sx-mono">${esc(u.current_release || t('k.unknown'))}</span>`), u.pending_release ? row(t('k.pending'), `<span class="sx-mono">${esc(u.pending_release)}</span>`) : '', row(t('k.phase'), status(u.phase === 'UP_TO_DATE' ? 'ok' : 'warn', t('k.phase.' + u.phase))), row(t('k.signing'), u.signing === 'DEV_ONLY' ? status('warn', t('k.signing.dev')) : status('ok', esc(u.signing)))])),
-      group(t('g.recovery'), need('recovery.status', (r) => [row(t('k.rollback'), r.rollback_available ? `<span class="sx-mono">${esc(r.previous_release || '')}</span>` : t('k.rollback.none'))])),
-    ],
+    updates: () => updatesPage(),
     diagnostics: () => [
       group(t('g.health'), need('system.health', (h) => h.items.map((i) => row(t('part.' + i.part), status(TONE[i.health], t('health.' + i.health)))))),
       group(t('g.capabilities'), need('system.capabilities', (c) => c.hardware.filter((h) => h.hardware !== 'NONE').map((h) => row(`<span class="sx-mono">${esc(h.hardware)}</span>`, status(h.availability.state === 'PRESENT' ? 'ok' : 'mute', t('avail.' + h.availability.state)))))),
@@ -450,6 +522,13 @@
     } else if (d && d.kind === 'power-confirm') {
       inner = `<h2 id="dlg-h">${t('power.confirm.' + d.action)}</h2><p>${t('power.confirm.note')}</p>
         <div class="sx-dialog__acts">${btn('ghost', t('power.cancel'), 'dialog-cancel')}${btn(d.action === 'shutdown' ? 'danger' : 'pri', t('power.' + d.action), 'power-do', { arg: d.action })}</div>`;
+    } else if (d && d.kind === 'update') {
+      const u = got('update.status');
+      const a = u && u.available;
+      const reboot = u && u.phase === 'AWAITING_REBOOT';
+      inner = `<h2 id="dlg-h">${t('u.pop.t')}</h2><p>${u ? (u.phase === 'UPDATE_AVAILABLE' && a ? t('u.available', { v: a.version }) : t('up.' + u.phase)) : ''}${u && u.reason ? ' — ' + t('ur.' + u.reason) : ''}</p>
+        ${u ? `<dl class="sx-kv"><dt>${t('u.pop.os')}</dt><dd class="sx-mono">${esc(u.current ? u.current.version : '—')}${a ? ' → ' + esc(a.version) : ''}</dd>${a ? `<dt>${t('u.restartq')}</dt><dd>${t(a.reboot_required ? 'u.yes' : 'u.no')}</dd>` : ''}</dl>` : ''}
+        <div class="sx-dialog__acts">${btn('ghost', t('u.later'), 'upd-later')}${reboot ? btn('gold', t('u.restart'), 'power-ask', { arg: 'restart', icon: 'restart' }) : btn('pri', t('u.open'), 'upd-open')}</div>`;
     } else if (d && d.kind === 'languages') {
       inner = `<h2 id="dlg-h">${t('lang.choose')}</h2><div class="sx-menu">${['pt', 'en', 'fr'].map((c) => btn(c === S.lang ? 'pri' : '', t('lang.' + c), 'lang', { arg: c })).join('')}</div>
         <div class="sx-dialog__acts">${btn('ghost', t('power.cancel'), 'dialog-cancel')}</div>`;
@@ -623,6 +702,20 @@
     'privacy-mic': (arg) => change('privacy.set_microphone', { allowed: arg === '1' }),
     'privacy-cam': (arg) => change('privacy.set_camera', { allowed: arg === '1' }),
     ssh: (arg) => change('remote_access.configure', { ssh_enabled: arg === '1' }),
+    'upd-check': async () => { const r = await change('update.check'); await read(['update.status']); if (!r.refused) toast(t('up.' + (got('update.status') || {}).phase)); },
+    'upd-download': async () => { await change('update.download'); await read(['update.status']); },
+    'upd-install': async () => { await change('update.install'); await read(['update.status']); },
+    'upd-cancel': async () => { await change('update.cancel'); await read(['update.status']); },
+    'upd-rollback': async () => { await change('update.rollback'); await read(['update.status', 'update.history']); },
+    'upd-import': async (arg) => { await change('update.import', { bundle: arg }); await read(['update.status']); },
+    'upd-autocheck': (arg) => change('update.configure', { change: { auto_check: arg === '1' } }),
+    'upd-autodownload': (arg) => change('update.configure', { change: { auto_download: arg === '1' } }),
+    'upd-details': () => { S.updDetails = !S.updDetails; },
+    'upd-later': () => { S.updSeen = updKey(got('update.status')); S.dialog = null; },
+    'upd-pop': () => { S.dialog = { kind: 'update' }; },
+    'upd-open': () => { const u = got('update.status'); S.updSeen = updKey(u); S.dialog = null; S.panel = 'system'; S.page = 'updates'; return read(READS.updates); },
+    'base-check': async () => { await change('base.check'); await read(['base.status']); },
+    'base-apply': async () => { await change('base.apply'); await read(['base.status']); },
   };
 
   async function act(name, arg) {

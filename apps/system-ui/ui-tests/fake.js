@@ -25,6 +25,32 @@
     activation: scenario === 'setup' ? 'READY' : 'ACTIVATED',
     credential: false,
     steps: 0,
+    // The Update Engine, as the interface sees it (ADR-0032). `?upd=` picks
+    // where it starts: available, downloading, awaiting, reboot, rolledback,
+    // recovery, failed, norepo; otherwise up to date.
+    upd: new URLSearchParams(location.search).get('upd') || 'idle',
+    updDone: 0,
+  };
+  const CUR = { version: 'd34bbb0a141d-r1', release_number: 7, channel: 'development', activated_at: '2026-10-10T09:12:00Z' };
+  const PREV = { version: '2916a481e178-r1', release_number: 6, channel: 'development', activated_at: '2026-10-02T15:40:00Z' };
+  const NEXT = { version: 'e81c2f90b7aa-r1', release_number: 8, download_bytes: 642e6, install_bytes: 1284e6, reboot_required: false, security: true, migrations: { kind: 'expand' }, notes: { pt: 'Actualizações do Workspace e correcções de segurança da base de dados.', en: 'Workspace updates and database security fixes.', fr: 'Mises à jour du Workspace et correctifs de sécurité de la base de données.' }, synthetic: false, source: 'repository' };
+  const PHASE = { idle: 'IDLE', available: 'UPDATE_AVAILABLE', downloading: 'DOWNLOADING', awaiting: 'AWAITING_INSTALL', installing: 'INSTALLING', reboot: 'AWAITING_REBOOT', rolledback: 'ROLLED_BACK', recovery: 'RECOVERY_REQUIRED', failed: 'DOWNLOAD_FAILED', norepo: 'IDLE', completed: 'COMPLETED' };
+  const updState = () => {
+    if (F.upd === 'downloading') { F.updDone = Math.min(NEXT.download_bytes, F.updDone + 160e6); if (F.updDone >= NEXT.download_bytes) F.upd = 'awaiting'; }
+    if (F.upd === 'installing') { F.steps += 1; if (F.steps > 2) { F.upd = 'completed'; } }
+    const p = PHASE[F.upd];
+    const done = F.upd === 'completed';
+    return {
+      current: done ? { version: NEXT.version, release_number: 8, channel: 'development', activated_at: '2026-10-12T14:00:00Z' } : CUR,
+      previous: done ? CUR : PREV,
+      channel: 'development', repository_configured: F.upd !== 'norepo', phase: p,
+      available: ['available', 'downloading', 'awaiting', 'installing', 'reboot', 'failed'].includes(F.upd) ? Object.assign({}, NEXT, { reboot_required: F.upd === 'reboot' || NEXT.reboot_required }) : null,
+      progress: F.upd === 'downloading' ? { done: F.updDone, total: NEXT.download_bytes } : null,
+      last_check: '2026-10-12T13:58:00Z', last_outcome: done ? 'COMMITTED' : F.upd === 'rolledback' ? 'ROLLED_BACK' : F.upd === 'recovery' ? 'RECOVERY_REQUIRED' : null,
+      reason: F.upd === 'rolledback' ? 'HEALTH_GATE_FAILED' : F.upd === 'recovery' ? 'ROLLBACK_UNSAFE' : F.upd === 'failed' ? 'DOWNLOAD_INTERRUPTED' : null,
+      restart_required: F.upd === 'reboot', signing: 'DEV_ONLY', auto_check: false, auto_download: false,
+      offline_bundles: [{ name: 'ocinye-os-e81c2f90b7aa-r1.ocu', bytes: 642e6, removable: true }],
+    };
   };
   const state = () => F.session === 'ACTIVE'
     ? { state: 'ACTIVE', member_id: 'm-1', member_name: 'Pessoa de Prova', core: F.core, operator: true, idle_lock_secs: 300 }
@@ -85,10 +111,12 @@
     'accessibility.status': () => ok('accessibility', F.a11y),
     'privacy.status': () => ok('privacy', F.privacy),
     'storage.status': () => ok('storage', { disks: [{ name: 'nvme0n1', model: 'Disco de prova', size_bytes: 512e9, removable: false }], volumes: [{ mount_point: '/', filesystem: 'ext4', total_bytes: 60e9, free_bytes: 41e9 }, { mount_point: '/var/lib/ocinye', filesystem: 'ext4', total_bytes: 430e9, free_bytes: 402e9 }] }),
-    'update.status': () => ok('update', { current_release: 'ocinye-os-1.0.0-dev', pending_release: null, phase: 'UP_TO_DATE', signing: 'DEV_ONLY' }),
+    'update.status': () => ok('update', updState()),
+    'update.history': () => ok('update_history', { entries: [{ id: '5f1e0c2a9b7d3e41', version: CUR.version, release_number: 7, channel: 'development', from: PREV.version, started_at: '2026-10-10T09:02:00Z', finished_at: '2026-10-10T09:12:00Z', outcome: 'COMMITTED', reason: null, rebooted: false, source: 'repository', via: 'settings' }, { id: '0c9d8e7f6a5b4c3d', version: 'aa11bb22cc33-r1', release_number: 6, channel: 'development', from: PREV.version, started_at: '2026-10-08T11:00:00Z', finished_at: '2026-10-08T11:09:00Z', outcome: 'ROLLED_BACK', reason: 'HEALTH_GATE_FAILED', rebooted: false, source: 'offline', via: 'cli' }] }),
+    'base.status': () => ok('base', { phase: 'IDLE', sources_approved: true, pending: 12, security: 3, last_check: '2026-10-12T06:00:00Z', reboot_required: false, last_outcome: null, reason: null, major_upgrade_supported: false }),
     'remote_access.status': () => ok('remote_access', F.remote),
     'activation.status': () => { if (F.activation === 'RUNNING') { F.steps += 1; if (F.steps > 3) { F.activation = 'ACTIVATED'; F.credential = true; } } return ok('activation', { phase: F.activation, release_id: 'ocinye-os-1.0.0-dev', steps_begun: F.activation === 'RUNNING' ? F.steps : 0, credential_waiting: F.credential }); },
-    'recovery.status': () => ok('recovery', { rollback_available: false, previous_release: null }),
+    'recovery.status': () => ok('recovery', { rollback_available: true, previous_release: PREV.version, current_release: CUR.version, pending_release: null, last_update: null }),
   };
 
   function system(request, grant) {
@@ -108,6 +136,15 @@
       case 'remote_access.configure': { const f = fresh('LOCAL_REAUTH'); if (f) return f; F.remote = { ssh_enabled: request.ssh_enabled, ssh_active: request.ssh_enabled }; return ok('remote_access', F.remote); }
       case 'power.restart': case 'power.shutdown': { if (member) { const f = fresh('CONFIRM'); if (f) return f; } return ok('done'); }
       case 'power.suspend': return ok('done');
+      case 'update.check': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); if (F.upd === 'norepo') return no('UPDATE_REFUSED', { update: 'REPOSITORY_NOT_CONFIGURED' }); F.upd = 'available'; return READS['update.status']();
+      case 'update.download': F.upd = 'downloading'; F.updDone = 0; return READS['update.status']();
+      case 'update.cancel': F.upd = 'available'; return READS['update.status']();
+      case 'update.install': { const f = fresh('LOCAL_REAUTH'); if (f) return f; F.upd = 'installing'; F.steps = 0; return READS['update.status'](); }
+      case 'update.rollback': { const f = fresh('LOCAL_REAUTH'); if (f) return f; F.upd = 'rolledback'; return READS['update.status'](); }
+      case 'update.import': F.upd = 'available'; return READS['update.status']();
+      case 'update.configure': { const f = fresh('LOCAL_REAUTH'); if (f) return f; return READS['update.status'](); }
+      case 'base.check': return READS['base.status']();
+      case 'base.apply': { const f = fresh('LOCAL_REAUTH'); if (f) return f; return READS['base.status'](); }
       case 'time.configure': return no('AUTHORITY_UNAVAILABLE');
       case 'activation.start': if (F.activation !== 'READY' && F.activation !== 'FAILED') return no('NOT_OFFERED_HERE'); if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(request.domain)) return no('VALUE_OUT_OF_RANGE'); F.activation = 'RUNNING'; F.steps = 0; return READS['activation.status']();
       case 'activation.credential': if (!F.credential) return no('NOT_FOUND'); F.credential = false; return ok('initial_credential', { username: 'admin@empresa.example', password: FIRST_CREDENTIAL });
