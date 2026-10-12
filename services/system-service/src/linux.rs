@@ -180,6 +180,7 @@ pub const IMPLEMENTED: &[CapabilityId] = &[
     CapabilityId::ActivationStatus,
     CapabilityId::ActivationStart,
     CapabilityId::ActivationCredential,
+    CapabilityId::ActivationConfigure,
 ];
 
 /// What the service remembers between restarts: preferences that have no
@@ -1200,6 +1201,38 @@ impl Platform for Linux {
             Request::ActivationStart { .. } => {
                 self.activation.start(request).map(Payload::Activation)
             }
+            Request::ActivationConfigure {
+                language,
+                timezone,
+                network,
+            } => {
+                // Only before an Instance exists: afterwards these are the
+                // operator's, through their own capabilities.
+                if !matches!(
+                    self.activation.state().phase,
+                    ocinye_system_contracts::state::ActivationPhase::Ready
+                        | ocinye_system_contracts::state::ActivationPhase::Failed
+                ) {
+                    return Err(Reason::NotOfferedHere);
+                }
+                if let Some(n) = network {
+                    self.configure_network(&n.interface, &n.addressing)?;
+                }
+                self.perform(
+                    &Request::TimeConfigure {
+                        timezone: Some(timezone.clone()),
+                        automatic: Some(true),
+                    },
+                    context,
+                )?;
+                self.perform(
+                    &Request::LocaleConfigure {
+                        language: *language,
+                    },
+                    context,
+                )?;
+                Ok(Payload::Activation(self.activation.state()))
+            }
             Request::ActivationCredential {} => {
                 self.activation.credential().map(Payload::InitialCredential)
             }
@@ -1791,6 +1824,49 @@ mod tests {
         ));
         assert!(t.0.join("etc/netplan/90-ocinye-enp3s0.yaml").exists());
         assert!(runner.ran(&["apply"]));
+    }
+
+    #[test]
+    fn o_primeiro_arranque_so_escolhe_lingua_hora_e_rede_antes_de_haver_instancia() {
+        use ocinye_system_contracts::request::FirstNetwork;
+        use ocinye_system_contracts::state::Language;
+        let t = Tree::new();
+        laptop(&t, "0", "0");
+        let runner = Arc::new(Script::default());
+        let l = t.with(runner.clone(), Arc::new(FakeBus::default()));
+        let req = Request::ActivationConfigure {
+            language: Language::En,
+            timezone: "Europe/Lisbon".into(),
+            network: Some(FirstNetwork {
+                interface: "enp3s0".into(),
+                addressing: Addressing::Dhcp,
+            }),
+        };
+        // No release to create an Instance from: not offered, nothing touched.
+        assert_eq!(l.perform_test(&req), Err(Reason::NotOfferedHere));
+        assert!(runner.changes().is_empty());
+        assert!(!t.0.join("etc/netplan/90-ocinye-enp3s0.yaml").exists());
+        // Offered: the language, the zone and the wired addressing are set.
+        runner.answer(
+            Tool::Timedatectl,
+            &["show"],
+            "Timezone=Europe/Lisbon\nNTP=yes\n",
+        );
+        t.put(
+            "usr/lib/ocinye/release/f3fc6ba0863b/install/ocinye",
+            "#!/bin/sh\n",
+        );
+        let r = l.perform_test(&req);
+        assert!(matches!(r, Ok(Payload::Activation(_))), "{r:?}");
+        assert!(runner.ran(&["set-timezone", "Europe/Lisbon"]));
+        assert!(runner.ran(&["set-locale", "LANG=en_GB.UTF-8"]));
+        assert!(t.0.join("etc/netplan/90-ocinye-enp3s0.yaml").exists());
+        // Once the Instance exists these are the operator's, through their
+        // own capabilities.
+        t.put("etc/ocinye/release.env", "OCINYE_RELEASE=f3fc6ba0863b\n");
+        let before = runner.changes().len();
+        assert_eq!(l.perform_test(&req), Err(Reason::NotOfferedHere));
+        assert_eq!(runner.changes().len(), before);
     }
 
     fn sound(t: &Tree) -> Arc<Script> {

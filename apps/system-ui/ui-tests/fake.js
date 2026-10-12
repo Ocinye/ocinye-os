@@ -126,8 +126,8 @@
     'display.status': () => ok('display', { outputs: [{ name: 'eDP-1', internal: true, enabled: true, width: 1920, height: 1080, refresh_mhz: null, scale_percent: null }, { name: 'HDMI-A-1', internal: false, enabled: true, width: 2560, height: 1440, refresh_mhz: null, scale_percent: null }], brightness: F.brightness }),
     'power.status': () => ok('power', { source: 'BATTERY', battery: { charge: 82, charging: false, health: 96 }, can_suspend: true, inhibitors: [] }),
     'locale.status': () => ok('locale', F.locale),
-    'time.status': () => ok('time', { timezone: 'Europe/Lisbon', automatic: true, synchronised: true, unix_time: 1791680000 }),
-    'keyboard.status': () => ok('keyboard', { layout: 'pt', variant: null, offered: ['pt', 'us', 'fr', 'gb', 'es', 'de'] }),
+    'time.status': () => ok('time', { timezone: (F.configured && F.configured.timezone) || 'Europe/Lisbon', automatic: true, synchronised: true, unix_time: 1791680000 }),
+    'keyboard.status': () => ok('keyboard', { layout: F.layout || 'pt', variant: null, offered: ['pt', 'us', 'fr', 'gb', 'es', 'de'] }),
     'accessibility.status': () => ok('accessibility', F.a11y),
     'privacy.status': () => ok('privacy', F.privacy),
     'storage.status': () => ok('storage', { disks: [{ name: 'nvme0n1', model: 'Disco de prova', size_bytes: 512e9, removable: false }], volumes: [{ mount_point: '/', filesystem: 'ext4', total_bytes: 60e9, free_bytes: 41e9 }, { mount_point: '/var/lib/ocinye', filesystem: 'ext4', total_bytes: 430e9, free_bytes: 402e9 }] }),
@@ -150,7 +150,7 @@
       case 'accessibility.configure': F.a11y = { text_scale_percent: request.text_scale_percent, high_contrast: request.high_contrast, reduce_motion: request.reduce_motion }; return ok('accessibility', F.a11y);
       case 'locale.configure': F.locale = { language: request.language, system_locale: F.locale.system_locale }; return ok('locale', F.locale);
       case 'display.set_brightness': F.brightness = request.percent; return READS['display.status']();
-      case 'keyboard.configure': return member ? ok('keyboard', { layout: request.layout, variant: null, offered: ['pt', 'us', 'fr', 'gb', 'es', 'de'] }) : no('NOT_AUTHORIZED', { needs: 'MEMBER' });
+      case 'keyboard.configure': F.layout = request.layout; return ok('keyboard', { layout: request.layout, variant: null, offered: ['pt', 'us', 'fr', 'gb', 'es', 'de'] });
       case 'privacy.set_microphone': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.privacy = Object.assign({}, F.privacy, { microphone_allowed: request.allowed }); F.audio.inMuted = !request.allowed; return ok('privacy', F.privacy);
       case 'wifi.set_radio': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.wifi = { enabled: request.enabled, connected: request.enabled ? F.wifi.connected : null }; return READS['network.status']();
       case 'wifi.connect': {
@@ -210,8 +210,15 @@
       case 'base.check': return READS['base.status']();
       case 'base.apply': { const f = fresh('LOCAL_REAUTH'); if (f) return f; return READS['base.status'](); }
       case 'time.configure': return no('AUTHORITY_UNAVAILABLE');
+      case 'activation.configure': {
+        if (F.activation !== 'READY' && F.activation !== 'FAILED') return no('NOT_OFFERED_HERE');
+        if (!/^[A-Za-z_]+(\/[A-Za-z_+-]+)*$/.test(request.timezone)) return no('VALUE_OUT_OF_RANGE');
+        F.configured = { language: request.language, timezone: request.timezone, network: request.network };
+        F.locale = { language: request.language, system_locale: { pt: 'pt_PT.UTF-8', en: 'en_GB.UTF-8', fr: 'fr_FR.UTF-8' }[request.language] };
+        return READS['activation.status']();
+      }
       case 'activation.start': if (F.activation !== 'READY' && F.activation !== 'FAILED') return no('NOT_OFFERED_HERE'); if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(request.domain)) return no('VALUE_OUT_OF_RANGE'); F.activation = 'RUNNING'; F.steps = 0; return READS['activation.status']();
-      case 'activation.credential': if (!F.credential) return no('NOT_FOUND'); F.credential = false; return ok('initial_credential', { username: 'admin@empresa.example', password: FIRST_CREDENTIAL });
+      case 'activation.credential': if (!F.credential) return no('NOT_FOUND'); F.credential = false; return ok('initial_credential', { username: 'admin@empresa.com', password: FIRST_CREDENTIAL });
       default: return no('NOT_IMPLEMENTED');
     }
   }

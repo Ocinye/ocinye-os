@@ -3,6 +3,7 @@ import type { Addressing } from "./Addressing";
 import type { AudioTarget } from "./AudioTarget";
 import type { ConfigChange } from "./ConfigChange";
 import type { Distribution } from "./Distribution";
+import type { FirstNetwork } from "./FirstNetwork";
 import type { Language } from "./Language";
 import type { Percent } from "./Percent";
 import type { Secret } from "./Secret";
@@ -178,4 +179,16 @@ admin_name: string,
 /**
  * The first administrator's address: what they sign in with.
  */
-admin_email: string, } | { "capability": "activation.credential", };
+admin_email: string, } | { "capability": "activation.credential", } | { "capability": "activation.configure",
+/**
+ * The machine's language.
+ */
+language: Language,
+/**
+ * The time zone (`Africa/Luanda`); the clock is set from the network.
+ */
+timezone: string,
+/**
+ * A wired interface's addressing, when it is to be changed.
+ */
+network: FirstNetwork | null, };

@@ -115,7 +115,8 @@ fn request(id: CapabilityId) -> Request {
         CapabilityId::RemoteAccessConfigure => r#"{"capability":"remote_access.configure","ssh_enabled":false}"#.to_owned(),
         CapabilityId::UpdateConfigure => r#"{"capability":"update.configure","change":{"channel":"stable","repository":null,"auto_check":true,"auto_download":null}}"#.to_owned(),
         CapabilityId::UpdateImport => r#"{"capability":"update.import","bundle":"ocinye-os-d34bbb0a141d-r2.ocu"}"#.to_owned(),
-        CapabilityId::ActivationStart => r#"{"capability":"activation.start","domain":"ocinye.empresa.example","instance_name":"Instituto","distributions":["research"],"person_name":"Pessoa","person_email":"pessoa@empresa.example","admin_name":"Admin","admin_email":"admin@empresa.example"}"#.to_owned(),
+        CapabilityId::ActivationConfigure => r#"{"capability":"activation.configure","language":"en","timezone":"Europe/Lisbon","network":null}"#.to_owned(),
+        CapabilityId::ActivationStart => r#"{"capability":"activation.start","domain":"ocinye.empresa.com","instance_name":"Instituto","distributions":["research"],"person_name":"Pessoa","person_email":"pessoa@empresa.com","admin_name":"Admin","admin_email":"admin@empresa.com"}"#.to_owned(),
         other => format!(r#"{{"capability":"{}"}}"#, other.as_str()),
     };
     serde_json::from_str(&json).unwrap()

@@ -82,9 +82,23 @@ escolhe, monta ou escreve um disco. Bancada: `#live`, `#hardware`, `#recovery`.
 
 ## Primeiro arranque
 
-Sem Instância, o ecrã de entrada dá lugar a **Configurar este computador**
-(`activation.start`), ao progresso, e à entrega — única — da credencial
-temporária do primeiro administrador (`activation.credential`).
+Sem Instância, o ecrã de entrada dá lugar a cinco passos:
+
+1. **Idioma e região** — a língua, o fuso horário (lista curta e fechada) e o
+   teclado (`keyboard.configure`, que a presença já pode);
+2. **Rede** — as ligações que o System Service vê, e, para uma com fios,
+   endereço automático ou fixo. Uma rede sem fios junta-se depois de entrar. Ao
+   sair deste passo, a língua, o fuso e a rede seguem juntos em
+   `activation.configure`, que o serviço só aceita enquanto a máquina não tem
+   Instância e se oferece para a criar;
+3. **Instância** — nome, nome na rede e Distribuições;
+4. **Pessoas** — quem configura e o primeiro administrador;
+5. **Rever e criar** — o resumo, e `activation.start`.
+
+Depois, o progresso e a entrega — única — da credencial temporária do primeiro
+administrador (`activation.credential`). Cada passo segue com Enter: a acção
+natural tem o foco, e o último campo de um formulário envia-o. Bancada:
+`harness.html#setup`.
 
 ## Primeiro acesso
 

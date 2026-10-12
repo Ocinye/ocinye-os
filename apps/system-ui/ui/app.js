@@ -20,6 +20,7 @@
     panel: null,            // null | 'quick' | 'system'
     page: 'home',
     dialog: null,
+    fb: { step: 'region', tz: null, kb: null, net: 'AUTOMATIC', iface: '' }, // o primeiro arranque, passo a passo
     form: { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '', iname: '', domain: '', pname: '', pemail: '', aname: '', aemail: '', wifipass: '', naddr: '', nprefix: '24', ngw: '', ndns: '' },
     net: { iface: null, mode: 'DHCP' }, // o formulário de endereçamento: interface e modo escolhidos
     dist: { research: true, business: false, education: false, personal: false },
@@ -54,7 +55,7 @@
 
   // ── peças
   const ic = (id, c) => `<svg class="sx-icon${c ? ' ' + c : ''}" aria-hidden="true" focusable="false"><use href="icons.svg#${id}"></use></svg>`;
-  const btn = (kind, label, act, o = {}) => `<button class="sx-btn${kind ? ' sx-btn--' + kind : ''}${o.lg ? ' sx-btn--lg' : ''}" type="${o.submit ? 'submit' : 'button'}"${act ? ` data-act="${act}"` : ''}${o.arg != null ? ` data-arg="${esc(o.arg)}"` : ''}${o.disabled || S.busy ? ' disabled' : ''}${o.id ? ` id="${o.id}"` : ''}>${o.icon ? ic(o.icon) : ''}${label}</button>`;
+  const btn = (kind, label, act, o = {}) => `<button class="sx-btn${kind ? ' sx-btn--' + kind : ''}${o.lg ? ' sx-btn--lg' : ''}" type="${o.submit ? 'submit' : 'button'}"${act ? ` data-act="${act}"` : ''}${o.arg != null ? ` data-arg="${esc(o.arg)}"` : ''}${o.disabled || S.busy ? ' disabled' : ''}${o.af ? ' data-af' : ''}${o.id ? ` id="${o.id}"` : ''}>${o.icon ? ic(o.icon) : ''}${label}</button>`;
   const status = (tone, text) => `<span class="sx-status" data-tone="${tone}">${text}</span>`;
   const alert = (tone, text) => `<div class="sx-alert" data-tone="${tone}" role="${tone === 'bad' ? 'alert' : 'status'}">${ic(tone === 'info' ? 'info' : 'warn')}<div>${text}</div></div>`;
   const field = (id, label, o = {}) => `<label class="sx-field" for="f-${id}"><span class="sx-field__l">${label}</span><input class="sx-input${o.code ? ' sx-input--code' : ''}" id="f-${id}" data-f="${id}" type="${o.type || 'text'}" value="${esc(S.form[id])}" autocomplete="off" autocapitalize="none" spellcheck="false"${o.code ? ' inputmode="numeric" maxlength="6"' : ''}${S.busy ? ' disabled' : ''}></label>`;
@@ -237,18 +238,82 @@
   // ── primeiro arranque: este computador cria a sua Instância
   const activation = () => got('activation.status');
   const pairing = () => `<p class="sx-card__note">${t('act.pairing')}</p>`;
+  // Os passos do primeiro arranque. A língua, o fuso e a rede aplicam-se ao
+  // sair do segundo passo (activation.configure); a Instância só no fim.
+  const FB = ['region', 'network', 'instance', 'people', 'summary'];
+  const ZONES = ['Africa/Luanda', 'Europe/Lisbon', 'Atlantic/Azores', 'Atlantic/Madeira', 'Africa/Maputo', 'Africa/Kinshasa', 'Africa/Lagos', 'America/Sao_Paulo', 'Europe/Paris', 'Europe/Brussels', 'Europe/London', 'UTC'];
+  const kbName = (code) => (T['kbn.' + code] ? t('kbn.' + code) : `<span class="sx-mono">${esc(code)}</span>`);
+  function fbDefaults() {
+    const time = got('time.status');
+    const k = got('keyboard.status');
+    const n = got('network.status');
+    if (S.fb.tz === null) S.fb.tz = time && ZONES.includes(time.timezone) ? time.timezone : 'Africa/Luanda';
+    if (S.fb.kb === null) S.fb.kb = k ? k.layout : 'pt';
+    if (!S.fb.iface && n) { const w = n.interfaces.find((i) => i.kind === 'ETHERNET'); S.fb.iface = w ? w.name : ''; }
+  }
   function setup(a) {
-    const check = (key) => `<label class="sx-check"><input type="checkbox" data-act="dist" data-arg="${key}"${S.dist[key] ? ' checked' : ''}${S.busy ? ' disabled' : ''}><span>${t('act.dist.' + key)}</span></label>`;
-    return `<div><div class="sx-card__step">${t('act.step')}</div><h1 id="login-h">${t('act.h')}</h1></div>
-      <p>${t('act.lead')}</p>
+    fbDefaults();
+    const at = FB.indexOf(S.fb.step);
+    const head = (h, lead) => `<div><div class="sx-card__step">${t('fb.of', { n: at + 1, m: FB.length })} · ${t('act.step')}</div><h1 id="login-h">${h}</h1></div>${lead ? `<p>${lead}</p>` : ''}
       ${a.phase === 'FAILED' ? alert('bad', t('act.failed')) : ''}
-      ${S.error ? alert('bad', t(S.error[0], S.error[1])) : ''}
-      <div class="sx-form2">${field('iname', t('act.iname'))}${field('domain', t('act.domain'))}</div>
-      <fieldset class="sx-checks"><legend class="sx-field__l">${t('act.dists')}</legend>${['research', 'business', 'education', 'personal'].map(check).join('')}</fieldset>
-      <div class="sx-form2">${field('pname', t('act.pname'))}${field('pemail', t('act.pemail'))}</div>
-      <div class="sx-form2">${field('aname', t('act.aname'))}${field('aemail', t('act.aemail'))}</div>
-      ${btn('gold', t(S.busy ? 'login.busy' : 'act.go'), null, { submit: true, lg: true })}
-      ${pairing()}`;
+      ${S.error ? alert('bad', t(S.error[0], S.error[1])) : ''}`;
+    const nav = (next, o = {}) => `<div class="sx-fbnav">${at > 0 ? btn('ghost', t('login.back'), 'fb-back') : ''}${btn('gold', t(S.busy ? 'login.busy' : next), null, { submit: true, lg: true, af: o.af })}</div>`;
+    const seg = (cur, act, values, label) => `<div class="sx-seg" role="radiogroup" aria-label="${label}">${values.map(([v, l]) => `<button class="sx-seg__opt" type="button" role="radio" aria-checked="${cur === v}" data-act="${act}" data-arg="${esc(v)}"${S.busy ? ' disabled' : ''}>${l}</button>`).join('')}</div>`;
+    const select = (id, cur, values, label) => `<label class="sx-field" for="fb-${id}"><span class="sx-field__l">${label}</span><select class="sx-input" id="fb-${id}" data-fb="${id}"${S.busy ? ' disabled' : ''}>${values.map(([v, l]) => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`;
+    if (S.fb.step === 'region') {
+      const k = got('keyboard.status');
+      const layouts = [...new Set([S.fb.kb].concat(k ? k.offered : []))];
+      return `${head(t('fb.region.h'), t('fb.region.lead'))}
+        <div class="sx-field"><span class="sx-field__l">${t('lang.choose')}</span>${seg(S.lang, 'fb-lang', [['pt', t('lang.pt')], ['en', t('lang.en')], ['fr', t('lang.fr')]], t('lang.choose'))}</div>
+        <div class="sx-form2">${select('tz', S.fb.tz, ZONES.map((z) => [z, esc(z.replace('_', ' '))]), t('fb.tz'))}${select('kb', S.fb.kb, layouts.map((c) => [c, T['kbn.' + c] ? t('kbn.' + c) : esc(c)]), t('fb.kb'))}</div>
+        ${nav('login.go', { af: true })}${pairing()}`;
+    }
+    if (S.fb.step === 'network') {
+      const n = got('network.status');
+      const ifaces = n ? n.interfaces : [];
+      const wired = ifaces.filter((i) => i.kind === 'ETHERNET');
+      const line = (i) => `<li><span>${ic(i.kind === 'WIFI' ? 'wifi' : 'eth', 'sx-icon--sm')}<span class="sx-mono">${esc(i.name)}</span></span><span>${i.carrier ? t('fb.link') : t('fb.nolink')}${i.addresses.length ? ` · <span class="sx-mono">${i.addresses.map(esc).join(' ')}</span>` : ''}</span></li>`;
+      const fixed = S.fb.net === 'STATIC' && wired.length
+        ? `<div class="sx-form2">${select('iface', S.fb.iface, wired.map((i) => [i.name, esc(i.name)]), t('fb.iface'))}${field('naddr', t('fb.addr'))}</div>
+           <div class="sx-form2">${field('nprefix', t('fb.prefix'))}${field('ngw', t('fb.gw'))}</div>${field('ndns', t('fb.dns'))}`
+        : '';
+      return `${head(t('fb.net.h'), t('fb.net.lead'))}
+        <ul class="sx-ifaces">${ifaces.length ? ifaces.map(line).join('') : `<li>${t('fb.noiface')}</li>`}</ul>
+        ${wired.length ? `<div class="sx-field"><span class="sx-field__l">${t('fb.wired')}</span>${seg(S.fb.net, 'fb-net', [['AUTOMATIC', t('fb.auto')], ['STATIC', t('fb.static')]], t('fb.wired'))}</div>` : ''}
+        ${fixed}
+        ${ifaces.some((i) => i.kind === 'WIFI') ? `<p class="sx-card__note">${t('fb.wifi.later')}</p>` : ''}
+        ${nav('login.go', { af: S.fb.net !== 'STATIC' })}`;
+    }
+    if (S.fb.step === 'instance') {
+      const check = (key) => `<label class="sx-check"><input type="checkbox" data-act="dist" data-arg="${key}"${S.dist[key] ? ' checked' : ''}${S.busy ? ' disabled' : ''}><span>${t('act.dist.' + key)}</span></label>`;
+      return `${head(t('act.h'), t('act.lead'))}
+        <div class="sx-form2">${field('iname', t('act.iname'))}${field('domain', t('act.domain'))}</div>
+        <fieldset class="sx-checks"><legend class="sx-field__l">${t('act.dists')}</legend>${['research', 'business', 'education', 'personal'].map(check).join('')}</fieldset>
+        ${nav('login.go')}`;
+    }
+    if (S.fb.step === 'people') {
+      return `${head(t('fb.people.h'), t('fb.people.lead'))}
+        <div class="sx-form2">${field('pname', t('act.pname'))}${field('pemail', t('act.pemail'))}</div>
+        <div class="sx-form2">${field('aname', t('act.aname'))}${field('aemail', t('act.aemail'))}</div>
+        ${nav('login.go')}`;
+    }
+    const f = S.form;
+    const dists = Object.keys(S.dist).filter((k) => S.dist[k]).map((k) => t('act.dist.' + k)).join(', ');
+    const netv = S.fb.net === 'STATIC' ? `<span class="sx-mono">${esc(S.fb.iface)} · ${esc(f.naddr.trim())}/${esc(f.nprefix.trim())}</span>` : t('fb.auto');
+    return `${head(t('fb.sum.h'), t('fb.sum.lead'))}
+      <dl class="sx-kv">
+        <dt>${t('lang.choose')}</dt><dd>${t('lang.' + S.lang)}</dd>
+        <dt>${t('fb.tz')}</dt><dd>${esc(S.fb.tz)}</dd>
+        <dt>${t('fb.kb')}</dt><dd>${kbName(S.fb.kb)}</dd>
+        <dt>${t('fb.wired')}</dt><dd>${netv}</dd>
+        <dt>${t('act.iname')}</dt><dd>${esc(f.iname.trim())}</dd>
+        <dt>${t('fb.domain')}</dt><dd class="sx-mono">${esc(f.domain.trim().toLowerCase())}</dd>
+        <dt>${t('act.dists')}</dt><dd>${dists}</dd>
+        <dt>${t('act.pname')}</dt><dd>${esc(f.pname.trim())} · <span class="sx-mono">${esc(f.pemail.trim())}</span></dd>
+        <dt>${t('act.aname')}</dt><dd>${esc(f.aname.trim())} · <span class="sx-mono">${esc(f.aemail.trim())}</span></dd>
+      </dl>
+      ${alert('info', t('fb.sum.note'))}
+      ${nav('act.go', { af: true })}`;
   }
   const running = (a) => `<div><div class="sx-card__step">${t('act.step')}</div><h1 id="login-h" tabindex="-1">${t('act.running.h')}</h1></div>
       <p role="status">${t('act.running.step', { n: a.steps_begun })}</p>
@@ -690,7 +755,7 @@
     root.innerHTML = html;
     // O foco segue o que mudou: um diálogo novo, uma página nova, um ecrã novo;
     // de resto fica onde a pessoa o tinha.
-    const focusKey = v + '|' + ((got('activation.status') || {}).phase || '') + (S.credential ? 'c' : '') + (S.recovery ? 'r' : '') + (S.enrolKey ? 'k' : '') + '|' + (S.dialog ? S.dialog.kind + (S.dialog.cls || '') : '') + '|' + (v === 'shell' ? S.panel + ':' + S.page : S.step);
+    const focusKey = v + '|' + ((got('activation.status') || {}).phase || '') + (S.credential ? 'c' : '') + (S.recovery ? 'r' : '') + (S.enrolKey ? 'k' : '') + '|' + (S.dialog ? S.dialog.kind + (S.dialog.cls || '') : '') + '|' + (v === 'shell' ? S.panel + ':' + S.page : S.step + ':' + S.fb.step);
     const moved = focusKey !== lastFocusKey;
     lastFocusKey = focusKey;
     let target = null;
@@ -698,7 +763,7 @@
       // Dentro do que acabou de aparecer: o diálogo, o painel, ou o cartão do
       // ecrã — nunca os botões do canto, que estão antes dele no documento.
       const scope = root.querySelector('.sx-dialog') || root.querySelector('.sx-panel') || root.querySelector('.sx-card') || root.querySelector('.sx-lock__who') || root;
-      target = (S.panel === 'system' && !S.dialog && root.querySelector('#page-h')) || scope.querySelector('input:not([disabled])') || scope.querySelector('button:not([disabled])') || scope.querySelector('[tabindex="-1"]');
+      target = (S.panel === 'system' && !S.dialog && root.querySelector('#page-h')) || scope.querySelector('[data-af]:not([disabled])') || scope.querySelector('input:not([disabled])') || scope.querySelector('button:not([disabled])') || scope.querySelector('[tabindex="-1"]');
     } else if (keep) {
       target = document.getElementById(keep.id);
       if (target && target.disabled) target = null;
@@ -759,6 +824,45 @@
     render();
   }
 
+  // Cada passo valida o que é seu; o motor (o System Service) decide outra
+  // vez quando recebe. A língua, o fuso e a rede vão juntos, uma vez.
+  async function fbNext() {
+    if (S.busy) return;
+    const f = S.form;
+    S.error = null;
+    const step = S.fb.step;
+    if (step === 'region') {
+      const k = got('keyboard.status');
+      if (!k || k.layout !== S.fb.kb) {
+        S.busy = true; render();
+        const r = await call('keyboard.configure', { layout: S.fb.kb, variant: null });
+        S.busy = false;
+        if (r.refused) { S.error = ['r.' + r.refused.code]; return render(); }
+      }
+    } else if (step === 'network') {
+      const ip = (v) => /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(v) && v.split('.').every((x) => Number(x) <= 255);
+      let network = null;
+      if (S.fb.net === 'STATIC') {
+        const dns = f.ndns.split(/[\s,]+/).filter(Boolean);
+        const prefix = Number(f.nprefix);
+        if (!S.fb.iface || !ip(f.naddr.trim()) || !ip(f.ngw.trim()) || !(prefix >= 1 && prefix <= 32) || !dns.every(ip) || dns.length > 4) { S.error = ['fb.net.invalid']; return render(); }
+        network = { interface: S.fb.iface, addressing: { mode: 'STATIC', address: f.naddr.trim(), prefix, gateway: f.ngw.trim(), dns } };
+      }
+      S.busy = true; render();
+      const r = await call('activation.configure', { language: S.lang, timezone: S.fb.tz, network });
+      S.busy = false;
+      if (r.refused) { S.error = [r.refused.code === 'VALUE_OUT_OF_RANGE' ? 'fb.net.invalid' : 'r.' + r.refused.code]; return render(); }
+      S.langChosen = false;
+      await read(['network.status', 'time.status', 'locale.status']);
+    } else if (step === 'instance') {
+      if (!f.iname.trim() || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(f.domain.trim().toLowerCase()) || !Object.keys(S.dist).some((k) => S.dist[k])) { S.error = ['act.missing']; return render(); }
+    } else if (step === 'people') {
+      if ([f.pname, f.pemail, f.aname, f.aemail].some((v) => !v.trim()) || ![f.pemail, f.aemail].every((v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()))) { S.error = ['act.missing']; return render(); }
+    }
+    S.fb.step = FB[Math.min(FB.length - 1, FB.indexOf(step) + 1)];
+    render();
+  }
+
   async function activate() {
     if (S.busy) return;
     const f = S.form;
@@ -785,6 +889,9 @@
 
   const ACTIONS = {
     dist: (arg) => { S.dist[arg] = !S.dist[arg]; },
+    'fb-lang': (arg) => { S.lang = arg; S.langChosen = true; document.documentElement.lang = LOCALE(); },
+    'fb-net': (arg) => { S.fb.net = arg; },
+    'fb-back': () => { S.error = null; S.fb.step = FB[Math.max(0, FB.indexOf(S.fb.step) - 1)]; },
     'credential-show': async () => {
       S.error = null;
       const r = await call('activation.credential');
@@ -881,6 +988,8 @@
     act(el.dataset.act, el.dataset.arg);
   });
   document.addEventListener('change', (e) => {
+    const fb = e.target.closest('select[data-fb]');
+    if (fb) { S.fb[fb.dataset.fb] = fb.value; render(); return; }
     const el = e.target.closest('select[data-act], input[type="range"][data-act]');
     if (el) return act(el.dataset.act, el.value);
     const box = e.target.closest('input[type="checkbox"][data-act]');
@@ -895,7 +1004,7 @@
     const form = e.target.closest('[data-form]');
     if (!form) return;
     if (form.dataset.form === 'login') signIn();
-    else if (form.dataset.form === 'setup') activate();
+    else if (form.dataset.form === 'setup') { if (S.fb.step === 'summary') activate(); else fbNext(); }
     else if (form.dataset.form === 'unlock') unlock();
     else if (form.dataset.form === 'auth') authorise();
     else if (form.dataset.form === 'wifi') joinWifi();

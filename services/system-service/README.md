@@ -55,6 +55,14 @@ sistema o faça, não.
 Uma operação de Wi-Fi, de Bluetooth ou de endereçamento de cada vez: uma
 segunda, enquanto a primeira corre, é `OPERATION_IN_PROGRESS`.
 
+**Primeiro arranque.** `activation.configure` (presença, auditada como
+segurança) leva a língua, o fuso horário e, opcionalmente, o endereçamento de
+uma interface com fios, e corre o mesmo código de `locale.configure`,
+`time.configure` (com o relógio da rede) e `network.configure`. Só é aceite
+enquanto a máquina não tem Instância e se oferece para a criar (`READY` ou
+`FAILED`); depois, `NOT_OFFERED_HERE` — essas mudanças passam a ser do
+operador, pelas suas próprias capacidades.
+
 ### O que continua `NOT_IMPLEMENTED`, e porquê
 
 - **`audio.set_input`**: em ALSA a placa predefinida é uma só para saída e

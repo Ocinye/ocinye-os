@@ -661,13 +661,21 @@ def scenario_seat(a):
                       "sudo -n journalctl -b -u ocinye-display.service -u seatd.service --no-pager -o cat 2>&1 | tail -n 80; "
                       "pgrep -a -f 'ocinye-|WebKit' 2>&1; id ocinye-ui 2>&1; sudo -n dmesg | grep -iE 'segfault|traps:|killed process|oom' | tail -n 10").stdout.decode(errors="replace")
             log("seat: display diagnosis\n" + why)
-        # The whole set-up, at the keyboard: the form's fields in order, the
-        # four distribution boxes passed over (research is ticked), Enter.
+        # The whole set-up, at the keyboard. Language and region, then the
+        # network, each continued with Enter (their action has the focus);
+        # the Instance (research is ticked) and the people, each sent with
+        # Enter from its last field; then the summary's Create.
+        pace = 1 if native(a.arch) else 15
+        vm.press("ret")
+        time.sleep(pace)
+        vm.press("ret")
+        # The network step sends the first start's settings to the service.
+        time.sleep(pace + 5)
         vm.type("Bancada do posto")
         vm.press("tab")
         vm.type("ocinye-seat.test")
-        for _ in range(5):
-            vm.press("tab")
+        vm.press("ret")
+        time.sleep(pace)
         vm.type("Pessoa de Prova")
         vm.press("tab")
         vm.type("pessoa@ocinye-seat.test")
@@ -675,10 +683,12 @@ def scenario_seat(a):
         vm.type("Admin de Prova")
         vm.press("tab")
         vm.type("admin@ocinye-seat.test")
-        # The picture of the filled form is the one taken after the guest has
-        # drawn the last field, and Enter follows it.
-        time.sleep(1 if native(a.arch) else 15)
+        vm.press("ret")
+        # The summary, drawn, and Create (it has the focus).
+        time.sleep(pace)
         vm.screenshot(os.path.join(shots, "2-set-up-filled.png"))
+        configured = run("sudo -n grep -c activation.configure /var/log/ocinye/system-audit.jsonl").stdout.decode().strip()
+        r.check("seat: the first start's language, zone and network went through the service, audited", configured == "1", configured)
         vm.press("ret")
         time.sleep(15)
         started = activation()

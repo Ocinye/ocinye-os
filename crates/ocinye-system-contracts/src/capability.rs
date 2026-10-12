@@ -241,6 +241,7 @@ catalogue! {
     ActivationStatus    = "activation.status",      Activation,   Presence, None,        None,     None,                mutating false, locked true,  headless true,  ai false;
     ActivationStart     = "activation.start",       Activation,   Presence, None,        Security, None,                mutating true,  locked true,  headless true,  ai false;
     ActivationCredential = "activation.credential", Activation,   Presence, None,        Security, None,                mutating true,  locked true,  headless true,  ai false;
+    ActivationConfigure = "activation.configure",  Activation,   Presence, None,        Security, None,                mutating true,  locked true,  headless true,  ai false;
 }
 
 /// The row for a capability.
