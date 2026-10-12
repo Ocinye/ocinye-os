@@ -2,6 +2,7 @@
 import type { AccessibilityState } from "./AccessibilityState";
 import type { ActivationState } from "./ActivationState";
 import type { AudioState } from "./AudioState";
+import type { BaseState } from "./BaseState";
 import type { BluetoothState } from "./BluetoothState";
 import type { CapabilityInventory } from "./CapabilityInventory";
 import type { DiagnosticsReport } from "./DiagnosticsReport";
@@ -18,10 +19,11 @@ import type { StorageState } from "./StorageState";
 import type { SystemHealth } from "./SystemHealth";
 import type { SystemInfo } from "./SystemInfo";
 import type { TimeState } from "./TimeState";
+import type { UpdateHistory } from "./UpdateHistory";
 import type { UpdateState } from "./UpdateState";
 import type { WifiScan } from "./WifiScan";
 
 /**
  * What a capability returned.
  */
-export type Payload = { "kind": "done" } | { "kind": "health", "value": SystemHealth } | { "kind": "info", "value": SystemInfo } | { "kind": "inventory", "value": CapabilityInventory } | { "kind": "network", "value": NetworkState } | { "kind": "wifi_scan", "value": WifiScan } | { "kind": "bluetooth", "value": BluetoothState } | { "kind": "audio", "value": AudioState } | { "kind": "display", "value": DisplayState } | { "kind": "power", "value": PowerState } | { "kind": "locale", "value": LocaleState } | { "kind": "time", "value": TimeState } | { "kind": "keyboard", "value": KeyboardState } | { "kind": "accessibility", "value": AccessibilityState } | { "kind": "privacy", "value": PrivacyState } | { "kind": "storage", "value": StorageState } | { "kind": "update", "value": UpdateState } | { "kind": "diagnostics", "value": DiagnosticsReport } | { "kind": "remote_access", "value": RemoteAccessState } | { "kind": "recovery", "value": RecoveryState } | { "kind": "activation", "value": ActivationState } | { "kind": "initial_credential", "value": InitialCredential };
+export type Payload = { "kind": "done" } | { "kind": "health", "value": SystemHealth } | { "kind": "info", "value": SystemInfo } | { "kind": "inventory", "value": CapabilityInventory } | { "kind": "network", "value": NetworkState } | { "kind": "wifi_scan", "value": WifiScan } | { "kind": "bluetooth", "value": BluetoothState } | { "kind": "audio", "value": AudioState } | { "kind": "display", "value": DisplayState } | { "kind": "power", "value": PowerState } | { "kind": "locale", "value": LocaleState } | { "kind": "time", "value": TimeState } | { "kind": "keyboard", "value": KeyboardState } | { "kind": "accessibility", "value": AccessibilityState } | { "kind": "privacy", "value": PrivacyState } | { "kind": "storage", "value": StorageState } | { "kind": "update", "value": UpdateState } | { "kind": "update_history", "value": UpdateHistory } | { "kind": "base", "value": BaseState } | { "kind": "diagnostics", "value": DiagnosticsReport } | { "kind": "remote_access", "value": RemoteAccessState } | { "kind": "recovery", "value": RecoveryState } | { "kind": "activation", "value": ActivationState } | { "kind": "initial_credential", "value": InitialCredential };

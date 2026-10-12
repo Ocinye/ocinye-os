@@ -22,6 +22,7 @@ path = "src/bin/cli.rs"
 [dependencies]
 ocinye-system-contracts = { workspace = true }
 ocinye-system-client = { workspace = true }
+ocinye-update-contracts = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

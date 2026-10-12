@@ -19,13 +19,15 @@ use ocinye_system_contracts::state::{
     AccessibilityState, Availability, Battery, CapabilityInventory, Connectivity,
     DiagnosticsReport, Disk, DisplayState, HardwareAvailability, Health, HealthItem, InterfaceKind,
     KeyboardState, Language, LocaleState, NetworkInterface, NetworkState, Percent, PowerSource,
-    PowerState, PrivacyState, RecoveryState, ReleaseSigning, RemoteAccessState, SecureBoot,
-    StorageState, SystemHealth, SystemInfo, TimeState, UpdatePhase, UpdateState, WifiRadioState,
+    PowerState, PrivacyState, RecoveryState, RemoteAccessState, SecureBoot,
+    StorageState, SystemHealth, SystemInfo, TimeState, WifiRadioState,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::activation::{Activation, Installer, ReleaseInstaller};
-use crate::service::Platform;
+use crate::service::{Context, Platform};
+use crate::update_link::UpdateLink;
+use ocinye_update_contracts::wire::{EngineReply, Operation};
 use crate::tool::{self, Tool};
 
 /// Where the system's files are. `/` on a machine; a temporary tree in tests.
@@ -41,6 +43,8 @@ pub struct Roots {
     pub ocinye_lib: PathBuf,
     /// `/var/lib/ocinye/system`: what this service itself remembers.
     pub state: PathBuf,
+    /// The Update Engine's socket.
+    pub update_socket: PathBuf,
 }
 
 impl Roots {
@@ -53,6 +57,7 @@ impl Roots {
             etc: "/etc".into(),
             ocinye_lib: "/usr/lib/ocinye".into(),
             state: "/var/lib/ocinye/system".into(),
+            update_socket: ocinye_update_contracts::SOCKET.into(),
         }
     }
 }
@@ -80,6 +85,17 @@ pub const IMPLEMENTED: &[CapabilityId] = &[
     CapabilityId::PrivacyStatus,
     CapabilityId::StorageStatus,
     CapabilityId::UpdateStatus,
+    CapabilityId::UpdateCheck,
+    CapabilityId::UpdateDownload,
+    CapabilityId::UpdateInstall,
+    CapabilityId::UpdateCancel,
+    CapabilityId::UpdateHistory,
+    CapabilityId::UpdateRollback,
+    CapabilityId::UpdateConfigure,
+    CapabilityId::UpdateImport,
+    CapabilityId::BaseStatus,
+    CapabilityId::BaseCheck,
+    CapabilityId::BaseApply,
     CapabilityId::DiagnosticsCollect,
     CapabilityId::RemoteAccessStatus,
     CapabilityId::RemoteAccessConfigure,
@@ -118,6 +134,7 @@ pub struct Linux {
     roots: Roots,
     remembered: Mutex<()>,
     activation: Activation,
+    update: UpdateLink,
 }
 
 fn read(path: &Path) -> Option<String> {
@@ -188,10 +205,12 @@ impl Linux {
             roots.state.join("activation"),
             installer,
         );
+        let update = UpdateLink::new(roots.update_socket.clone());
         Self {
             roots,
             remembered: Mutex::new(()),
             activation,
+            update,
         }
     }
 
@@ -553,22 +572,36 @@ impl Linux {
         }
     }
 
-    fn update(&self) -> UpdateState {
-        let releases = entries(&self.roots.ocinye_lib.join("release"));
-        UpdateState {
-            current_release: releases.last().cloned(),
-            pending_release: None,
-            phase: UpdatePhase::UpToDate,
-            signing: ReleaseSigning::DevOnly,
-        }
-    }
-
+    /// What recovery shows, from the Update Engine's own record. Without
+    /// the engine (an image older than it, or the engine down), nothing is
+    /// claimed.
     fn recovery(&self) -> RecoveryState {
-        let releases = entries(&self.roots.ocinye_lib.join("release"));
-        let previous = (releases.len() > 1).then(|| releases[releases.len() - 2].clone());
-        RecoveryState {
-            rollback_available: previous.is_some(),
-            previous_release: previous,
+        let state = match self.update.ask(Operation::Status, "recovery-operator", "recovery") {
+            Ok(EngineReply::State { state }) => Some(state),
+            _ => None,
+        };
+        let version = |r: &Option<ocinye_update_contracts::ReleaseInfo>| {
+            r.as_ref().map(|i| i.version.to_string())
+        };
+        match state {
+            Some(s) => RecoveryState {
+                rollback_available: s.previous.is_some() && s.phase.at_rest(),
+                previous_release: version(&s.previous),
+                current_release: version(&s.current),
+                pending_release: s
+                    .available
+                    .as_ref()
+                    .filter(|_| !s.phase.at_rest())
+                    .map(|a| a.version.to_string()),
+                last_update: s.last_outcome,
+            },
+            None => RecoveryState {
+                rollback_available: false,
+                previous_release: None,
+                current_release: None,
+                pending_release: None,
+                last_update: None,
+            },
         }
     }
 
@@ -752,9 +785,12 @@ impl Linux {
 }
 
 impl Platform for Linux {
-    fn perform(&self, request: &Request) -> Result<Payload, Reason> {
+    fn perform(&self, request: &Request, context: &Context<'_>) -> Result<Payload, Reason> {
         if !IMPLEMENTED.contains(&request.capability()) {
             return Err(Reason::NotImplemented);
+        }
+        if UpdateLink::operation(request).is_some() {
+            return self.update.perform(request, context.actor, context.via);
         }
         match request {
             Request::ActivationStatus {} => Ok(Payload::Activation(self.activation.state())),
@@ -844,7 +880,6 @@ impl Platform for Linux {
             }
             Request::PrivacyStatus {} => Ok(Payload::Privacy(self.privacy())),
             Request::StorageStatus {} => Ok(Payload::Storage(self.storage())),
-            Request::UpdateStatus {} => Ok(Payload::Update(self.update())),
             Request::DiagnosticsCollect {} => {
                 Ok(Payload::Diagnostics(Box::new(self.diagnostics())))
             }
@@ -863,6 +898,15 @@ impl Platform for Linux {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    trait PerformTest {
+        fn perform_test(&self, request: &Request) -> Result<Payload, Reason>;
+    }
+    impl PerformTest for Linux {
+        fn perform_test(&self, request: &Request) -> Result<Payload, Reason> {
+            self.perform(request, &Context { actor: "presence", via: "cli" })
+        }
+    }
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static N: AtomicU32 = AtomicU32::new(0);
@@ -894,6 +938,7 @@ mod tests {
                 etc: self.0.join("etc"),
                 ocinye_lib: self.0.join("usr/lib/ocinye"),
                 state: self.0.join("var/lib/ocinye/system"),
+                update_socket: self.0.join("run/ocinye/update.sock"),
             })
         }
     }
@@ -923,7 +968,7 @@ mod tests {
         assert_eq!(l.brightness(), None);
         assert_eq!(l.network().connectivity, Connectivity::Disconnected);
         assert_eq!(
-            l.perform(&Request::DisplaySetBrightness {
+            l.perform_test(&Request::DisplaySetBrightness {
                 percent: Percent::new(40).unwrap()
             }),
             Err(Reason::HardwareAbsent)
@@ -1015,7 +1060,7 @@ mod tests {
             .put("sys/class/backlight/b/brightness", "255");
         let l = t.linux();
         let Payload::Display(d) = l
-            .perform(&Request::DisplaySetBrightness {
+            .perform_test(&Request::DisplaySetBrightness {
                 percent: Percent::new(40).unwrap(),
             })
             .unwrap()
@@ -1027,7 +1072,7 @@ mod tests {
             read(&t.0.join("sys/class/backlight/b/brightness")).unwrap(),
             "102"
         );
-        l.perform(&Request::DisplaySetBrightness {
+        l.perform_test(&Request::DisplaySetBrightness {
             percent: Percent::new(0).unwrap(),
         })
         .unwrap();
@@ -1042,7 +1087,7 @@ mod tests {
         let t = Tree::new();
         let l = t.linux();
         assert_eq!(l.accessibility().text_scale_percent, 100);
-        l.perform(&Request::AccessibilityConfigure {
+        l.perform_test(&Request::AccessibilityConfigure {
             text_scale_percent: 130,
             high_contrast: true,
             reduce_motion: false,
@@ -1087,8 +1132,10 @@ mod tests {
         );
         assert_eq!(i.base_system, "Ubuntu 24.04.5 LTS");
         assert_eq!((i.uefi, i.secure_boot), (false, SecureBoot::Unknown));
-        assert_eq!(l.update().current_release.as_deref(), Some("f3fc6ba0863b"));
-        assert!(!l.recovery().rollback_available);
+        // Without the Update Engine nothing is claimed about releases.
+        let r = l.recovery();
+        assert!(!r.rollback_available);
+        assert_eq!(r.current_release, None);
         assert!(Tree::new().linux().info().development_build);
     }
 
@@ -1096,12 +1143,23 @@ mod tests {
     fn o_que_nao_esta_implementado_di_lo_e_o_inventario_tambem() {
         let l = Tree::new().linux();
         assert_eq!(
-            l.perform(&Request::WifiScan {}),
+            l.perform_test(&Request::WifiScan {}),
             Err(Reason::NotImplemented)
         );
+        // The update capabilities are carried out by the Update Engine; with
+        // the engine absent the answer is that it cannot be reached, never a
+        // made-up state.
         assert_eq!(
-            l.perform(&Request::UpdateApply {}),
-            Err(Reason::NotImplemented)
+            l.perform_test(&Request::UpdateStatus {}),
+            Err(Reason::AdapterFailed {
+                cause: AdapterFailure::Unreachable
+            })
+        );
+        assert_eq!(
+            l.perform_test(&Request::UpdateInstall {}),
+            Err(Reason::AdapterFailed {
+                cause: AdapterFailure::Unreachable
+            })
         );
         let inv = l.inventory();
         assert!(!inv.implemented.contains(&CapabilityId::WifiScan));

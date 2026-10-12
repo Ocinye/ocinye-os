@@ -18,7 +18,7 @@ use crate::service::{Platform, Service};
 struct Recorder(Mutex<Vec<CapabilityId>>);
 
 impl Platform for Recorder {
-    fn perform(&self, request: &Request) -> Result<Payload, Reason> {
+    fn perform(&self, request: &Request, _: &crate::service::Context<'_>) -> Result<Payload, Reason> {
         self.0.lock().unwrap().push(request.capability());
         Ok(Payload::Done)
     }
@@ -109,6 +109,8 @@ fn request(id: CapabilityId) -> Request {
         CapabilityId::AccessibilityConfigure => r#"{"capability":"accessibility.configure","text_scale_percent":115,"high_contrast":false,"reduce_motion":true}"#.to_owned(),
         CapabilityId::PrivacySetMicrophone | CapabilityId::PrivacySetCamera => format!(r#"{{"capability":"{}","allowed":false}}"#, id.as_str()),
         CapabilityId::RemoteAccessConfigure => r#"{"capability":"remote_access.configure","ssh_enabled":false}"#.to_owned(),
+        CapabilityId::UpdateConfigure => r#"{"capability":"update.configure","change":{"channel":"stable","repository":null,"auto_check":true,"auto_download":null}}"#.to_owned(),
+        CapabilityId::UpdateImport => r#"{"capability":"update.import","bundle":"ocinye-os-d34bbb0a141d-r2.ocu"}"#.to_owned(),
         CapabilityId::ActivationStart => r#"{"capability":"activation.start","domain":"ocinye.empresa.example","instance_name":"Instituto","distributions":["research"],"person_name":"Pessoa","person_email":"pessoa@empresa.example","admin_name":"Admin","admin_email":"admin@empresa.example"}"#.to_owned(),
         other => format!(r#"{{"capability":"{}"}}"#, other.as_str()),
     };

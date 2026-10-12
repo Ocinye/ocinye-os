@@ -1,0 +1,15 @@
+[package]
+name = "ocinye-update-contracts"
+description = "Typed contracts of the Ocinye Update Engine: release identity, update manifest, state machine, journal, configuration and the engine wire (ADR-0032)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+# The interface reads these types; TypeScript bindings are generated from them
+# through ocinye-system-contracts, never written by hand.
+ts-rs = { workspace = true }

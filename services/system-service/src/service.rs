@@ -24,7 +24,18 @@ pub trait Platform: Send + Sync {
     /// # Errors
     ///
     /// A typed reason. Never a tool's text.
-    fn perform(&self, request: &Request) -> Result<Payload, Reason>;
+    fn perform(&self, request: &Request, context: &Context<'_>) -> Result<Payload, Reason>;
+}
+
+/// Who asked, and through what: carried to subsystems that keep their own
+/// record (the Update Engine's history). It is never authority — that was
+/// decided before the platform is reached.
+#[derive(Debug, Clone, Copy)]
+pub struct Context<'a> {
+    /// The audit actor (`member:<id>`, `presence`, `recovery-operator`).
+    pub actor: &'a str,
+    /// `settings`, `cli` or `nye`.
+    pub via: &'static str,
 }
 
 /// What the service is built from.
@@ -75,7 +86,13 @@ impl Service<'_> {
         if let Err(reason) = request.validate() {
             return self.refuse(spec.audit, &actor, request, reason);
         }
-        match self.platform.perform(request) {
+        let via = match peer {
+            Peer::SystemInterface => "settings",
+            Peer::Core => "nye",
+            Peer::RecoveryOperator | Peer::Other => "cli",
+        };
+        let context = Context { actor: &actor, via };
+        match self.platform.perform(request, &context) {
             Ok(payload) => {
                 if spec.audit != AuditClass::None {
                     self.audit.record(&AuditRecord::new(&actor, request, "OK"));

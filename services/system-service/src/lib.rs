@@ -17,6 +17,7 @@ pub mod linux;
 pub mod server;
 pub mod service;
 pub mod tool;
+pub mod update_link;
 
 #[cfg(test)]
 mod tests;

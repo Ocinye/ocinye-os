@@ -25,7 +25,7 @@ pub enum Event {
     /// A device connected or left.
     BluetoothStateChanged(BluetoothState),
     /// An update moved to another phase.
-    UpdateStateChanged(UpdateState),
+    UpdateStateChanged(Box<UpdateState>),
     /// A part of the system changed health.
     SystemHealthChanged(SystemHealth),
 }

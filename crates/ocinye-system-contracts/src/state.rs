@@ -4,6 +4,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// The update state and signing are the Update Engine's own types (ADR-0032).
+pub use ocinye_update_contracts::{ReleaseSigning, UpdateState};
+
 use crate::capability::{CapabilityId, HardwareDependency};
 use crate::reason::Unavailable;
 
@@ -498,47 +501,6 @@ pub struct StorageState {
     pub volumes: Vec<Volume>,
 }
 
-/// Where an update stands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum UpdatePhase {
-    /// Nothing pending.
-    UpToDate,
-    /// A verified release is staged.
-    Prepared,
-    /// Being applied.
-    Applying,
-    /// Applied; a restart finishes it.
-    RestartRequired,
-    /// The last attempt was refused or rolled back.
-    Refused,
-}
-
-/// The answer to the update capabilities.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct UpdateState {
-    /// The release in use.
-    pub current_release: Option<String>,
-    /// The release staged or applied, when there is one.
-    pub pending_release: Option<String>,
-    /// Phase.
-    pub phase: UpdatePhase,
-    /// How releases are signed on this build: `DEV_ONLY` until a production
-    /// signing key exists.
-    pub signing: ReleaseSigning,
-}
-
-/// Release signing on this build.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ReleaseSigning {
-    /// Development key only.
-    DevOnly,
-    /// A production signing key is configured.
-    Production,
-}
-
 /// The answer to the remote-access capabilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -557,6 +519,12 @@ pub struct RecoveryState {
     pub rollback_available: bool,
     /// The release that would be returned to.
     pub previous_release: Option<String>,
+    /// The running release.
+    pub current_release: Option<String>,
+    /// A release staged or in flight.
+    pub pending_release: Option<String>,
+    /// How the last update ended.
+    pub last_update: Option<ocinye_update_contracts::UpdateOutcome>,
 }
 
 /// The answer to `diagnostics.collect`: a bounded, redacted report.
@@ -662,3 +630,4 @@ mod tests {
         assert!(serde_json::from_str::<Language>("\"es\"").is_err());
     }
 }
+

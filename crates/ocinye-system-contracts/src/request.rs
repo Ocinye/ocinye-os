@@ -17,8 +17,9 @@ use crate::state::{
     AccessibilityState, ActivationState, AudioState, BluetoothState, CapabilityInventory,
     DiagnosticsReport, DisplayState, Distribution, InitialCredential, KeyboardState, Language,
     LocaleState, NetworkState, Percent, PowerState, PrivacyState, RecoveryState, RemoteAccessState,
-    StorageState, SystemHealth, SystemInfo, TimeState, UpdateState, WifiScan,
+    StorageState, SystemHealth, SystemInfo, TimeState, WifiScan,
 };
+use ocinye_update_contracts::{BaseState, ConfigChange, UpdateHistory, UpdateState};
 
 /// A secret that crosses the socket once (a Wi-Fi passphrase). Zeroized on
 /// drop and never printed. It serialises, because a client must be able to
@@ -298,12 +299,45 @@ pub enum Request {
     /// `update.status`.
     #[serde(rename = "update.status")]
     UpdateStatus {},
-    /// `update.prepare`.
-    #[serde(rename = "update.prepare")]
-    UpdatePrepare {},
-    /// `update.apply`.
-    #[serde(rename = "update.apply")]
-    UpdateApply {},
+    /// `update.check`.
+    #[serde(rename = "update.check")]
+    UpdateCheck {},
+    /// `update.download`: download, verify, preflight and stage.
+    #[serde(rename = "update.download")]
+    UpdateDownload {},
+    /// `update.install`: install the staged release.
+    #[serde(rename = "update.install")]
+    UpdateInstall {},
+    /// `update.cancel`: drop a transaction that changed nothing yet.
+    #[serde(rename = "update.cancel")]
+    UpdateCancel {},
+    /// `update.history`.
+    #[serde(rename = "update.history")]
+    UpdateHistory {},
+    /// `update.rollback`: back to the previous release.
+    #[serde(rename = "update.rollback")]
+    UpdateRollback {},
+    /// `update.configure`.
+    #[serde(rename = "update.configure")]
+    UpdateConfigure {
+        /// What changes.
+        change: ConfigChange,
+    },
+    /// `update.import`: offer the release of a listed offline bundle.
+    #[serde(rename = "update.import")]
+    UpdateImport {
+        /// The bundle's name, as `update.status` lists it.
+        bundle: String,
+    },
+    /// `base.status`.
+    #[serde(rename = "base.status")]
+    BaseStatus {},
+    /// `base.check`.
+    #[serde(rename = "base.check")]
+    BaseCheck {},
+    /// `base.apply`.
+    #[serde(rename = "base.apply")]
+    BaseApply {},
     /// `diagnostics.collect`.
     #[serde(rename = "diagnostics.collect")]
     DiagnosticsCollect {},
@@ -463,8 +497,17 @@ impl Request {
             Self::PrivacySetCamera { .. } => C::PrivacySetCamera,
             Self::StorageStatus {} => C::StorageStatus,
             Self::UpdateStatus {} => C::UpdateStatus,
-            Self::UpdatePrepare {} => C::UpdatePrepare,
-            Self::UpdateApply {} => C::UpdateApply,
+            Self::UpdateCheck {} => C::UpdateCheck,
+            Self::UpdateDownload {} => C::UpdateDownload,
+            Self::UpdateInstall {} => C::UpdateInstall,
+            Self::UpdateCancel {} => C::UpdateCancel,
+            Self::UpdateHistory {} => C::UpdateHistory,
+            Self::UpdateRollback {} => C::UpdateRollback,
+            Self::UpdateConfigure { .. } => C::UpdateConfigure,
+            Self::UpdateImport { .. } => C::UpdateImport,
+            Self::BaseStatus {} => C::BaseStatus,
+            Self::BaseCheck {} => C::BaseCheck,
+            Self::BaseApply {} => C::BaseApply,
             Self::DiagnosticsCollect {} => C::DiagnosticsCollect,
             Self::RemoteAccessStatus {} => C::RemoteAccessStatus,
             Self::RemoteAccessConfigure { .. } => C::RemoteAccessConfigure,
@@ -554,6 +597,24 @@ impl Request {
             Self::AccessibilityConfigure {
                 text_scale_percent, ..
             } => TEXT_SCALES.contains(text_scale_percent),
+            Self::UpdateConfigure { change } => {
+                change
+                    .repository
+                    .as_ref()
+                    .is_none_or(|r| r.validate().is_ok())
+                    && !(change.clear_repository && change.repository.is_some())
+                    && (change.channel.is_some()
+                        || change.repository.is_some()
+                        || change.clear_repository
+                        || change.auto_check.is_some()
+                        || change.auto_download.is_some())
+            }
+            Self::UpdateImport { bundle } => {
+                bundle.len() <= 128
+                    && bundle.ends_with(".ocu")
+                    && ocinye_update_contracts::manifest::is_safe_target(bundle)
+                    && !bundle.contains('/')
+            }
             Self::ActivationStart {
                 domain,
                 instance_name,
@@ -614,6 +675,20 @@ impl Request {
                 format!("address={address}")
             }
             Self::RemoteAccessConfigure { ssh_enabled } => format!("ssh_enabled={ssh_enabled}"),
+            Self::UpdateConfigure { change } => format!(
+                "channel={:?} repository={} auto_check={:?} auto_download={:?}",
+                change.channel.map(ocinye_update_contracts::Channel::as_str),
+                if change.clear_repository {
+                    "cleared"
+                } else if change.repository.is_some() {
+                    "set"
+                } else {
+                    "unchanged"
+                },
+                change.auto_check,
+                change.auto_download
+            ),
+            Self::UpdateImport { bundle } => format!("bundle={bundle:?}"),
             Self::TimeConfigure {
                 timezone,
                 automatic,
@@ -673,7 +748,11 @@ pub enum Payload {
     /// Storage state.
     Storage(StorageState),
     /// Update state.
-    Update(UpdateState),
+    Update(Box<UpdateState>),
+    /// Update history.
+    UpdateHistory(UpdateHistory),
+    /// Ubuntu base maintenance state.
+    Base(BaseState),
     /// A diagnostics report.
     Diagnostics(Box<DiagnosticsReport>),
     /// Remote access state, read back.
@@ -728,6 +807,8 @@ mod tests {
             CapabilityId::AccessibilityConfigure => r#"{"capability":"accessibility.configure","text_scale_percent":115,"high_contrast":false,"reduce_motion":true}"#.to_owned(),
             CapabilityId::PrivacySetMicrophone | CapabilityId::PrivacySetCamera => format!(r#"{{"capability":"{}","allowed":false}}"#, id.as_str()),
             CapabilityId::RemoteAccessConfigure => r#"{"capability":"remote_access.configure","ssh_enabled":false}"#.to_owned(),
+            CapabilityId::UpdateConfigure => r#"{"capability":"update.configure","change":{"channel":"stable","repository":null,"auto_check":true,"auto_download":null}}"#.to_owned(),
+            CapabilityId::UpdateImport => r#"{"capability":"update.import","bundle":"ocinye-os-d34bbb0a141d-r2.ocu"}"#.to_owned(),
             CapabilityId::ActivationStart => r#"{"capability":"activation.start","domain":"ocinye.empresa.example","instance_name":"Instituto","distributions":["research"],"person_name":"Pessoa","person_email":"pessoa@empresa.example","admin_name":"Admin","admin_email":"admin@empresa.example"}"#.to_owned(),
             other => format!(r#"{{"capability":"{}"}}"#, other.as_str()),
         };

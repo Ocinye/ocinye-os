@@ -17,6 +17,7 @@ use ocinye_system_client::Client;
 use ocinye_system_contracts::request::{Outcome, Request};
 use ocinye_system_contracts::state::{Language, Percent};
 use ocinye_system_contracts::SOCKET_PATH;
+use ocinye_update_contracts::{Channel, ConfigChange, RepositoryEndpoint};
 
 const USAGE: &str = "usage: ocinye-system [--json] [--socket PATH] FAMILY ACTION [ARGS]
 
@@ -28,7 +29,12 @@ const USAGE: &str = "usage: ocinye-system [--json] [--socket PATH] FAMILY ACTION
   locale status | language pt|en|fr
   keyboard status | layout LAYOUT [VARIANT]
   storage status
-  update status
+  update status | check | download | install | cancel | history | rollback
+  update channel development|candidate|stable
+  update repository METADATA_URL TARGETS_URL | repository none
+  update auto-check on|off | auto-download on|off
+  update import BUNDLE.ocu
+  base status | check | apply
   remote-access status | ssh on|off
   recovery status
   activation status
@@ -93,6 +99,71 @@ fn parse(words: &[&str]) -> Option<Request> {
         }
         ("storage", "status") => exact(2, Request::StorageStatus {}),
         ("update", "status") => exact(2, Request::UpdateStatus {}),
+        ("update", "check") => exact(2, Request::UpdateCheck {}),
+        ("update", "download") => exact(2, Request::UpdateDownload {}),
+        ("update", "install") => exact(2, Request::UpdateInstall {}),
+        ("update", "cancel") => exact(2, Request::UpdateCancel {}),
+        ("update", "history") => exact(2, Request::UpdateHistory {}),
+        ("update", "rollback") => exact(2, Request::UpdateRollback {}),
+        ("update", "channel") => {
+            let channel = Channel::parse(arg(2)?)?;
+            exact(
+                3,
+                Request::UpdateConfigure {
+                    change: ConfigChange {
+                        channel: Some(channel),
+                        ..ConfigChange::default()
+                    },
+                },
+            )
+        }
+        ("update", "repository") if words.len() == 3 && arg(2) == Some("none") => {
+            Some(Request::UpdateConfigure {
+                change: ConfigChange {
+                    clear_repository: true,
+                    ..ConfigChange::default()
+                },
+            })
+        }
+        ("update", "repository") => exact(
+            4,
+            Request::UpdateConfigure {
+                change: ConfigChange {
+                    repository: Some(RepositoryEndpoint {
+                        metadata_url: arg(2)?.to_owned(),
+                        targets_url: arg(3)?.to_owned(),
+                    }),
+                    ..ConfigChange::default()
+                },
+            },
+        ),
+        ("update", "auto-check") => exact(
+            3,
+            Request::UpdateConfigure {
+                change: ConfigChange {
+                    auto_check: Some(switch(arg(2))?),
+                    ..ConfigChange::default()
+                },
+            },
+        ),
+        ("update", "auto-download") => exact(
+            3,
+            Request::UpdateConfigure {
+                change: ConfigChange {
+                    auto_download: Some(switch(arg(2))?),
+                    ..ConfigChange::default()
+                },
+            },
+        ),
+        ("update", "import") => exact(
+            3,
+            Request::UpdateImport {
+                bundle: arg(2)?.to_owned(),
+            },
+        ),
+        ("base", "status") => exact(2, Request::BaseStatus {}),
+        ("base", "check") => exact(2, Request::BaseCheck {}),
+        ("base", "apply") => exact(2, Request::BaseApply {}),
         ("remote-access", "status") => exact(2, Request::RemoteAccessStatus {}),
         ("remote-access", "ssh") => exact(
             3,
@@ -191,7 +262,24 @@ mod tests {
                 &["diagnostics", "collect"],
                 CapabilityId::DiagnosticsCollect,
             ),
+            (&["update", "check"], CapabilityId::UpdateCheck),
+            (&["update", "install"], CapabilityId::UpdateInstall),
+            (&["update", "rollback"], CapabilityId::UpdateRollback),
+            (&["update", "channel", "stable"], CapabilityId::UpdateConfigure),
+            (&["update", "repository", "none"], CapabilityId::UpdateConfigure),
+            (
+                &[
+                    "update",
+                    "repository",
+                    "https://updates.empresa.com/stable/metadata/",
+                    "https://updates.empresa.com/stable/targets/",
+                ],
+                CapabilityId::UpdateConfigure,
+            ),
+            (&["update", "import", "release.ocu"], CapabilityId::UpdateImport),
+            (&["base", "apply"], CapabilityId::BaseApply),
         ];
+        assert_eq!(parse(&["update", "channel", "beta"]), None);
         for (words, id) in cases {
             assert_eq!(parse(words).map(|r| r.capability()), Some(*id), "{words:?}");
         }
