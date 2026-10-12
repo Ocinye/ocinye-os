@@ -430,6 +430,7 @@ window.SX_T = {
   'u.inbox': ['Na caixa de entrada do sistema', 'In the system inbox', 'Dans la boîte de réception du système'],
   'u.previous': ['Versão anterior', 'Previous version', 'Version précédente'],
   'u.rollback': ['Voltar a esta versão', 'Return to this version', 'Revenir à cette version'],
+  'u.rollback.note': ['Voltar repõe também a base de dados como estava antes da actualização: o que a Instância guardou desde então perde-se. É para recuperar, não para desfazer.', 'Going back also restores the database as it was before the update: what the Instance saved since then is lost. It is for recovery, not for undoing.', 'Revenir restaure aussi la base de données telle qu’elle était avant la mise à jour : ce que l’Instance a enregistré depuis est perdu. C’est pour récupérer, pas pour annuler.'],
   'u.from': ['de {v}', 'from {v}', 'depuis {v}'],
   'u.history.none': ['Nenhuma actualização ainda', 'No update yet', 'Aucune mise à jour pour l’instant'],
   'u.base.pending': ['Pacotes da base', 'Base packages', 'Paquets de base'],

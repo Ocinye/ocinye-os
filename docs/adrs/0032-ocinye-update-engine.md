@@ -70,7 +70,7 @@ servidor, não que o Ocinye os publicou.
    alvos imutáveis endereçados pelo conteúdo (`consistent_snapshot`), servidos
    por qualquer HTTP(S), armazenamento de objectos ou espelho. O servidor não
    tem chaves. O endereço é configuração da máquina
-   (`/etc/ocinye/update.toml`), nunca compilado. Um pacote **offline** (`.ocu`)
+   (`/etc/ocinye/update.json`), nunca compilado. Um pacote **offline** (`.ocu`)
    é o mesmo repositório, de um só release, num arquivo: importado do suporte,
    passa pela mesma verificação contra a raiz instalada.
 
@@ -101,8 +101,9 @@ servidor, não que o Ocinye os publicou.
       depois do compromisso);
    4. portão de saúde do sistema inteiro;
    5. se o release pede reinício: `AWAITING_REBOOT`, e o compromisso só vem
-      depois de um arranque saudável (`ocinye-update-boot.service`, tentativas
-      limitadas);
+      depois de um arranque saudável — validado pelo próprio motor quando
+      arranca (`ocinye-update.service`, depois do System e do Session Service),
+      com três tentativas antes de reverter;
    6. `COMMITTED`, histórico, retenção.
 
 9. **Reversão automática.** Se o portão falha depois da activação: ponteiros
@@ -126,6 +127,22 @@ servidor, não que o Ocinye os publicou.
 12. **Retenção.** Ficam sempre o release activo, o anterior (alvo de reversão)
     e o pendente. O resto recolhe-se por regra tipada, nunca por pedido da
     interface.
+
+13. **Recuperação a partir do menu de arranque.** O sistema instalado tem uma
+    entrada `Ocinye OS - release anterior` (`/etc/grub.d/42_ocinye_previous`),
+    que arranca o mesmo núcleo com `ocinye.update=rollback`. O motor age sobre
+    ela uma vez por arranque (marca o `boot_id` antes de agir): é a mesma
+    reversão diarizada das Definições, registada com o menu de arranque como
+    actor. Quem escolhe a entrada está à frente da máquina — a autoridade que o
+    menu já exige —, e a entrada não dá mais nada: nem shell, nem outro
+    parâmetro. Sem release anterior, recusa e não muda nada. O suporte de
+    instalação, em modo Recuperação, não abre o disco instalado na v1 e
+    encaminha para esta entrada e para as Definições.
+
+14. **Motor do release anterior como recurso.** Se o motor de um release
+    acabado de activar não consegue correr, `ocinye-update-fallback.service`
+    (`OnFailure=`) arranca o do release anterior sobre o mesmo diário, que
+    reconcilia e reverte a transacção em curso.
 
 ## Alternatives
 
@@ -153,3 +170,9 @@ servidor, não que o Ocinye os publicou.
   cerimónia.
 - Sem número de release no pacote da D011, quem publica atribui-o e o TUF
   garante que nunca recua.
+- O publicador de hoje cria raízes de limiar 1, uma chave por papel; o quórum
+  de raiz da produção exige estendê-lo antes da
+  [cerimónia](../update/key-ceremony.md). O motor já verifica limiares.
+- Uma reversão pedida depois do compromisso repõe a base do checkpoint: o que a
+  Instância escreveu desde a actualização perde-se, e quem a pede é avisado
+  ([migrações](../update/migrations.md)).
