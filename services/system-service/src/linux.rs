@@ -55,6 +55,9 @@ pub struct Roots {
     pub update_socket: PathBuf,
     /// `/var/lib/iwd`: where iwd reads the networks it knows.
     pub iwd: PathBuf,
+    /// The XKB rules list (`/usr/share/X11/xkb/rules/base.lst`): the layouts
+    /// and variants that exist.
+    pub xkb_rules: PathBuf,
 }
 
 impl Roots {
@@ -69,6 +72,7 @@ impl Roots {
             state: "/var/lib/ocinye/system".into(),
             update_socket: ocinye_update_contracts::SOCKET.into(),
             iwd: "/var/lib/iwd".into(),
+            xkb_rules: "/usr/share/X11/xkb/rules/base.lst".into(),
         }
     }
 }
@@ -1310,23 +1314,35 @@ impl Platform for Linux {
             }
             Request::KeyboardStatus {} => Ok(Payload::Keyboard(self.keyboard())),
             Request::KeyboardConfigure { layout, variant } => {
+                // Ubuntu's localed refuses to set keymaps ("not supported in
+                // Debian"): the layout is the file the installer writes, and
+                // the compositor and the consoles read. Only a layout, and a
+                // variant of it, that the XKB rules list names.
                 let layout = tool::value(layout).ok_or(Reason::ValueOutOfRange)?;
                 let variant = match variant {
                     Some(v) => tool::value(v).ok_or(Reason::ValueOutOfRange)?,
                     None => "",
                 };
-                // model, then variant: `localectl set-x11-keymap LAYOUT MODEL VARIANT`.
-                let args: &[&str] = if variant.is_empty() {
-                    &["set-x11-keymap", layout]
-                } else {
-                    &["set-x11-keymap", layout, "pc105", variant]
+                let rules = read(&self.roots.xkb_rules).ok_or(Reason::AdapterFailed {
+                    cause: AdapterFailure::Unreachable,
+                })?;
+                if !xkb_known(&rules, layout, variant) {
+                    return Err(Reason::NotFound);
+                }
+                let path = self.roots.etc.join("default/keyboard");
+                let before = read(&path).unwrap_or_default();
+                let keep = |k: &str, or: &str| {
+                    property(&before, k)
+                        .map(|v| v.trim_matches('"').to_owned())
+                        .filter(|v| tool::value(v).is_some() || v.is_empty())
+                        .unwrap_or_else(|| or.to_owned())
                 };
-                self.runner
-                    .run(Tool::Localectl, args)
-                    .map_err(|e| match e {
-                        AdapterFailure::Refused => Reason::NotFound,
-                        other => failed(other),
-                    })?;
+                let text = format!(
+                    "# Set by the Ocinye System Service (keyboard.configure).\nXKBMODEL=\"{}\"\nXKBLAYOUT=\"{layout}\"\nXKBVARIANT=\"{variant}\"\nXKBOPTIONS=\"{}\"\nBACKSPACE=\"guess\"\n",
+                    keep("XKBMODEL", "pc105"),
+                    keep("XKBOPTIONS", ""),
+                );
+                files::write_atomic(&path, text.as_bytes(), 0o644)?;
                 Ok(Payload::Keyboard(self.keyboard()))
             }
             Request::AccessibilityStatus {} => Ok(Payload::Accessibility(self.accessibility())),
@@ -1361,6 +1377,31 @@ impl Platform for Linux {
             _ => Err(Reason::NotImplemented),
         }
     }
+}
+
+/// Whether the XKB rules list names a layout, and the variant of it when
+/// one is given (`! layout` lines: `  us  English (US)`; `! variant` lines:
+/// `  nodeadkeys  de: German (no dead keys)`).
+fn xkb_known(rules: &str, layout: &str, variant: &str) -> bool {
+    let mut section = "";
+    let mut layout_found = false;
+    let mut variant_found = variant.is_empty();
+    for line in rules.lines() {
+        if let Some(name) = line.strip_prefix("! ") {
+            section = name.trim();
+            continue;
+        }
+        let mut words = line.split_whitespace();
+        let Some(name) = words.next() else { continue };
+        match section {
+            "layout" if name == layout => layout_found = true,
+            "variant" if name == variant && words.next() == Some(&format!("{layout}:")) => {
+                variant_found = true;
+            }
+            _ => {}
+        }
+    }
+    layout_found && variant_found
 }
 
 #[cfg(test)]
@@ -1418,6 +1459,7 @@ mod tests {
                 state: self.0.join("var/lib/ocinye/system"),
                 update_socket: self.0.join("run/ocinye/update.sock"),
                 iwd: self.0.join("var/lib/iwd"),
+                xkb_rules: self.0.join("usr/share/X11/xkb/rules/base.lst"),
             }
         }
         /// The platform over this tree, with no tool and no bus that
@@ -1867,6 +1909,53 @@ mod tests {
         let before = runner.changes().len();
         assert_eq!(l.perform_test(&req), Err(Reason::NotOfferedHere));
         assert_eq!(runner.changes().len(), before);
+    }
+
+    #[test]
+    fn o_teclado_e_o_ficheiro_que_o_compositor_le_e_so_com_nomes_que_o_xkb_tem() {
+        let t = Tree::new();
+        let l = t.linux();
+        let set = |layout: &str, variant: Option<&str>| Request::KeyboardConfigure {
+            layout: layout.into(),
+            variant: variant.map(Into::into),
+        };
+        // Without the rules list, nothing is decided.
+        assert_eq!(
+            l.perform_test(&set("us", None)),
+            Err(Reason::AdapterFailed {
+                cause: AdapterFailure::Unreachable
+            })
+        );
+        t.put(
+            "usr/share/X11/xkb/rules/base.lst",
+            "! model\n  pc105           Generic 105-key PC\n\n! layout\n  us              English (US)\n  fr              French\n  pt              Portuguese\n\n! variant\n  intl            us: English (US, intl., with dead keys)\n  nodeadkeys      pt: Portuguese (no dead keys)\n",
+        );
+        t.put(
+            "etc/default/keyboard",
+            "XKBMODEL=\"pc105\"\nXKBLAYOUT=\"fr\"\nXKBVARIANT=\"\"\nXKBOPTIONS=\"grp:alt_shift_toggle\"\n",
+        );
+        let file = || std::fs::read_to_string(t.0.join("etc/default/keyboard")).unwrap();
+        let before = file();
+        assert_eq!(l.perform_test(&set("xx", None)), Err(Reason::NotFound));
+        assert_eq!(
+            l.perform_test(&set("fr", Some("intl"))),
+            Err(Reason::NotFound)
+        );
+        assert_eq!(file(), before, "a refusal leaves the file as it was");
+        let Ok(Payload::Keyboard(k)) = l.perform_test(&set("pt", Some("nodeadkeys"))) else {
+            panic!("pt nodeadkeys is a layout and a variant of it");
+        };
+        assert_eq!(
+            (k.layout.as_str(), k.variant.as_deref()),
+            ("pt", Some("nodeadkeys"))
+        );
+        let now = file();
+        assert!(now.contains("XKBLAYOUT=\"pt\"") && now.contains("XKBVARIANT=\"nodeadkeys\""));
+        assert!(
+            now.contains("XKBMODEL=\"pc105\"")
+                && now.contains("XKBOPTIONS=\"grp:alt_shift_toggle\""),
+            "{now}"
+        );
     }
 
     fn sound(t: &Tree) -> Arc<Script> {

@@ -280,11 +280,12 @@ pub fn init(
         },
     )?;
 
-    // Where the session stands, once a second.
+    // Where the session stands, and the keyboard layout, once a second.
     event_loop.handle().insert_source(
         Timer::from_duration(Duration::from_millis(200)),
         |_, (), state| {
             state.follow_session();
+            state.follow_keymap();
             TimeoutAction::ToDuration(Duration::from_secs(1))
         },
     )?;

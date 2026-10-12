@@ -275,8 +275,10 @@ sem que nada falhe.
   e com ambiente limpo; auditoria sem segredos. As ligações TypeScript são
   geradas dos tipos Rust e um teste falha se divergirem. Há um cliente sem ecrã
   (`ocinye-system`). Fazem trabalho real, provado numa imagem, o estado e o
-  inventário, a rede (leitura), energia, brilho, hora, idioma, teclado e acesso
-  remoto. **Wi-Fi (iwd), Bluetooth (BlueZ), som (ALSA), leitura dos ecrãs,
+  inventário, a rede (leitura), energia, brilho, hora e acesso remoto; o idioma
+  e o teclado foram corrigidos a 2026-10-12 depois de o E2E `update` mostrar que
+  falhavam numa máquina (sem locales gerados; `localectl` sem mapas de teclado
+  no Ubuntu; um compositor que ignorava `/etc/default/keyboard`). **Wi-Fi (iwd), Bluetooth (BlueZ), som (ALSA), leitura dos ecrãs,
   endereçamento com fios (netplan) e privacidade de microfone e câmara estão
   implementados e testados contra duplos, sem prova numa máquina**;
   `display.configure` e `audio.set_input` continuam `NOT_IMPLEMENTED`. As

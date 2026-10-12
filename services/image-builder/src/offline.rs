@@ -702,6 +702,22 @@ pub fn inspect(m: &Mounted, profile: &str, arch: &str, release_id: &str) -> Insp
                 (!(executable && in_menu)).then(|| format!("script={executable} menu={in_menu}")),
             );
         }
+        // The product's three languages are generated: `locale.configure`
+        // and the first start's language step set them with localectl, which
+        // refuses a locale that is not.
+        {
+            let archive = fs::read(r.join("usr/lib/locale/locale-archive")).unwrap_or_default();
+            let has = |name: &[u8]| archive.windows(name.len()).any(|w| w == name);
+            let missing: Vec<&str> = ["pt_PT.utf8", "en_GB.utf8", "fr_FR.utf8"]
+                .into_iter()
+                .filter(|n| !has(n.as_bytes()))
+                .collect();
+            c(
+                "product_locales",
+                missing.is_empty(),
+                (!missing.is_empty()).then(|| missing.join(",")),
+            );
+        }
         // What the System Service asks for Wi-Fi and Bluetooth (ADR-0031).
         c(
             "radio_daemons_enabled",

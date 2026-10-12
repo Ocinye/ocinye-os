@@ -25,6 +25,8 @@ use crate::drm::Backend;
 pub struct State {
     /// When it started: the clock frame callbacks are stamped with.
     pub start_time: std::time::Instant,
+    /// When `/etc/default/keyboard` last changed, as last applied.
+    pub keymap_seen: Option<std::time::SystemTime>,
     /// The Wayland socket's name.
     pub socket_name: OsString,
     /// The display.
@@ -79,6 +81,20 @@ pub struct State {
 }
 
 impl State {
+    /// Apply the machine's keyboard layout again when its file changed.
+    pub fn follow_keymap(&mut self) {
+        let (keymap, seen) = crate::keymap::read(std::path::Path::new(crate::keymap::FILE));
+        if seen == self.keymap_seen {
+            return;
+        }
+        self.keymap_seen = seen;
+        if let Some(keyboard) = self.seat.get_keyboard() {
+            if keyboard.set_xkb_config(self, keymap.config()).is_err() {
+                eprintln!("ocinye-compositor: the keyboard layout in {} does not compile; kept the previous one", crate::keymap::FILE);
+            }
+        }
+    }
+
     /// Create the globals and start listening.
     pub fn new(event_loop: &mut EventLoop<'static, State>, display: Display<Self>) -> Self {
         let dh = display.handle();
@@ -89,13 +105,19 @@ impl State {
         let mut seat_state = SeatState::new();
         let data_device_state = DataDeviceState::new::<Self>(&dh);
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "seat0");
-        seat.add_keyboard(Default::default(), 300, 30)
-            .expect("the default keymap compiles");
+        // The machine's layout; a file that does not compile falls back to
+        // xkbcommon's default rather than leaving the screen without a keyboard.
+        let (keymap, keymap_seen) = crate::keymap::read(std::path::Path::new(crate::keymap::FILE));
+        if seat.add_keyboard(keymap.config(), 300, 30).is_err() {
+            seat.add_keyboard(Default::default(), 300, 30)
+                .expect("the default keymap compiles");
+        }
         seat.add_pointer();
 
         let socket_name = Self::listen(display, event_loop);
         Self {
             start_time: std::time::Instant::now(),
+            keymap_seen,
             socket_name,
             display_handle: dh,
             handle: event_loop.handle(),

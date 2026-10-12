@@ -33,6 +33,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Suporte de instalação**: Experimentar, Verificar o hardware e Recuperação
   mostram na janela um relatório só de leitura em que o desconhecido fica
   desconhecido.
+- **Teclado e idioma numa máquina a sério** (encontrado no E2E `update` em
+  `arm64`): o compositor compilava sempre o mapa por omissão do xkbcommon (US)
+  e nunca lia `/etc/default/keyboard` — o teclado escolhido no instalador não
+  chegava ao ecrã —; o `keyboard.configure` pedia ao `localectl`, que no Ubuntu
+  recusa («not supported in Debian»); e a imagem não tinha `locales`, pelo que
+  `localectl set-locale` recusava `pt_PT`, `en_GB` e `fr_FR`. Agora o
+  compositor lê o ficheiro ao arrancar e de novo quando muda (sem reiniciar o
+  ecrã), o System Service escreve-o atomicamente só com um layout e uma
+  variante que a lista de regras do XKB tem, e a imagem gera as três línguas,
+  com uma inspecção offline que o exige.
 - **Guarda `release_strings.py`** (no `verify.sh` e na CI): nenhum texto das
   superfícies gráficas chega ao ecrã com um campo por preencher.
 - **E2E das imagens**: cenário `update`, numa máquina instalada a partir da ISO,

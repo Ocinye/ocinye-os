@@ -109,8 +109,13 @@ SRC
   policy_on
   apt_update
   "${APT[@]}" dist-upgrade
-  "${APT[@]}" install --no-install-recommends ufw sudo ca-certificates curl gnupg openssh-server cloud-init
+  "${APT[@]}" install --no-install-recommends ufw sudo ca-certificates curl gnupg openssh-server cloud-init locales
   "${APT[@]}" purge snapd || true
+  # The three languages of the product (CLAUDE.md §84): the machine's
+  # language is set with `localectl set-locale`, which refuses a locale that
+  # is not generated. The minimal base has only C.UTF-8.
+  sed -i -E 's/^# *(pt_PT\.UTF-8|en_GB\.UTF-8|fr_FR\.UTF-8) UTF-8/\1 UTF-8/' /etc/locale.gen
+  locale-gen pt_PT.UTF-8 en_GB.UTF-8 fr_FR.UTF-8
 
   log "Docker repository (key fingerprint pinned by the release manifest)"
   install -d -m 0755 /etc/apt/keyrings

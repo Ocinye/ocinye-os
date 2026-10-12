@@ -15,6 +15,7 @@
 mod drm;
 mod handlers;
 mod input;
+mod keymap;
 mod session;
 mod state;
 
