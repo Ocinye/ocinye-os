@@ -1785,9 +1785,8 @@ def scenario_update(a):
         time.sleep(20)
         wait_ssh_port(vm.port, 900)
         st = settle()
-        whole = version(st) in (versions["GOOD"], versions["GOOD2"]) and st.get("phase") not in ("RECOVERY_REQUIRED", "UNKNOWN")
-        native = run("readlink /usr/lib/ocinye/current").stdout.decode().strip()
-        r.check("update: after the cut the machine runs one whole release, and its native layer agrees", whole and native.endswith(version(st) or "?"), (st, native))
+        r.check("update: after the cut the engine decided — no half release, no recovery needed",
+                version(st) in (versions["GOOD"], versions["GOOD2"]) and st.get("phase") not in ("RECOVERY_REQUIRED", "UNKNOWN"), st)
         def through_reboot(st):
             # GOOD2 asks for a restart: it is committed only after a healthy
             # start of the new release.
@@ -1799,6 +1798,8 @@ def scenario_update(a):
             return st
 
         st = through_reboot(st)
+        native = run("readlink /usr/lib/ocinye/current").stdout.decode().strip()
+        r.check("update: once settled, the native layer is the release the engine says runs", native.endswith(version(st) or "?"), (st.get("phase"), version(st), native))
         if version(st) != versions["GOOD2"] or st.get("phase") != "COMPLETED":
             run("sudo -n ocinye-system update install", timeout=3600)
             st = through_reboot(settle())
