@@ -20,7 +20,8 @@
     panel: null,            // null | 'quick' | 'system'
     page: 'home',
     dialog: null,
-    form: { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '', iname: '', domain: '', pname: '', pemail: '', aname: '', aemail: '' },
+    form: { user: '', pass: '', code: '', unlock: '', auth: '', new1: '', new2: '', iname: '', domain: '', pname: '', pemail: '', aname: '', aemail: '', wifipass: '', naddr: '', nprefix: '24', ngw: '', ndns: '' },
+    net: { iface: null, mode: 'DHCP' }, // o formulário de endereçamento: interface e modo escolhidos
     dist: { research: true, business: false, education: false, personal: false },
     credential: null,       // a credencial do primeiro administrador, enquanto está no ecrã
     enrolKey: null,         // a chave do autenticador, enquanto se inscreve o segundo factor
@@ -66,7 +67,7 @@
   // ── serviços
   const got = (cap) => { const v = S.sys[cap]; return v && !v.refused ? v : null; };
   const refusedText = (reason) => (reason && reason.code === 'UPDATE_REFUSED' ? t('ur.' + reason.update) : t('r.' + ((reason && reason.code) || 'SYSTEM_SERVICE')));
-  const STATUS_OF = { health: 'system.health', info: 'system.info', inventory: 'system.capabilities', network: 'network.status', audio: 'audio.status', display: 'display.status', power: 'power.status', locale: 'locale.status', time: 'time.status', keyboard: 'keyboard.status', accessibility: 'accessibility.status', privacy: 'privacy.status', storage: 'storage.status', update: 'update.status', update_history: 'update.history', base: 'base.status', remote_access: 'remote_access.status', recovery: 'recovery.status', bluetooth: 'bluetooth.status', activation: 'activation.status' };
+  const STATUS_OF = { wifi_scan: 'wifi.scan', health: 'system.health', info: 'system.info', inventory: 'system.capabilities', network: 'network.status', audio: 'audio.status', display: 'display.status', power: 'power.status', locale: 'locale.status', time: 'time.status', keyboard: 'keyboard.status', accessibility: 'accessibility.status', privacy: 'privacy.status', storage: 'storage.status', update: 'update.status', update_history: 'update.history', base: 'base.status', remote_access: 'remote_access.status', recovery: 'recovery.status', bluetooth: 'bluetooth.status', activation: 'activation.status' };
 
   async function call(capability, args, grant) {
     const request = Object.assign({ capability }, args || {});
@@ -116,6 +117,13 @@
     root.lang = LOCALE();
   }
 
+  // Depois de uma alteração, o que mais mudou com ela e se lê outra vez: a
+  // lista de redes Wi-Fi não vem na resposta de ligar, desligar ou esquecer.
+  function afterChange(capability) {
+    if (capability.indexOf('wifi.') === 0 && capability !== 'wifi.scan') read(['wifi.scan']).then(render);
+    if (capability === 'privacy.set_microphone') read(['audio.status']).then(render);
+  }
+
   // Uma alteração: pede; se o serviço exigir prova fresca, mostra o pedido de
   // confiança e repete com a concessão que o Session Service emitir.
   async function change(capability, args) {
@@ -130,6 +138,7 @@
     } else {
       applyPreferences();
       if (r.ok.kind !== 'done') toast(t('k.saved'));
+      afterChange(capability);
     }
     render();
     return r;
@@ -149,8 +158,44 @@
     if (reply.reply !== 'granted') { d.error = whyText(reply.reason); return render(); }
     const r = await call(d.capability, d.args, reply.grant);
     S.dialog = null;
-    if (r.refused) toast(refusedText(r.refused), 'bad'); else { applyPreferences(); toast(t('k.saved')); }
+    if (r.refused) toast(refusedText(r.refused), 'bad'); else { applyPreferences(); toast(t('k.saved')); afterChange(d.capability); }
     render();
+  }
+
+  // Procurar (redes, dispositivos): uma leitura que demora; nada a confirmar.
+  async function look(capability) {
+    S.busy = true; render();
+    const r = await call(capability);
+    S.busy = false;
+    if (r.refused) toast(refusedText(r.refused), 'bad');
+    render();
+  }
+
+  // Ligar a uma rede Wi-Fi: a palavra-passe sai do formulário no momento em
+  // que é enviada, e não fica em lado nenhum da interface.
+  async function joinWifi() {
+    const d = S.dialog;
+    if (!d || d.kind !== 'wifi' || S.busy) return;
+    const passphrase = d.ask ? S.form.wifipass : '';
+    S.form.wifipass = '';
+    if (d.ask && (passphrase.length < 8 || passphrase.length > 63)) { d.error = t('wifi.pass.len'); return render(); }
+    S.busy = true; d.error = null; render();
+    const r = await call('wifi.connect', { ssid: d.ssid, passphrase: d.ask ? passphrase : null });
+    S.busy = false;
+    if (r.refused) { d.error = refusedText(r.refused); return render(); }
+    S.dialog = null;
+    toast(t('wifi.joined', { ssid: d.ssid }));
+    afterChange('wifi.connect');
+    render();
+  }
+
+  // Endereçamento de uma interface com fios: os valores vão como foram
+  // escritos; é o serviço que os valida e recusa.
+  function addressing() {
+    const f = S.form;
+    if (S.net.mode === 'DHCP') return { mode: 'DHCP' };
+    const dns = f.ndns.split(',').map((x) => x.trim()).filter(Boolean);
+    return { mode: 'STATIC', address: f.naddr.trim(), prefix: Number(f.nprefix), gateway: f.ngw.trim(), dns };
   }
 
   const whyText = (reason) => t('why.' + ((reason && reason.code) || 'SESSION_SERVICE'), { n: reason && reason.retry_after_secs });
@@ -352,9 +397,9 @@
       </div></section></div>`;
   }
 
-  const NAV = [['home', 'home'], ['network', 'wifi'], ['sound', 'sound'], ['displays', 'monitor'], ['power', 'battery'], ['input', 'keyboard'], ['language', 'globe'], ['time', 'clock'], ['accessibility', 'person'], ['privacy', 'eye'], ['security', 'shield'], ['storage', 'disk'], ['updates', 'update'], ['diagnostics', 'pulse'], ['about', 'info']];
+  const NAV = [['home', 'home'], ['network', 'wifi'], ['bluetooth', 'bt'], ['sound', 'sound'], ['displays', 'monitor'], ['power', 'battery'], ['input', 'keyboard'], ['language', 'globe'], ['time', 'clock'], ['accessibility', 'person'], ['privacy', 'eye'], ['security', 'shield'], ['storage', 'disk'], ['updates', 'update'], ['diagnostics', 'pulse'], ['about', 'info']];
   const READS = {
-    home: ['system.health', 'network.status', 'power.status', 'update.status'], network: ['network.status'], sound: ['audio.status'], displays: ['display.status'],
+    home: ['system.health', 'network.status', 'power.status', 'update.status'], network: ['network.status'], bluetooth: ['bluetooth.status'], sound: ['audio.status', 'privacy.status'], displays: ['display.status'],
     power: ['power.status'], input: ['keyboard.status'], language: ['locale.status'], time: ['time.status'], accessibility: ['accessibility.status'],
     privacy: ['privacy.status'], security: ['system.info', 'remote_access.status', 'recovery.status'], storage: ['storage.status'], updates: ['update.status', 'update.history', 'base.status', 'recovery.status'],
     diagnostics: ['system.health', 'system.capabilities'], about: ['system.info'],
@@ -362,6 +407,51 @@
   // O que uma leitura dá: o valor, ou a razão dita em vez dele.
   const need = (cap, draw) => { const v = S.sys[cap]; return !v ? [note(t('k.loading'))] : v.refused ? [note(refusedText(v.refused))] : draw(v); };
   const yes = (b, y, n) => t(b ? y : n);
+  const acts = (items) => `<span class="sx-acts">${items.filter(Boolean).join('')}</span>`;
+
+  // Wi-Fi: o rádio, a rede em uso e as redes ao alcance, pela ordem do sinal.
+  function wifiRows(n) {
+    if (!n.wifi) return [note(t('k.wifi.none'))];
+    const rows = [row(t('k.wifi.radio'), toggle(n.wifi.enabled, 'wifi-radio', { label: t('k.wifi.radio') }))];
+    if (!n.wifi.enabled) return rows;
+    if (n.wifi.connected) rows.push(row(esc(n.wifi.connected), btn('', t('wifi.disconnect'), 'wifi-disconnect'), { sub: t('wifi.connected') }));
+    rows.push(row(t('wifi.networks'), btn('', t('wifi.scan'), 'wifi-scan', { icon: 'search' })));
+    const v = S.sys['wifi.scan'];
+    if (!v) rows.push(note(t('wifi.notscanned')));
+    else if (v.refused) rows.push(note(refusedText(v.refused)));
+    else if (!v.networks.length) rows.push(note(t('wifi.empty')));
+    else v.networks.forEach((w, i) => rows.push(row(esc(w.ssid),
+      w.connected ? status('ok', t('wifi.connected')) : acts([w.known ? btn('ghost', t('wifi.forget'), 'wifi-forget', { arg: i }) : '', btn('', t('wifi.connect'), 'wifi-pick', { arg: i, disabled: w.security === 'ENTERPRISE' })]),
+      { sub: `${t('wifi.sec.' + w.security)} · ${t('wifi.signal', { n: w.signal })}${w.known ? ' · ' + t('wifi.known') : ''}` })));
+    return rows;
+  }
+
+  // Endereçamento de uma interface com fios. A do Wi-Fi vem da rede.
+  function addressRows(n) {
+    const wired = n.interfaces.filter((i) => i.kind !== 'WIFI');
+    if (!wired.length) return [note(t('addr.none'))];
+    if (!wired.some((i) => i.name === S.net.iface)) S.net.iface = wired[0].name;
+    const select = (act, label, options, value) => `<select class="sx-select" data-act="${act}" aria-label="${label}"${S.busy ? ' disabled' : ''}>${options.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+    const rows = [
+      row(t('k.iface'), select('net-iface', t('k.iface'), wired.map((i) => [i.name, esc(i.name)]), S.net.iface), { op: true }),
+      row(t('k.mode'), select('net-mode', t('k.mode'), [['DHCP', t('k.mode.DHCP')], ['STATIC', t('k.mode.STATIC')]], S.net.mode)),
+    ];
+    if (S.net.mode === 'STATIC') {
+      rows.push(`<div class="sx-addr"><div class="sx-form2">${field('naddr', t('k.address'))}${field('nprefix', t('k.prefix'))}</div><div class="sx-form2">${field('ngw', t('k.gateway'))}${field('ndns', t('k.dnslist'))}</div></div>`);
+    }
+    rows.push(row(t('addr.apply'), btn('', t('addr.apply'), 'net-apply'), { sub: t('addr.note') }));
+    return rows;
+  }
+
+  function btRow(d) {
+    const a = { arg: d.address };
+    return row(esc(d.name), acts([
+      !d.paired ? btn('', t('bt.pair'), 'bt-pair', a) : '',
+      d.paired && !d.connected ? btn('', t('bt.connect'), 'bt-connect', a) : '',
+      d.connected ? btn('', t('bt.disconnect'), 'bt-disconnect', a) : '',
+      d.paired ? btn('ghost', t('bt.remove'), 'bt-remove', a) : '',
+    ]), { sub: `${t('bt.class.' + d.class)} · <span class="sx-mono">${esc(d.address)}</span>${d.connected ? ' · ' + t('bt.connected') : d.paired ? ' · ' + t('bt.paired') : ''}` });
+  }
 
   // ── actualizações (ADR-0032): o motor decide; esta página mostra e pede
   const BUSY_PHASES = ['CHECKING', 'DOWNLOADING', 'DOWNLOADED', 'VERIFYING', 'VERIFIED', 'PREFLIGHT', 'STAGED', 'INSTALLING', 'ACTIVATING', 'BOOT_VALIDATING', 'COMMITTING', 'ROLLING_BACK'];
@@ -445,15 +535,38 @@
       group(t('g.release'), need('update.status', (u) => [row(t('u.current'), `<span class="sx-mono">${esc(u.current ? u.current.version : t('k.unknown'))}</span>`), row(t('k.phase'), status(phaseTone(u.phase), t('up.' + u.phase)), { sub: u.available && !AT_REST_QUIET.includes(u.phase) ? `<span class="sx-mono">${esc(u.available.version)}</span>` : '' })])),
     ],
     network: () => [
+      group(t('g.wifi'), need('network.status', wifiRows)),
       group(t('g.connections'), need('network.status', (n) => n.interfaces.map((i) => row(`${esc(i.name)} · ${t('k.kind.' + i.kind)}`, status(i.carrier ? 'ok' : 'mute', t(i.carrier ? 'k.carrier.yes' : 'k.carrier.no')), { sub: `<span class="sx-mono">${i.addresses.length ? i.addresses.map(esc).join(' · ') : t('k.noaddr')}${i.mac ? ' · ' + esc(i.mac) : ''}</span>` })))),
-      group(t('g.routing'), need('network.status', (n) => [row(t('k.connectivity'), status(n.connectivity === 'LOCAL' ? 'ok' : 'warn', t('k.conn.' + n.connectivity))), row(t('k.gateway'), `<span class="sx-mono">${esc(n.gateway || '—')}</span>`), row(t('k.dns'), `<span class="sx-mono">${n.dns.length ? n.dns.map(esc).join(' · ') : '—'}</span>`), row(t('k.wifi'), n.wifi ? (n.wifi.connected ? esc(n.wifi.connected) : t(n.wifi.enabled ? 'q.on' : 'q.off')) : t('avail.ABSENT'), { sub: t('r.NOT_IMPLEMENTED') })])),
+      group(t('g.routing'), need('network.status', (n) => [row(t('k.connectivity'), status(n.connectivity === 'LOCAL' ? 'ok' : 'warn', t('k.conn.' + n.connectivity))), row(t('k.gateway'), `<span class="sx-mono">${esc(n.gateway || '—')}</span>`), row(t('k.dns'), `<span class="sx-mono">${n.dns.length ? n.dns.map(esc).join(' · ') : '—'}</span>`)])),
+      group(t('g.addressing'), need('network.status', addressRows)),
+    ],
+    bluetooth: () => [
+      group(t('g.bluetooth'), need('bluetooth.status', (b) => [
+        row(t('k.bt.power'), toggle(b.powered, 'bt-power', { label: t('k.bt.power') })),
+        row(t('bt.scan'), btn('', t('bt.scan'), 'bt-scan', { icon: 'search', disabled: !b.powered }), { sub: t('bt.scan.sub') }),
+      ])),
+      group(t('g.btdevices'), need('bluetooth.status', (b) => (b.devices.length ? b.devices.map(btRow) : [note(t('bt.none'))]).concat([note(t('bt.note'))]))),
     ],
     sound: () => {
-      const list = (kind) => need('audio.status', (a) => (a[kind].length ? a[kind].map((d) => row(esc(d.name) + (d.default ? ` · ${t('k.default')}` : ''), d.muted ? t('k.muted') : d.volume + '%')) : [note(t('k.none'))]));
-      return [group(t('g.outputs'), list('outputs')), group(t('g.inputs'), list('inputs'))];
+      const p = got('privacy.status');
+      const blocked = p && !p.microphone_allowed;
+      const slider = (d, act, label) => `<label class="sx-slider"><input type="range" min="0" max="100" step="5" value="${d.volume}" data-act="${act}" aria-label="${label}"${S.busy ? ' disabled' : ''}><span class="sx-slider__v">${d.volume}%</span></label>`;
+      const outputs = need('audio.status', (a) => (a.outputs.length ? a.outputs.flatMap((d) => (d.default
+        ? [row(`${esc(d.name)} · ${t('k.default')}`, slider(d, 'volume', t('q.volume'))), row(t('k.sound.on'), toggle(!d.muted, 'mute-out', { label: t('k.sound.on') }))]
+        : [row(esc(d.name), btn('', t('snd.use'), 'snd-output', { arg: d.id }), { sub: d.muted ? t('k.muted') : d.volume + '%' })])) : [note(t('k.none'))]));
+      const inputs = need('audio.status', (a) => {
+        const d = a.inputs.find((x) => x.default) || a.inputs[0];
+        if (!d) return [note(t('k.none'))];
+        return [
+          row(esc(d.name), slider(d, 'volume-in', t('k.capture.level'))),
+          row(t('k.capture'), toggle(!d.muted && !blocked, 'mute-in', { label: t('k.capture'), disabled: blocked }), { sub: blocked ? t('snd.micblocked') : '' }),
+          note(t('snd.input.note')),
+        ];
+      });
+      return [group(t('g.outputs'), outputs), group(t('g.inputs'), inputs)];
     },
     displays: () => [
-      group(t('g.displays'), need('display.status', (d) => (d.outputs.length ? d.outputs.map((o) => row(esc(o.name), `${o.width} × ${o.height} · ${(o.refresh_mhz / 1000).toFixed(0)} Hz · ${o.scale_percent}%`, { sub: t(o.internal ? 'k.internal' : 'k.external') })) : [note(t('k.none'))]).concat(d.brightness != null ? [row(t('k.brightness'), `<label class="sx-slider"><input type="range" min="5" max="100" step="5" value="${d.brightness}" data-act="brightness" aria-label="${t('k.brightness')}"><span class="sx-slider__v">${d.brightness}%</span></label>`)] : []))),
+      group(t('g.displays'), need('display.status', (d) => (d.outputs.length ? d.outputs.map((o) => row(esc(o.name), [o.width ? `${o.width} × ${o.height}` : t('k.nomode'), o.refresh_mhz ? `${(o.refresh_mhz / 1000).toFixed(0)} Hz` : '', o.scale_percent ? `${o.scale_percent}%` : ''].filter(Boolean).join(' · '), { sub: t(o.internal ? 'k.internal' : 'k.external') + (o.enabled ? '' : ' · ' + t('k.disabled')) })) : [note(t('k.none'))]).concat(d.brightness != null ? [row(t('k.brightness'), `<label class="sx-slider"><input type="range" min="5" max="100" step="5" value="${d.brightness}" data-act="brightness" aria-label="${t('k.brightness')}"${S.busy ? ' disabled' : ''}><span class="sx-slider__v">${d.brightness}%</span></label>`)] : []).concat([note(t('disp.note'))]))),
     ],
     power: () => [
       group(t('g.power'), need('power.status', (p) => [row(t('k.source'), t('k.source.' + p.source))].concat(p.battery ? [row(t('k.battery'), `${p.battery.charge}%${p.battery.charging ? ' · ' + t('k.charging') : ''}`), p.battery.health != null ? row(t('k.battery.health'), p.battery.health + '%') : ''] : []))),
@@ -469,8 +582,9 @@
       row(t('k.reader'), status('mute', t('k.reader.v'))),
     ]))],
     privacy: () => [group(t('g.devices'), need('privacy.status', (p) => [
-      row(t('k.mic'), toggle(p.microphone_allowed, 'privacy-mic', { label: t('k.mic') }), { sub: p.microphone_in_use ? t('k.inuse') : '' }),
-      row(t('k.cam'), toggle(p.camera_allowed, 'privacy-cam', { label: t('k.cam') }), { sub: p.camera_in_use ? t('k.inuse') : '' }),
+      row(t('k.mic'), toggle(p.microphone_allowed, 'privacy-mic', { label: t('k.mic') }), { sub: !p.microphone_present ? t('k.absent') : p.microphone_in_use ? t('k.inuse') : '' }),
+      row(t('k.cam'), toggle(p.camera_allowed, 'privacy-cam', { label: t('k.cam') }), { sub: !p.camera_present ? t('k.absent') : p.camera_in_use ? t('k.inuse') : '' }),
+      note(t('privacy.note')),
     ]))],
     security: () => [
       group(t('g.session'), [row(t('k.member'), esc(S.session.member_name)), row(t('k.lock.now'), btn('', t('q.lock'), 'lock', { icon: 'lock' })), row(t('power.signout'), btn('', t('power.signout'), 'signout', { icon: 'logout' }))]),
@@ -532,6 +646,10 @@
     } else if (d && d.kind === 'languages') {
       inner = `<h2 id="dlg-h">${t('lang.choose')}</h2><div class="sx-menu">${['pt', 'en', 'fr'].map((c) => btn(c === S.lang ? 'pri' : '', t('lang.' + c), 'lang', { arg: c })).join('')}</div>
         <div class="sx-dialog__acts">${btn('ghost', t('power.cancel'), 'dialog-cancel')}</div>`;
+    } else if (d && d.kind === 'wifi') {
+      inner = `<div class="sx-dialog__trust">${ic('shield')}${t('auth.trusted')}</div><h2 id="dlg-h">${t('wifi.dialog.h', { ssid: d.ssid })}</h2>
+        <p>${t(d.ask ? 'wifi.dialog.note' : 'wifi.dialog.known')}</p>${d.error ? alert('bad', d.error) : ''}
+        <form data-form="wifi">${d.ask ? field('wifipass', t('wifi.pass'), { type: 'password' }) : ''}<div class="sx-dialog__acts">${btn('ghost', t('power.cancel'), 'dialog-cancel')}${btn('pri', t(S.busy ? 'wifi.joining' : 'wifi.connect'), null, { submit: true })}</div></form>`;
     } else if (d && d.kind === 'auth') {
       const head = `<div class="sx-dialog__trust">${ic('shield')}${t('auth.trusted')}</div>`;
       const error = d.error ? alert('bad', d.error) : '';
@@ -682,13 +800,19 @@
     power: () => { S.dialog = { kind: 'power' }; },
     'power-ask': (arg) => { S.dialog = { kind: 'power-confirm', action: arg }; },
     'power-do': async (arg) => { S.dialog = null; await change('power.' + arg); },
-    'dialog-cancel': () => { S.dialog = null; S.form.auth = ''; },
+    'dialog-cancel': () => { S.dialog = null; S.form.auth = ''; S.form.wifipass = ''; },
     signout: async () => { S.dialog = null; S.panel = null; S.error = null; await ask({ request: 'sign_out' }); },
     lock: async () => { S.dialog = null; S.panel = null; S.error = null; await ask({ request: 'lock' }); },
     tray: () => { S.panel = S.panel === 'quick' ? null : 'quick'; },
     'open-system': () => { S.panel = S.panel === 'system' ? null : 'system'; if (S.panel) read(READS[S.page]).then(render); },
     'close-panel': () => { S.panel = null; },
-    nav: (arg) => { S.panel = 'system'; S.page = arg; read(READS[arg]).then(render); },
+    nav: (arg) => {
+      S.panel = 'system'; S.page = arg;
+      // Procurar redes demora segundos: uma vez ao abrir a página, e depois
+      // só quando se pede — nunca a cada actualização.
+      const extra = arg === 'network' && !S.sys['wifi.scan'] ? ['wifi.scan'] : [];
+      read(READS[arg].concat(extra)).then(render);
+    },
     workspace: async () => { S.panel = null; render(); let ok = false; try { ok = await invoke('open_workspace'); } catch (e) { ok = false; } if (!ok) toast(t('bar.wsfail'), 'bad'); },
     collect: async () => { const r = await change('diagnostics.collect'); if (r.ok) toast(t('k.collected')); },
     brightness: (arg) => change('display.set_brightness', { percent: Number(arg) }),
@@ -699,6 +823,29 @@
     'a11y-scale': (arg) => change('accessibility.configure', Object.assign({}, got('accessibility.status'), { text_scale_percent: Number(arg) })),
     'a11y-contrast': (arg) => change('accessibility.configure', Object.assign({}, got('accessibility.status'), { high_contrast: arg === '1' })),
     'a11y-motion': (arg) => change('accessibility.configure', Object.assign({}, got('accessibility.status'), { reduce_motion: arg === '1' })),
+    'wifi-radio': (arg) => change('wifi.set_radio', { enabled: arg === '1' }),
+    'wifi-scan': () => look('wifi.scan'),
+    'wifi-disconnect': () => change('wifi.disconnect'),
+    'wifi-pick': (arg) => {
+      const v = got('wifi.scan'); const w = v && v.networks[Number(arg)];
+      if (!w) return;
+      S.form.wifipass = '';
+      S.dialog = { kind: 'wifi', ssid: w.ssid, ask: w.security === 'PASSPHRASE' && !w.known, error: null };
+    },
+    'wifi-forget': (arg) => { const v = got('wifi.scan'); const w = v && v.networks[Number(arg)]; return w ? change('wifi.forget', { ssid: w.ssid }) : null; },
+    'net-iface': (arg) => { S.net.iface = arg; },
+    'net-mode': (arg) => { S.net.mode = arg === 'STATIC' ? 'STATIC' : 'DHCP'; },
+    'net-apply': () => change('network.configure', { interface: S.net.iface, addressing: addressing() }),
+    'bt-power': (arg) => change('bluetooth.set_power', { powered: arg === '1' }),
+    'bt-scan': () => look('bluetooth.scan'),
+    'bt-pair': (arg) => change('bluetooth.pair', { address: arg }),
+    'bt-connect': (arg) => change('bluetooth.connect', { address: arg }),
+    'bt-disconnect': (arg) => change('bluetooth.disconnect', { address: arg }),
+    'bt-remove': (arg) => change('bluetooth.remove', { address: arg }),
+    'volume-in': (arg) => change('audio.set_volume', { target: 'INPUT', percent: Number(arg) }),
+    'mute-out': (arg) => change('audio.set_mute', { target: 'OUTPUT', muted: arg !== '1' }),
+    'mute-in': (arg) => change('audio.set_mute', { target: 'INPUT', muted: arg !== '1' }),
+    'snd-output': (arg) => change('audio.set_output', { id: Number(arg) }),
     'privacy-mic': (arg) => change('privacy.set_microphone', { allowed: arg === '1' }),
     'privacy-cam': (arg) => change('privacy.set_camera', { allowed: arg === '1' }),
     ssh: (arg) => change('remote_access.configure', { ssh_enabled: arg === '1' }),
@@ -751,10 +898,11 @@
     else if (form.dataset.form === 'setup') activate();
     else if (form.dataset.form === 'unlock') unlock();
     else if (form.dataset.form === 'auth') authorise();
+    else if (form.dataset.form === 'wifi') joinWifi();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (S.dialog) { S.dialog = null; S.form.auth = ''; render(); }
+    if (S.dialog) { S.dialog = null; S.form.auth = ''; S.form.wifipass = ''; render(); }
     else if (S.panel) { S.panel = null; render(); }
   });
   document.addEventListener('focusin', (e) => { if (e.target && e.target.id) lastFocusId = e.target.id; });

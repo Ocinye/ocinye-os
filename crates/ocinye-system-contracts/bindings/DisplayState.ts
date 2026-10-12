@@ -7,7 +7,7 @@ import type { Percent } from "./Percent";
  */
 export type DisplayState = {
 /**
- * Connected displays. Empty when the session reports none.
+ * Connected displays. Empty when none is connected.
  */
 outputs: Array<DisplayOutput>,
 /**

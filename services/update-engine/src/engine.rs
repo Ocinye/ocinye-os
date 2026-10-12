@@ -1005,7 +1005,8 @@ impl<H: Host> Engine<H> {
         let t = j.transaction.clone().ok_or(UpdateReason::JournalInvalid)?;
         let from = t.from.clone();
         let mut safe = true;
-        let instance_touched = t.done(Step::InstanceUpgraded) || t.begun_not_done(Step::InstanceUpgraded);
+        let instance_touched =
+            t.done(Step::InstanceUpgraded) || t.begun_not_done(Step::InstanceUpgraded);
         if instance_touched
             && self.instance_release().as_deref() == Some(t.target.release_id())
             && self.host.instance_rollback().is_err()

@@ -18,7 +18,22 @@
     surface: null,
     a11y: { text_scale_percent: 100, high_contrast: false, reduce_motion: false },
     locale: { language: 'pt', system_locale: 'pt_PT.UTF-8' },
-    privacy: { microphone_allowed: true, camera_allowed: true, microphone_in_use: false, camera_in_use: false },
+    privacy: { microphone_present: true, camera_present: true, microphone_allowed: true, camera_allowed: true, microphone_in_use: false, camera_in_use: false },
+    // Wi-Fi: o rádio, a rede em uso e as redes ao alcance (a palavra-passe
+    // que o duplo aceita é a de baixo; outra é recusada como uma rede faria).
+    wifi: { enabled: true, connected: 'Laboratório' },
+    networks: [
+      { ssid: 'Laboratório', security: 'PASSPHRASE', signal: 82, known: true, connected: true },
+      { ssid: 'Biblioteca', security: 'PASSPHRASE', signal: 61, known: false, connected: false },
+      { ssid: 'Visitantes', security: 'OPEN', signal: 47, known: false, connected: false },
+      { ssid: 'Empresa-802.1X', security: 'ENTERPRISE', signal: 30, known: false, connected: false },
+    ],
+    wifiPass: 'palavra-passe-wifi',
+    bt: { powered: true, devices: [
+      { address: '00:1A:7D:DA:71:13', name: 'Teclado de prova', class: 'KEYBOARD', paired: true, connected: true },
+      { address: '00:1A:7D:DA:71:14', name: 'Auscultadores de prova', class: 'AUDIO', paired: false, connected: false },
+    ] },
+    audio: { output: 0, outVolume: 60, outMuted: false, inVolume: 70, inMuted: false },
     remote: { ssh_enabled: true, ssh_active: true },
     brightness: 70,
     grants: {},
@@ -100,10 +115,15 @@
   const READS = {
     'system.health': () => ok('health', { items: [{ part: 'system_service', health: 'OK' }, { part: 'network', health: 'OK' }, { part: 'clock', health: 'OK' }, { part: 'storage', health: 'OK' }, { part: 'instance', health: F.core === 'ONLINE' ? 'OK' : 'FAILED' }] }),
     'system.info': () => ok('info', { hostname: 'ocinye-01', release_id: 'ocinye-os-1.0.0-dev', development_build: true, base_system: 'Ubuntu 24.04.3 LTS', kernel: '6.8.0-90-generic', arch: 'x86_64', cpu_model: 'Processador de prova', cpu_count: 8, memory_mib: 16000, uefi: true, secure_boot: 'DISABLED' }),
-    'system.capabilities': () => ok('inventory', { hardware: [{ hardware: 'NETWORK_INTERFACE', availability: { state: 'PRESENT' } }, { hardware: 'WIFI_RADIO', availability: { state: 'ABSENT' } }, { hardware: 'BACKLIGHT', availability: { state: 'PRESENT' } }, { hardware: 'BATTERY', availability: { state: 'PRESENT' } }], implemented: [] }),
-    'network.status': () => ok('network', { interfaces: [{ name: 'enp1s0', kind: 'ETHERNET', carrier: true, mac: '52:54:00:12:34:56', addresses: ['192.168.1.84/24'], speed_mbps: 1000 }], gateway: '192.168.1.1', dns: ['192.168.1.1'], connectivity: 'LOCAL', wifi: null }),
-    'audio.status': () => no('NOT_IMPLEMENTED'),
-    'display.status': () => ok('display', { outputs: [{ name: 'eDP-1', internal: true, width: 1920, height: 1080, refresh_mhz: 60000, scale_percent: 100 }], brightness: F.brightness }),
+    'system.capabilities': () => ok('inventory', { hardware: [{ hardware: 'NETWORK_INTERFACE', availability: { state: 'PRESENT' } }, { hardware: 'WIFI_RADIO', availability: { state: 'PRESENT' } }, { hardware: 'BLUETOOTH_CONTROLLER', availability: { state: 'PRESENT' } }, { hardware: 'AUDIO_OUTPUT', availability: { state: 'PRESENT' } }, { hardware: 'BACKLIGHT', availability: { state: 'PRESENT' } }, { hardware: 'BATTERY', availability: { state: 'PRESENT' } }], implemented: [] }),
+    'network.status': () => ok('network', { interfaces: [{ name: 'enp1s0', kind: 'ETHERNET', carrier: true, mac: '52:54:00:12:34:56', addresses: ['192.168.1.84/24'], speed_mbps: 1000 }, { name: 'wlp2s0', kind: 'WIFI', carrier: !!F.wifi.connected, mac: '52:54:00:ab:cd:ef', addresses: F.wifi.connected ? ['192.168.1.85/24'] : [], speed_mbps: null }], gateway: '192.168.1.1', dns: ['192.168.1.1'], connectivity: 'LOCAL', wifi: { enabled: F.wifi.enabled, connected: F.wifi.enabled ? F.wifi.connected : null } }),
+    'wifi.scan': () => (F.wifi.enabled ? ok('wifi_scan', { networks: F.networks.map((n) => Object.assign({}, n, { connected: n.ssid === F.wifi.connected })) }) : no('HARDWARE_UNAVAILABLE', { cause: 'SOFT_BLOCKED' })),
+    'bluetooth.status': () => ok('bluetooth', F.bt),
+    'audio.status': () => ok('audio', {
+      outputs: [{ id: 0, name: 'HDA Intel PCH', default: F.audio.output === 0, volume: F.audio.output === 0 ? F.audio.outVolume : 50, muted: F.audio.output === 0 && F.audio.outMuted }, { id: 1, name: 'USB Audio Device', default: F.audio.output === 1, volume: F.audio.output === 1 ? F.audio.outVolume : 40, muted: F.audio.output === 1 && F.audio.outMuted }],
+      inputs: [{ id: 0, name: 'HDA Intel PCH', default: F.audio.output === 0, volume: F.audio.inVolume, muted: F.audio.inMuted || !F.privacy.microphone_allowed }],
+    }),
+    'display.status': () => ok('display', { outputs: [{ name: 'eDP-1', internal: true, enabled: true, width: 1920, height: 1080, refresh_mhz: null, scale_percent: null }, { name: 'HDMI-A-1', internal: false, enabled: true, width: 2560, height: 1440, refresh_mhz: null, scale_percent: null }], brightness: F.brightness }),
     'power.status': () => ok('power', { source: 'BATTERY', battery: { charge: 82, charging: false, health: 96 }, can_suspend: true, inhibitors: [] }),
     'locale.status': () => ok('locale', F.locale),
     'time.status': () => ok('time', { timezone: 'Europe/Lisbon', automatic: true, synchronised: true, unix_time: 1791680000 }),
@@ -131,7 +151,51 @@
       case 'locale.configure': F.locale = { language: request.language, system_locale: F.locale.system_locale }; return ok('locale', F.locale);
       case 'display.set_brightness': F.brightness = request.percent; return READS['display.status']();
       case 'keyboard.configure': return member ? ok('keyboard', { layout: request.layout, variant: null, offered: ['pt', 'us', 'fr', 'gb', 'es', 'de'] }) : no('NOT_AUTHORIZED', { needs: 'MEMBER' });
-      case 'privacy.set_microphone': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.privacy = Object.assign({}, F.privacy, { microphone_allowed: request.allowed }); return ok('privacy', F.privacy);
+      case 'privacy.set_microphone': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.privacy = Object.assign({}, F.privacy, { microphone_allowed: request.allowed }); F.audio.inMuted = !request.allowed; return ok('privacy', F.privacy);
+      case 'wifi.set_radio': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.wifi = { enabled: request.enabled, connected: request.enabled ? F.wifi.connected : null }; return READS['network.status']();
+      case 'wifi.connect': {
+        if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' });
+        const n = F.networks.find((x) => x.ssid === request.ssid);
+        if (!n) return no('NOT_FOUND');
+        if (n.security === 'ENTERPRISE') return no('NOT_IMPLEMENTED');
+        if (n.security === 'PASSPHRASE' && !n.known && request.passphrase !== F.wifiPass) return no(request.passphrase ? 'WIFI_AUTHENTICATION_FAILED' : 'VALUE_OUT_OF_RANGE');
+        if (n.security === 'PASSPHRASE') n.known = true;
+        F.wifi.connected = n.ssid; return READS['network.status']();
+      }
+      case 'wifi.disconnect': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.wifi.connected = null; return READS['network.status']();
+      case 'wifi.forget': {
+        if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' });
+        const f = fresh('CONFIRM'); if (f) return f;
+        const n = F.networks.find((x) => x.ssid === request.ssid && x.known);
+        if (!n) return no('NOT_FOUND');
+        n.known = false; if (F.wifi.connected === n.ssid) F.wifi.connected = null; return READS['network.status']();
+      }
+      case 'network.configure': { const f = fresh('CORE_STEP_UP'); if (f) return f; return READS['network.status'](); }
+      case 'bluetooth.set_power': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.bt.powered = request.powered; if (!request.powered) F.bt.devices.forEach((d) => { d.connected = false; }); return READS['bluetooth.status']();
+      case 'bluetooth.scan':
+        if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' });
+        if (!F.bt.powered) return no('HARDWARE_UNAVAILABLE', { cause: 'SOFT_BLOCKED' });
+        if (!F.bt.devices.some((d) => d.address === '00:1A:7D:DA:71:15')) F.bt.devices.push({ address: '00:1A:7D:DA:71:15', name: 'Rato de prova', class: 'POINTER', paired: false, connected: false });
+        return READS['bluetooth.status']();
+      case 'bluetooth.pair': case 'bluetooth.connect': case 'bluetooth.disconnect': case 'bluetooth.remove': {
+        if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' });
+        if (cap === 'bluetooth.pair' || cap === 'bluetooth.remove') { const f = fresh('CONFIRM'); if (f) return f; }
+        const d = F.bt.devices.find((x) => x.address === request.address);
+        if (!d) return no('NOT_FOUND');
+        // O duplo recusa os auscultadores como um dispositivo que pede código.
+        if (cap === 'bluetooth.pair' && d.class === 'AUDIO') return no('ADAPTER_FAILED', { cause: 'REFUSED' });
+        if (cap === 'bluetooth.pair') d.paired = true;
+        if (cap === 'bluetooth.connect') d.connected = true;
+        if (cap === 'bluetooth.disconnect') d.connected = false;
+        if (cap === 'bluetooth.remove') F.bt.devices = F.bt.devices.filter((x) => x !== d);
+        return READS['bluetooth.status']();
+      }
+      case 'audio.set_volume': if (request.target === 'OUTPUT') F.audio.outVolume = request.percent; else F.audio.inVolume = request.percent; return READS['audio.status']();
+      case 'audio.set_mute':
+        if (request.target === 'INPUT' && !request.muted && !F.privacy.microphone_allowed) return no('HARDWARE_UNAVAILABLE', { cause: 'SOFT_BLOCKED' });
+        if (request.target === 'OUTPUT') F.audio.outMuted = request.muted; else F.audio.inMuted = request.muted;
+        return READS['audio.status']();
+      case 'audio.set_output': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); if (request.id !== 0 && request.id !== 1) return no('NOT_FOUND'); F.audio.output = request.id; return READS['audio.status']();
       case 'privacy.set_camera': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.privacy = Object.assign({}, F.privacy, { camera_allowed: request.allowed }); return ok('privacy', F.privacy);
       case 'remote_access.configure': { const f = fresh('LOCAL_REAUTH'); if (f) return f; F.remote = { ssh_enabled: request.ssh_enabled, ssh_active: request.ssh_enabled }; return ok('remote_access', F.remote); }
       case 'power.restart': case 'power.shutdown': { if (member) { const f = fresh('CONFIRM'); if (f) return f; } return ok('done'); }

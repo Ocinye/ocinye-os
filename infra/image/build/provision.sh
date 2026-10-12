@@ -157,13 +157,20 @@ SRC
   log "the seat: display stack, system webview, the account the screen runs as"
   # What the compositor and the interface link against, and nothing a desktop
   # would add: no display manager, no session of another environment, no
-  # NetworkManager, no automounter (no recommends).
+  # NetworkManager, no automounter (no recommends). What the System Service
+  # drives (ADR-0031): iwd for Wi-Fi (networkd gives the address), BlueZ for
+  # Bluetooth, the ALSA tools for sound — no sound server.
   policy_on
   "${APT[@]}" install --no-install-recommends \
     seatd libseat1 libinput10 libudev1 libdrm2 libgbm1 libegl1 libgles2 libgl1-mesa-dri \
     libxkbcommon0 xkb-data libwayland-server0 libwayland-client0 \
-    libwebkit2gtk-4.1-0 libgtk-3-0 dbus iproute2 rfkill
+    libwebkit2gtk-4.1-0 libgtk-3-0 dbus iproute2 rfkill \
+    iwd bluez alsa-utils
   policy_off
+  # The packages enable their daemons; this layer is shared with the
+  # installation medium, which must not run them. An installed system enables
+  # them at finalize.
+  systemctl disable iwd.service bluetooth.service 2>/dev/null || true
   install -d -m 0755 /usr/lib/ocinye
   install_native_layer
   # No password and no shell. `video` is the group seatd serves (its socket),
@@ -368,10 +375,13 @@ stage_finalize() {
       systemctl enable seatd.service ocinye-system.service ocinye-session.service ocinye-seat-link.path \
         ocinye-seat-start.service ocinye-console@tty2.service
       # The Update Engine (ADR-0032): ready from the first start, with no
-      # repository until an operator configures one.
-      systemctl enable ocinye-update.service ;;
+      # repository until an operator configures one. And what the System
+      # Service asks over D-Bus: Wi-Fi and Bluetooth.
+      systemctl enable ocinye-update.service iwd.service bluetooth.service ;;
     oie)
       systemctl disable ssh.service ssh.socket cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
+      # No Wi-Fi or Bluetooth daemon on the medium, not even by D-Bus activation.
+      systemctl mask iwd.service bluetooth.service
       systemctl enable ocinye-oie@tty1.service "ocinye-oie@$SERIAL.service"
       # The installer window (ADR-0031): the same conversation as the text
       # consoles, on the screen of a machine that has one. tty1 keeps the text

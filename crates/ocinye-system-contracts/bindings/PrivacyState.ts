@@ -5,6 +5,14 @@
  */
 export type PrivacyState = {
 /**
+ * Whether the machine has a sound input.
+ */
+microphone_present: boolean,
+/**
+ * Whether the machine has a camera.
+ */
+camera_present: boolean,
+/**
  * Whether the microphone may be used at all.
  */
 microphone_allowed: boolean,
@@ -13,10 +21,11 @@ microphone_allowed: boolean,
  */
 camera_allowed: boolean,
 /**
- * Whether a microphone stream is open now.
+ * Whether a microphone stream is capturing now.
  */
 microphone_in_use: boolean,
 /**
- * Whether a camera is open now.
+ * Whether a camera is open now. Not cheaply knowable from the
+ * kernel's files: always `false` on this build.
  */
 camera_in_use: boolean, };

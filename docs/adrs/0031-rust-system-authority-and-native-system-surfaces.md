@@ -86,3 +86,10 @@ presença, e o que precisa de membro, operador ou prova fresca é recusado. O
 compositor, a interface gráfica e a integração na imagem são passos seguintes.
 Nada disto correu ainda numa imagem do Ocinye OS: os adaptadores que mudam o
 sistema têm testes de protocolo e de leitura, não prova numa máquina.
+
+**Actualização, 2026-10-12.** O segundo bloco de adaptadores existe: Wi-Fi
+(iwd) e Bluetooth (BlueZ) por D-Bus, com o `zbus`; som por ALSA; ecrãs pelos
+conectores DRM; endereçamento por netplan; microfone e câmara. Continuam
+`NOT_IMPLEMENTED` a escolha de entrada de som e a configuração de ecrãs, pelas
+razões no [README do serviço](../../services/system-service/README.md). Estão
+testados contra duplos e não provados numa máquina.

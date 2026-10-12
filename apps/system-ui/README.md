@@ -102,7 +102,11 @@ Português, inglês e francês em `ui/strings.js`. O idioma é o do sistema
 
 `ui-tests/` serve a interface num browser com um duplo dos dois serviços
 (`fake.js`, cenários `#signed-out`, `#locked`, `#active`, `#offline`, `#mfa`,
-`#down`). Serve para ver e medir a interface; não prova nada sobre os serviços.
+`#down`). Em `#active` há Wi-Fi com quatro redes (a palavra-passe que o duplo
+aceita para «Biblioteca» é `palavra-passe-wifi`), dois dispositivos Bluetooth
+(os auscultadores recusam emparelhar, como um que pedisse código), duas placas
+de som e dois ecrãs. Serve para ver e medir a interface; não prova nada sobre
+os serviços.
 
 ```bash
 python3 apps/system-ui/ui-tests/serve.py 18766
@@ -116,8 +120,17 @@ faz-se com `infra/system-ui/bench/` numa VM com placa gráfica virtual.
 `IMPLEMENTED`, provado numa VM `arm64`: entrar (com recusa e nova tentativa), a
 barra com o Workspace por baixo, definições rápidas e Sistema com dados reais
 do System Service. **Não** provado em `amd64` nem em hardware físico. O leitor
-de ecrã está `NOT_YET_CERTIFIED`. Wi-Fi, Bluetooth e som aparecem como
-indisponíveis porque o System Service ainda responde `NOT_IMPLEMENTED`.
+de ecrã está `NOT_YET_CERTIFIED`.
+
+As páginas **Rede** (Wi-Fi: rádio, procurar, ligar com a palavra-passe num
+diálogo de confiança, desligar, esquecer; endereçamento com fios por DHCP ou
+fixo), **Bluetooth** (ligar, procurar, emparelhar, ligar, desligar, remover),
+**Som** (volume e silêncio da saída e da entrada, saída predefinida), **Ecrãs**
+(ligados, modo preferido, brilho) e **Privacidade** (microfone e câmara)
+mostram o estado que o System Service lê e agem por ele. Foram vistas só na
+bancada, contra o duplo; **não** foram provadas numa máquina. O endereçamento
+pede uma prova reforçada do Core (`CORE_STEP_UP`) que este ecrã ainda não
+oferece: o diálogo di-lo, e não se aplica daqui.
 
 ## Construir
 

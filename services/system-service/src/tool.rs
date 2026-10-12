@@ -36,6 +36,12 @@ pub enum Tool {
     Rfkill,
     /// `ip`: only read, and only as JSON.
     Ip,
+    /// `amixer`: ALSA mixer levels and switches of a card, read and set.
+    Amixer,
+    /// `netplan`: only `apply`, after the service wrote its own file.
+    Netplan,
+    /// `udevadm`: only `trigger` of one subsystem, after a rule changed.
+    Udevadm,
 }
 
 impl Tool {
@@ -49,7 +55,44 @@ impl Tool {
             Self::Hostnamectl => "/usr/bin/hostnamectl",
             Self::Rfkill => "/usr/sbin/rfkill",
             Self::Ip => "/usr/sbin/ip",
+            Self::Amixer => "/usr/bin/amixer",
+            Self::Netplan => "/usr/sbin/netplan",
+            Self::Udevadm => "/usr/bin/udevadm",
         }
+    }
+
+    /// How long it may take. `netplan apply` restarts the network daemon and
+    /// waits for it; a mixer answers at once.
+    #[must_use]
+    pub const fn deadline(self) -> Duration {
+        match self {
+            Self::Netplan => Duration::from_secs(90),
+            Self::Udevadm => Duration::from_secs(30),
+            Self::Amixer => Duration::from_secs(10),
+            _ => DEADLINE,
+        }
+    }
+}
+
+/// Who runs the tools: the system, or, in tests, a recording that answers
+/// from a script. Adapters take one of these and never call [`run`] behind
+/// its back, so what they would ask the system is observable.
+pub trait Runner: Send + Sync {
+    /// Run `tool` with `args`, as [`run`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`run`].
+    fn run(&self, tool: Tool, args: &[&str]) -> Result<String, AdapterFailure>;
+}
+
+/// The real system.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct System;
+
+impl Runner for System {
+    fn run(&self, tool: Tool, args: &[&str]) -> Result<String, AdapterFailure> {
+        run(tool, args)
     }
 }
 
@@ -89,7 +132,7 @@ pub fn value(arg: &str) -> Option<&str> {
 /// a non-zero exit, [`AdapterFailure::UnexpectedReply`] when its output is not
 /// UTF-8.
 pub fn run(tool: Tool, args: &[&str]) -> Result<String, AdapterFailure> {
-    run_program(tool.path(), args, DEADLINE)
+    run_program(tool.path(), args, tool.deadline())
 }
 
 /// [`run`] with the program given: exists so the runner itself can be tested
@@ -200,6 +243,97 @@ pub fn run_logged(
 }
 
 #[cfg(test)]
+pub mod fake {
+    //! A runner that answers from a script and records what it was asked.
+
+    use super::{AdapterFailure, Runner, Tool};
+    use std::sync::Mutex;
+
+    type Answer = (Tool, Vec<String>, Result<String, AdapterFailure>);
+
+    /// A scripted runner. An exact `(tool, args)` gets its scripted answer.
+    /// Anything else that only reads (`get`, `show`) fails as a missing
+    /// control would; anything that changes succeeds with no output.
+    #[derive(Default)]
+    pub struct Script {
+        answers: Mutex<Vec<Answer>>,
+        /// Every call, in order.
+        pub calls: Mutex<Vec<(Tool, Vec<String>)>>,
+    }
+
+    impl Script {
+        /// `tool args` prints `out`.
+        pub fn answer(&self, tool: Tool, args: &[&str], out: &str) {
+            self.answers.lock().unwrap().push((
+                tool,
+                args.iter().map(|a| (*a).to_owned()).collect(),
+                Ok(out.to_owned()),
+            ));
+        }
+
+        /// `tool args` fails with `failure`, before any answer scripted for it.
+        pub fn fail(&self, tool: Tool, args: &[&str], failure: AdapterFailure) {
+            self.answers.lock().unwrap().insert(
+                0,
+                (
+                    tool,
+                    args.iter().map(|a| (*a).to_owned()).collect(),
+                    Err(failure),
+                ),
+            );
+        }
+
+        /// `tool args` no longer fails.
+        pub fn heal(&self, tool: Tool, args: &[&str]) {
+            self.answers.lock().unwrap().retain(|(t, a, r)| {
+                !(*t == tool && r.is_err() && a.iter().map(String::as_str).eq(args.iter().copied()))
+            });
+        }
+
+        /// Whether some tool ran with exactly `args`.
+        pub fn ran(&self, args: &[&str]) -> bool {
+            self.calls
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(_, a)| a.iter().map(String::as_str).eq(args.iter().copied()))
+        }
+
+        /// The calls that changed something (not `get`/`show`), in order.
+        pub fn changes(&self) -> Vec<(Tool, Vec<String>)> {
+            self.calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(_, a)| !a.iter().any(|w| w == "get" || w == "show"))
+                .cloned()
+                .collect()
+        }
+    }
+
+    impl Runner for Script {
+        fn run(&self, tool: Tool, args: &[&str]) -> Result<String, AdapterFailure> {
+            let args: Vec<String> = args.iter().map(|a| (*a).to_owned()).collect();
+            self.calls.lock().unwrap().push((tool, args.clone()));
+            if let Some((_, _, answer)) = self
+                .answers
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(t, a, _)| *t == tool && *a == args)
+            {
+                return answer.clone();
+            }
+            if args.iter().any(|w| w == "get" || w == "show") {
+                Err(AdapterFailure::Refused)
+            } else {
+                Ok(String::new())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -211,6 +345,10 @@ mod tests {
             Tool::Localectl,
             Tool::Hostnamectl,
             Tool::Rfkill,
+            Tool::Ip,
+            Tool::Amixer,
+            Tool::Netplan,
+            Tool::Udevadm,
         ] {
             let p = t.path();
             assert!(p.starts_with("/usr/"), "{p}");

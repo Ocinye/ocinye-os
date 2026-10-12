@@ -143,8 +143,11 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     let accounts = Accounts::from_passwd(&fs::read_to_string("/etc/passwd").unwrap_or_default());
+    let linux = Linux::new(Roots::system());
+    // A microphone the member blocked stays blocked across a restart.
+    linux.restore();
     let shared = Arc::new(Shared {
-        platform: Box::new(Linux::new(Roots::system())),
+        platform: Box::new(linux),
         session: Box::new(SessionOverSocket),
         core: Box::new(CoreThroughSession),
         audit: Box::new(FileAudit::new("/var/log/ocinye/system-audit.jsonl".into())),
