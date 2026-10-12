@@ -707,7 +707,7 @@
       const reboot = u && u.phase === 'AWAITING_REBOOT';
       inner = `<h2 id="dlg-h">${t('u.pop.t')}</h2><p>${u ? (u.phase === 'UPDATE_AVAILABLE' && a ? t('u.available', { v: a.version }) : t('up.' + u.phase)) : ''}${u && u.reason ? ' — ' + t('ur.' + u.reason) : ''}</p>
         ${u ? `<dl class="sx-kv"><dt>${t('u.pop.os')}</dt><dd class="sx-mono">${esc(u.current ? u.current.version : '—')}${a ? ' → ' + esc(a.version) : ''}</dd>${a ? `<dt>${t('u.restartq')}</dt><dd>${t(a.reboot_required ? 'u.yes' : 'u.no')}</dd>` : ''}</dl>` : ''}
-        <div class="sx-dialog__acts">${btn('ghost', t('u.later'), 'upd-later')}${reboot ? btn('gold', t('u.restart'), 'power-ask', { arg: 'restart', icon: 'restart' }) : btn('pri', t('u.open'), 'upd-open')}</div>`;
+        <div class="sx-dialog__acts">${btn('ghost', t('u.later'), 'upd-later')}${reboot ? btn('gold', t('u.restart'), 'power-ask', { arg: 'restart', icon: 'restart', af: true }) : btn('pri', t('u.open'), 'upd-open', { af: true })}</div>`;
     } else if (d && d.kind === 'languages') {
       inner = `<h2 id="dlg-h">${t('lang.choose')}</h2><div class="sx-menu">${['pt', 'en', 'fr'].map((c) => btn(c === S.lang ? 'pri' : '', t('lang.' + c), 'lang', { arg: c })).join('')}</div>
         <div class="sx-dialog__acts">${btn('ghost', t('power.cancel'), 'dialog-cancel')}</div>`;
