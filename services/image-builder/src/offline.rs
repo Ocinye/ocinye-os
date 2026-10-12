@@ -670,11 +670,31 @@ pub fn inspect(m: &Mounted, profile: &str, arch: &str, release_id: &str) -> Insp
             !r.join("usr/lib/udisks2").exists() && !r.join("usr/sbin/automount").exists(),
             None,
         );
+        // The medium installs; it does not join a Wi-Fi network or pair a
+        // device. Masked, so not even D-Bus activation starts them.
+        let masked = |unit: &str| {
+            fs::read_link(r.join("etc/systemd/system").join(unit))
+                .is_ok_and(|t| t == Path::new("/dev/null"))
+        };
+        c(
+            "no_radio_daemons",
+            masked("iwd.service") && masked("bluetooth.service"),
+            None,
+        );
     } else {
         c(
             "block_guard_absent_from_installed_system",
             guard_present.is_empty(),
             (!guard_present.is_empty()).then(|| guard_present.join(",")),
+        );
+        // What the System Service asks for Wi-Fi and Bluetooth (ADR-0031).
+        c(
+            "radio_daemons_enabled",
+            wants("iwd.service")
+                && r.join("etc/systemd/system/bluetooth.target.wants/bluetooth.service")
+                    .symlink_metadata()
+                    .is_ok(),
+            None,
         );
     }
     match profile {

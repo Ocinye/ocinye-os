@@ -28,8 +28,18 @@ a interface nativa do sistema, e as unidades que os ligam:
 | `ocinye-display.service` | o compositor e a interface, como `ocinye-ui`, em `tty1`; o ecrã e a entrada vêm do `seatd` (o logind, sem polkit, recusa activar a sessão de quem não é root). **Nunca activada no arranque**: é a `ocinye-seat-start` que a arranca. Se o ecrã não levantar, `tty1` volta à consola de texto |
 | `ocinye-seat-link.path` / `.service` | quando existe `/etc/ocinye/release.env` (há uma Instância instalada), aprende a chave pública de sessão pela porta de loopback do proxy e regista o endereço do Workspace |
 | `ocinye-console@tty2.service` | a consola de texto e o código de emparelhamento, a `Ctrl+Alt+F2` do ecrã gráfico (e na linha série, como antes) |
+| `iwd.service` | o Wi-Fi, que o System Service pede por D-Bus; só associa e autentica (`/etc/iwd/main.conf`: `EnableNetworkConfiguration=false`) |
+| `bluetooth.service` | o BlueZ, que o System Service pede por D-Bus; sem agente de emparelhamento |
 
 Uma máquina sem dispositivo de ecrã fica com a consola de texto em `tty1`.
+
+O endereço de uma ligação Wi-Fi vem do `systemd-networkd`, por DHCP
+(`/etc/systemd/network/80-ocinye-wifi.network`, que casa com `Type=wlan`), como
+o das ligações com fios descritas pelo netplan. O som é ALSA (`alsa-utils`), sem
+servidor de som. Não há NetworkManager. O suporte de instalação (OIE) traz os
+pacotes, mas o `iwd` e o `bluetooth` ficam **mascarados** nele, e a inspecção
+offline verifica-o (`no_radio_daemons`); numa imagem instalável verifica que
+estão activados (`radio_daemons_enabled`).
 
 ### Activação local
 
