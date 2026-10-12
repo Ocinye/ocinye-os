@@ -61,13 +61,23 @@ impl UpdateLink {
         };
         let opaque: String = actor
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .take(64)
             .collect();
         let request = EngineRequest {
             protocol: PROTOCOL,
             operation,
-            actor: if opaque.is_empty() { "unknown".into() } else { opaque },
+            actor: if opaque.is_empty() {
+                "unknown".into()
+            } else {
+                opaque
+            },
             via: via.to_owned(),
         };
         let mut stream = UnixStream::connect(&self.socket).map_err(|_| unreachable())?;

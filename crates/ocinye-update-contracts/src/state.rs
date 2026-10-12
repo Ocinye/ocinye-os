@@ -117,7 +117,12 @@ impl Phase {
         match self {
             Idle | UpdateAvailable | Completed | DownloadFailed | VerificationFailed
             | PreflightFailed | InstallFailed | RolledBack => {
-                matches!(next, Checking | Downloading | Idle | UpdateAvailable)
+                // `RollingBack` from rest: an operator returns to the previous
+                // release.
+                matches!(
+                    next,
+                    Checking | Downloading | Idle | UpdateAvailable | RollingBack
+                )
             }
             Checking => matches!(next, Idle | UpdateAvailable),
             Downloading => matches!(next, Downloaded | DownloadFailed | Idle),

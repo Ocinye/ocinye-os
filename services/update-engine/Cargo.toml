@@ -1,0 +1,31 @@
+[package]
+name = "ocinye-update-engine"
+description = "The Ocinye Update Engine: signed releases applied without reinstalling, with a durable journal, health gates and rollback (ADR-0032)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ocinye-update-engine"
+path = "src/main.rs"
+
+[dependencies]
+ocinye-update-contracts = { workspace = true }
+ocinye-update-repository = { workspace = true }
+tough = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# flock for the maintenance lock, statvfs for free space, peer credentials.
+rustix = { workspace = true, features = ["fs", "net", "process"] }
+
+[dev-dependencies]
+tempfile = "3"
+tar = { workspace = true }
+aws-lc-rs = { workspace = true }
+jiff = { workspace = true }

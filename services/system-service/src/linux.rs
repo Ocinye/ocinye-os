@@ -19,16 +19,16 @@ use ocinye_system_contracts::state::{
     AccessibilityState, Availability, Battery, CapabilityInventory, Connectivity,
     DiagnosticsReport, Disk, DisplayState, HardwareAvailability, Health, HealthItem, InterfaceKind,
     KeyboardState, Language, LocaleState, NetworkInterface, NetworkState, Percent, PowerSource,
-    PowerState, PrivacyState, RecoveryState, RemoteAccessState, SecureBoot,
-    StorageState, SystemHealth, SystemInfo, TimeState, WifiRadioState,
+    PowerState, PrivacyState, RecoveryState, RemoteAccessState, SecureBoot, StorageState,
+    SystemHealth, SystemInfo, TimeState, WifiRadioState,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::activation::{Activation, Installer, ReleaseInstaller};
 use crate::service::{Context, Platform};
+use crate::tool::{self, Tool};
 use crate::update_link::UpdateLink;
 use ocinye_update_contracts::wire::{EngineReply, Operation};
-use crate::tool::{self, Tool};
 
 /// Where the system's files are. `/` on a machine; a temporary tree in tests.
 #[derive(Debug, Clone)]
@@ -576,7 +576,10 @@ impl Linux {
     /// the engine (an image older than it, or the engine down), nothing is
     /// claimed.
     fn recovery(&self) -> RecoveryState {
-        let state = match self.update.ask(Operation::Status, "recovery-operator", "recovery") {
+        let state = match self
+            .update
+            .ask(Operation::Status, "recovery-operator", "recovery")
+        {
             Ok(EngineReply::State { state }) => Some(state),
             _ => None,
         };
@@ -904,7 +907,13 @@ mod tests {
     }
     impl PerformTest for Linux {
         fn perform_test(&self, request: &Request) -> Result<Payload, Reason> {
-            self.perform(request, &Context { actor: "presence", via: "cli" })
+            self.perform(
+                request,
+                &Context {
+                    actor: "presence",
+                    via: "cli",
+                },
+            )
         }
     }
     use std::sync::atomic::{AtomicU32, Ordering};

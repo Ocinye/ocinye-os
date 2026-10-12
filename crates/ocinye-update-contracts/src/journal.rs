@@ -6,7 +6,7 @@
 //! one, never half of one.
 
 use crate::reason::UpdateReason;
-use crate::state::{Phase, ReleaseInfo, ReleaseSource, UpdateOutcome};
+use crate::state::{AvailableRelease, Phase, ReleaseInfo, ReleaseSource, UpdateOutcome};
 use crate::version::{Channel, ReleaseNumber, ReleaseVersion};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -118,6 +118,8 @@ pub struct Journal {
     pub last_outcome: Option<UpdateOutcome>,
     /// Why, when not the happy path.
     pub reason: Option<UpdateReason>,
+    /// The release the last check offered, kept across restarts.
+    pub offered: Option<AvailableRelease>,
 }
 
 impl Journal {
@@ -134,6 +136,7 @@ impl Journal {
             last_check: None,
             last_outcome: None,
             reason: None,
+            offered: None,
         }
     }
 

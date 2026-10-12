@@ -18,7 +18,11 @@ use crate::service::{Platform, Service};
 struct Recorder(Mutex<Vec<CapabilityId>>);
 
 impl Platform for Recorder {
-    fn perform(&self, request: &Request, _: &crate::service::Context<'_>) -> Result<Payload, Reason> {
+    fn perform(
+        &self,
+        request: &Request,
+        _: &crate::service::Context<'_>,
+    ) -> Result<Payload, Reason> {
         self.0.lock().unwrap().push(request.capability());
         Ok(Payload::Done)
     }

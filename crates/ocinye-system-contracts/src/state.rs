@@ -630,4 +630,3 @@ mod tests {
         assert!(serde_json::from_str::<Language>("\"es\"").is_err());
     }
 }
-

@@ -265,8 +265,14 @@ mod tests {
             (&["update", "check"], CapabilityId::UpdateCheck),
             (&["update", "install"], CapabilityId::UpdateInstall),
             (&["update", "rollback"], CapabilityId::UpdateRollback),
-            (&["update", "channel", "stable"], CapabilityId::UpdateConfigure),
-            (&["update", "repository", "none"], CapabilityId::UpdateConfigure),
+            (
+                &["update", "channel", "stable"],
+                CapabilityId::UpdateConfigure,
+            ),
+            (
+                &["update", "repository", "none"],
+                CapabilityId::UpdateConfigure,
+            ),
             (
                 &[
                     "update",
@@ -276,7 +282,10 @@ mod tests {
                 ],
                 CapabilityId::UpdateConfigure,
             ),
-            (&["update", "import", "release.ocu"], CapabilityId::UpdateImport),
+            (
+                &["update", "import", "release.ocu"],
+                CapabilityId::UpdateImport,
+            ),
             (&["base", "apply"], CapabilityId::BaseApply),
         ];
         assert_eq!(parse(&["update", "channel", "beta"]), None);

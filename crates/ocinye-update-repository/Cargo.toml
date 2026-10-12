@@ -14,7 +14,6 @@ tough = { workspace = true }
 jiff = { workspace = true }
 aws-lc-rs = { workspace = true }
 tar = { workspace = true }
-tokio = { workspace = true }
 url = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
@@ -24,3 +23,4 @@ futures = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+tokio = { workspace = true }

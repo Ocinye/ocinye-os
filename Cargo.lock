@@ -4282,6 +4282,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocinye-update-engine"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "futures",
+ "jiff",
+ "ocinye-update-contracts",
+ "ocinye-update-repository",
+ "reqwest",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "tokio",
+ "tough",
+ "url",
+]
+
+[[package]]
 name = "ocinye-update-repository"
 version = "0.1.0"
 dependencies = [
