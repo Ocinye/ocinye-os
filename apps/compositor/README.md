@@ -57,6 +57,12 @@ que a política lhe dá.
   que o ecrã prefere. **Uma saída na v1.**
 - Desenho em OpenGL ES sobre GBM, que o Mesa também dá em software: uma máquina
   sem GPU acelerada continua a ter ecrã.
+- Ao cliente dá memória partilhada (`wl_shm`) e nenhum `linux-dmabuf`; arranca-o
+  com `WEBKIT_DISABLE_DMABUF_RENDERER=1` e `WEBKIT_DISABLE_COMPOSITING_MODE=1`,
+  para que a interface nunca dependa de GL no processo web. Numa imagem `amd64`
+  construída, sem estas variáveis, o processo web do WebKitGTK 2.52 morria no
+  `llvmpipe` e a janela ficava em branco com o compositor levantado; qualquer
+  uma das duas, sozinha, fazia a interface aparecer na mesma imagem.
 - Entrada pelo `libinput`: teclado para a superfície com foco, ponteiro para a
   superfície por baixo dele.
 - Sobre a biblioteca [Smithay](https://github.com/Smithay/smithay) 0.7 (MIT).
@@ -67,8 +73,9 @@ que a política lhe dá.
 (`infra/system-ui/bench/`): toma o ecrã, mostra a interface do sistema (Tauri
 sobre WebKitGTK), recebe teclado e ponteiro, dá a barra à superfície de
 confiança e o resto à janela do Workspace, e esconde-a quando a interface pede o
-ecrã. **Não** provado: `amd64`, hardware físico, segunda saída, mudança de
-terminal virtual. Ainda **não** tem: cursores por contexto (há uma seta só),
+ecrã. Provado também em imagens `arm64` e `amd64` construídas, sob QEMU com
+`virtio-gpu` (`scripts/image-e2e.sh seat` e `window`). **Não** provado:
+hardware físico, segunda saída, mudança de terminal virtual. Ainda **não** tem: cursores por contexto (há uma seta só),
 toque, e escala de saída diferente de 1.
 
 O desenho é concluído (`glFinish`) antes de cada troca de página: um

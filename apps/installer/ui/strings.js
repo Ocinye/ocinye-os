@@ -1,6 +1,6 @@
 /* Ocinye OS Installer · D011 · textos pt (canónico) · en · fr.
-   Cada chave tem exactamente três textos. Valores de exemplo só com domínios
-   .test / example.com e endereços de documentação (192.0.2.0/24, 2001:db8::/32).
+   Cada chave tem exactamente três textos. Domínios de exemplo só em .com
+   (empresa.com) e endereços de documentação (192.0.2.0/24, 2001:db8::/32).
    Nenhum segredo real: as credenciais são marcadores fictícios evidentes. */
 window.OI_T = {
   // ── moldura
@@ -495,9 +495,9 @@ window.OI_T = {
   'ver.https': ['HTTPS e certificado', 'HTTPS and certificate', 'HTTPS et certificat'],
   'ver.httpsD': ['O certificado servido é o do plano · TLS 1.3', 'The served certificate is the planned one · TLS 1.3', 'Le certificat servi est celui du plan · TLS 1.3'],
   'ver.ep': ['Ponto → Instância', 'Endpoint → Instance', 'Point → Instance'],
-  'ver.epD': ['Cada endereço resolve a Instância esperada; business.empresa.test fixa Business', 'Each address resolves the expected Instance; business.empresa.test pins Business', 'Chaque adresse résout l’Instance attendue ; business.empresa.test fixe Business'],
+  'ver.epD': ['Cada endereço resolve a Instância esperada; business.empresa.com fixa Business', 'Each address resolves the expected Instance; business.empresa.com pins Business', 'Chaque adresse résout l’Instance attendue ; business.empresa.com fixe Business'],
   'ver.login': ['Página de entrada', 'Sign-in page', 'Page de connexion'],
-  'ver.loginD': ['https://os.empresa.test/ → 303 → /login → 200', 'https://os.empresa.test/ → 303 → /login → 200', 'https://os.empresa.test/ → 303 → /login → 200'],
+  'ver.loginD': ['https://os.empresa.com/ → 303 → /login → 200', 'https://os.empresa.com/ → 303 → /login → 200', 'https://os.empresa.com/ → 303 → /login → 200'],
   'ver.hwD': ['GPU, VRAM e runtime registados como detectados; nada sobre rede de computação', 'GPU, VRAM and runtime recorded as detected; nothing about compute networks', 'GPU, VRAM et runtime enregistrés comme détectés ; rien sur les réseaux de calcul'],
   'ver.failT': ['Os serviços correm, mas o Core não está pronto', 'Services are running, but the Core is not ready', 'Les services tournent, mais le Core n’est pas prêt'],
   'ver.failB': ['/ready responde BLOCKED: o componente de compatibilidade diz que o Workspace e o Core falam versões de contrato diferentes. A instalação não está operacional e não é declarada concluída.', '/ready answers BLOCKED: the compatibility component says the Workspace and the Core speak different contract versions. The installation is not operational and is not declared complete.', '/ready répond BLOCKED : le composant de compatibilité indique que le Workspace et le Core parlent des versions de contrat différentes. L’installation n’est pas opérationnelle et n’est pas déclarée terminée.'],
@@ -518,7 +518,7 @@ window.OI_T = {
   'done.dists': ['Distribuições', 'Distributions', 'Distributions'],
   'done.eps': ['Pontos de acesso', 'Access endpoints', 'Points d’accès'],
   'done.next': ['A seguir', 'Next', 'Ensuite'],
-  'done.next1': ['Entre em https://os.empresa.test com a identidade privilegiada; defina a palavra-passe e o segundo factor.', 'Sign in at https://os.empresa.test with the privileged identity; set the password and second factor.', 'Connectez-vous sur https://os.empresa.test avec l’identité privilégiée ; définissez le mot de passe et le second facteur.'],
+  'done.next1': ['Entre em https://os.empresa.com com a identidade privilegiada; defina a palavra-passe e o segundo factor.', 'Sign in at https://os.empresa.com with the privileged identity; set the password and second factor.', 'Connectez-vous sur https://os.empresa.com avec l’identité privilégiée ; définissez le mot de passe et le second facteur.'],
   'done.next2': ['Guarde a raiz de selagem (/etc/ocinye/core.env) fora do servidor.', 'Keep the sealing root (/etc/ocinye/core.env) off the server.', 'Conservez la racine de scellement (/etc/ocinye/core.env) hors du serveur.'],
   'done.next3': ['Dê acesso aos membros em Administração.', 'Give members access in Administration.', 'Donnez l’accès aux membres dans Administration.'],
   'done.opens': ['Abre no browser deste computador.', 'Opens in this computer’s browser.', 'S’ouvre dans le navigateur de cet ordinateur.'],

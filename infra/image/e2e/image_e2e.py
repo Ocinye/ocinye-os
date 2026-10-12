@@ -68,6 +68,10 @@ def firmware(arch):
 
 RUNNING = []
 
+# Seconds between two keys the bench presses (see `Vm.press`).
+KEY_GAP_NATIVE = 0.04
+KEY_GAP_EMULATED = 0.3
+
 
 class Vm:
     """One QEMU guest with its serial console on a unix socket."""
@@ -220,6 +224,13 @@ class Vm:
         if shift:
             events = [k("shift", True)] + events + [k("shift", False)]
         self.qmp({"execute": "input-send-event", "arguments": {"events": events}})
+        # One key at a time, at a pace the guest keeps up with. Key repeat is
+        # the client's (Wayland): a press whose release reaches it more than
+        # the compositor's repeat delay later is repeated. Under full
+        # emulation a guest that falls behind a burst of keys delivers them
+        # that late, and the amd64 set-up form received extra Tabs and spaces
+        # (boxes ticked, a name typed into the wrong field).
+        time.sleep(KEY_GAP_NATIVE if native(self.arch) else KEY_GAP_EMULATED)
 
     def type(self, text):
         """Type on the guest's keyboard (US layout). The text is never logged."""
@@ -234,7 +245,6 @@ class Vm:
                 self.press(ch)
             else:
                 raise RuntimeError("a character the bench keyboard cannot type")
-            time.sleep(0.04)
 
     def stop(self):
         if self.proc and self.proc.poll() is None:
@@ -642,7 +652,15 @@ def scenario_seat(a):
         ready = activation()
         r.check("seat: the machine offers to create its Instance from the release it carries", ready.get("phase") == "READY" and ready.get("release_id"), ready)
         time.sleep(20)
-        r.check("seat: the screen shows the first-start set-up", png_is_a_picture(vm.screenshot(os.path.join(shots, "1-set-up.png"))))
+        shown = png_is_a_picture(vm.screenshot(os.path.join(shots, "1-set-up.png")))
+        r.check("seat: the screen shows the first-start set-up", shown)
+        if not shown:
+            # What the machine says of its own screen: the devices, the
+            # drivers, and the display unit's journal. Evidence, not a check.
+            why = run("ls -l /dev/dri 2>&1; lsmod | grep -E 'drm|gpu|bochs|virtio' 2>&1; "
+                      "sudo -n journalctl -b -u ocinye-display.service -u seatd.service --no-pager -o cat 2>&1 | tail -n 80; "
+                      "pgrep -a -f 'ocinye-|WebKit' 2>&1; id ocinye-ui 2>&1; sudo -n dmesg | grep -iE 'segfault|traps:|killed process|oom' | tail -n 10").stdout.decode(errors="replace")
+            log("seat: display diagnosis\n" + why)
         # The whole set-up, at the keyboard: the form's fields in order, the
         # four distribution boxes passed over (research is ticked), Enter.
         vm.type("Bancada do posto")
@@ -657,7 +675,9 @@ def scenario_seat(a):
         vm.type("Admin de Prova")
         vm.press("tab")
         vm.type("admin@ocinye-seat.test")
-        time.sleep(1)
+        # The picture of the filled form is the one taken after the guest has
+        # drawn the last field, and Enter follows it.
+        time.sleep(1 if native(a.arch) else 15)
         vm.screenshot(os.path.join(shots, "2-set-up-filled.png"))
         vm.press("ret")
         time.sleep(15)
@@ -1133,6 +1153,14 @@ def preserve_iso_failure(work, target, collector=None):
         return None
 
 
+def esp_boot_artifacts(files, suffix):
+    """Shim and grub of one architecture in one vendor directory, and the
+    removable fallback loader."""
+    vendors = {f.split("/")[1] for f in files if f.startswith("EFI/") and f.count("/") == 2} - {"BOOT"}
+    paired = any(f"EFI/{v}/shim{suffix}.efi" in files and f"EFI/{v}/grub{suffix}.efi" in files for v in vendors)
+    return paired and f"EFI/BOOT/BOOT{suffix.upper()}.EFI" in files
+
+
 def scenario_iso(a):
     r = Results(f"iso-{a.arch}")
     work = a.work
@@ -1230,10 +1258,12 @@ def scenario_iso(a):
                 # curtin log must show the offline install fetched nothing — a
                 # zero count over the fetch/resolution-failure and in-target
                 # install signatures proves no network package op was needed.
-                efi_expect = {
-                    "amd64": ["EFI/grub/shimx64.efi", "EFI/grub/grubx64.efi", "EFI/BOOT/BOOTX64.EFI"],
-                    "arm64": ["EFI/grub/shimaa64.efi", "EFI/grub/grubaa64.efi", "EFI/BOOT/BOOTAA64.EFI"],
-                }[a.arch]
+                # The vendor directory is the distributor's name as grub
+                # derives it, and it is not the same on the two architectures
+                # (`grub` on amd64, `ubuntu` on arm64): what is asked is the
+                # shim and grub of this architecture in one vendor directory,
+                # and the removable fallback.
+                efi_suffix = {"amd64": "x64", "arm64": "aa64"}[a.arch]
                 p = ssh(vm2.port, "ocinye", k1,
                         "sudo -n find /boot/efi -maxdepth 3 -type f -printf '%P\\n' 2>/dev/null; "
                         "echo '---LOG---'; "
@@ -1243,7 +1273,7 @@ def scenario_iso(a):
                 esp_part, _, log_part = p.stdout.decode().partition("---LOG---")
                 esp_files = set(esp_part.split())
                 r.check("ISO: ESP carries the UEFI boot artifacts for the architecture",
-                        all(f in esp_files for f in efi_expect), sorted(esp_files))
+                        esp_boot_artifacts(esp_files, efi_suffix), sorted(esp_files))
                 hit = re.search(r"\b(\d+)\b", log_part)
                 r.check("ISO: offline install required no package fetch (empty curtin apt)",
                         hit is not None and hit.group(1) == "0", log_part.strip()[:200])
@@ -1352,7 +1382,10 @@ def scenario_window(a):
         # nothing — the engine is never asked to confirm, and nothing is written.
         before = size()
         vm.type("0000")
-        time.sleep(4)
+        # The same wait as for the right confirmation below: Enter must reach
+        # a dialog the engine has answered for the wrong value, or the check
+        # proves nothing.
+        time.sleep(4 if native(a.arch) else 45)
         vm.press("ret")
         time.sleep(12)
         vm.screenshot(os.path.join(shots, "8-confirm-wrong.png"))
@@ -1364,7 +1397,13 @@ def scenario_window(a):
             vm.press("backspace")
             time.sleep(0.1)
         vm.type("7F3A")
-        time.sleep(5)
+        # Enter is pressed once, after the engine has checked what was typed:
+        # the window never decides a confirmation, it asks the engine
+        # (`check_confirmation`) and enables the action only on its answer, so
+        # an earlier Enter is rightly ignored, and a second Enter after the
+        # engine accepted would land on the next step. Under full emulation
+        # (amd64 on this arm64 bench) that round trip took more than 5 s.
+        time.sleep(5 if native(a.arch) else 45)
         vm.screenshot(os.path.join(shots, "9-confirm-right.png"))
         vm.press("ret")
         need("window: the confirmation typed in the dialog was accepted by the engine", reached(vm, "confirmation=accepted", 120))

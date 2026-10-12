@@ -66,6 +66,17 @@ fn main() -> ExitCode {
         .env("WAYLAND_DISPLAY", &state.socket_name)
         .env("XDG_SESSION_TYPE", "wayland")
         .env("GDK_BACKEND", "wayland")
+        // This compositor gives its client shared-memory buffers (`wl_shm`)
+        // and no `linux-dmabuf`: WebKit's accelerated paths gain nothing here,
+        // and on amd64 they cost the screen. On a built amd64 image the web
+        // process rendered through Mesa's software GL (llvmpipe) under the
+        // DMA-BUF renderer and died in it, leaving the window blank with the
+        // compositor up and the engine link alive. Either variable alone made
+        // the interface appear on the same image (probe of 2026-10-11, WebKitGTK
+        // 2.52.6); both are set so that the interface never depends on GL in
+        // the web process — the one path that is the same on every machine.
+        .env("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+        .env("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
         .spawn()
     {
         Ok(child) => state.client = Some(child),
