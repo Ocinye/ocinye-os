@@ -70,8 +70,15 @@ interfaces que o motor encontrou); depois dos discos, as **opções avançadas**
 rede, uma porta de saída noutra sub-rede ou um nome inválido voltam com a
 razão, e o passo não avança. A revisão mostra as três antes da confirmação, e
 o motor grava-as no disco instalado (`/etc/default/keyboard`, um netplan
-`0600` só para a escolha estática, `/etc/hostname`). O Live e a verificação de
-hardware ficam nas consolas de texto.
+`0600` só para a escolha estática, `/etc/hostname`).
+
+Nos arranques que não instalam — Experimentar, Verificar o hardware,
+Recuperação — o motor manda à janela o passo `MEDIA`: um relatório só de
+leitura (computador, processador, memória, firmware e Secure Boot, discos, rede,
+Wi-Fi, Bluetooth, ecrãs, som) e se uma instalação poderia seguir. O que o motor
+não consegue ler chega como `null` e a janela diz «Desconhecido», nunca
+«nenhum». As únicas acções são ler de novo, reiniciar e desligar; nenhuma
+escolhe, monta ou escreve um disco. Bancada: `#live`, `#hardware`, `#recovery`.
 
 ## Primeiro arranque
 

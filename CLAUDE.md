@@ -302,8 +302,9 @@ sem que nada falhe.
   (`scripts/image-e2e.sh window`): instalação completa só por controlos da
   janela, confirmação errada recusada sem escrita, e arranque do sistema
   instalado. O assistente escolhe também o teclado, a rede (automática ou
-  estática) e o nome da máquina, e o motor grava-os no disco instalado; o Live e a
-  verificação de hardware ficam em consolas de texto; o Workspace pede a sua
+  estática) e o nome da máquina, e o motor grava-os no disco instalado; o Live, a
+  verificação de hardware e a recuperação do suporte mostram na mesma janela um
+  relatório só de leitura (o que não se lê aparece como desconhecido); o Workspace pede a sua
   própria entrada (sem sessão única com o posto). Nada disto correu em
   hardware físico; o leitor de ecrã não foi certificado.
 - **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,

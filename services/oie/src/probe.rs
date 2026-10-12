@@ -3,6 +3,7 @@
 //! from marked so that it can never be chosen.
 
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::Path;
 
 use ocinye_image_contracts::oie::ProbedDisk;
@@ -205,10 +206,192 @@ pub fn mem_total(meminfo: &str) -> u64 {
         .map_or(0, |k| k * 1024)
 }
 
+/// The processor model, from `/proc/cpuinfo`. ARM kernels often do not say.
+pub fn cpu_model(cpuinfo: &str) -> Option<String> {
+    cpuinfo
+        .lines()
+        .find_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            matches!(k.trim(), "model name" | "Model" | "Processor" | "cpu model")
+                .then(|| v.trim().to_owned())
+        })
+        .filter(|v| !v.is_empty())
+}
+
+fn read_trim(path: &Path) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty() && s != "To Be Filled By O.E.M." && s != "Default string")
+}
+
+/// Maker and model, from the firmware tables (`/sys/class/dmi/id`).
+pub fn machine(sys: &Path) -> Option<String> {
+    let id = sys.join("class/dmi/id");
+    let parts: Vec<String> = ["sys_vendor", "product_name"]
+        .iter()
+        .filter_map(|f| read_trim(&id.join(f)))
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(" "))
+}
+
+/// Firmware vendor and version.
+pub fn firmware(sys: &Path) -> Option<String> {
+    let id = sys.join("class/dmi/id");
+    let parts: Vec<String> = ["bios_vendor", "bios_version"]
+        .iter()
+        .filter_map(|f| read_trim(&id.join(f)))
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(" "))
+}
+
+/// Whether the firmware enforces Secure Boot: the `SecureBoot` variable is
+/// four bytes of attributes and one of value. Unknown when it cannot be read.
+pub fn secure_boot(sys: &Path) -> Option<bool> {
+    let var = sys.join("firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-e98e8a39a0f6");
+    let bytes = fs::read(var).ok()?;
+    bytes.get(4).map(|b| *b == 1)
+}
+
+/// Entries of a class directory, or unknown when the class is not there (the
+/// driver that would create it is not loaded: that is not "none").
+fn class_count(dir: &Path) -> Option<u32> {
+    let entries = fs::read_dir(dir).ok()?;
+    Some(u32::try_from(entries.flatten().count()).unwrap_or(u32::MAX))
+}
+
+/// Wireless radios (`/sys/class/ieee80211`).
+pub fn wifi_radios(sys: &Path) -> Option<u32> {
+    class_count(&sys.join("class/ieee80211"))
+}
+
+/// Bluetooth controllers (`/sys/class/bluetooth`).
+pub fn bluetooth_controllers(sys: &Path) -> Option<u32> {
+    class_count(&sys.join("class/bluetooth"))
+}
+
+/// Connected display outputs (`/sys/class/drm/card*-*/status`), named as the
+/// connector without its card (`HDMI-A-1`, `Virtual-1`).
+pub fn displays(sys: &Path) -> Option<Vec<String>> {
+    let entries = fs::read_dir(sys.join("class/drm")).ok()?;
+    let mut out: Vec<String> = entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let (card, connector) = name.split_once('-')?;
+            if !card.starts_with("card") {
+                return None;
+            }
+            (read_trim(&e.path().join("status")).as_deref() == Some("connected"))
+                .then(|| connector.to_owned())
+        })
+        .collect();
+    out.sort();
+    Some(out)
+}
+
+/// Sound cards, from `/proc/asound/cards`. Unknown without the file.
+pub fn audio(cards: Option<&str>) -> Option<Vec<String>> {
+    let text = cards?;
+    Some(
+        text.lines()
+            .filter_map(|l| {
+                let (head, name) = l.split_once(" - ")?;
+                head.split_whitespace()
+                    .next()?
+                    .parse::<u32>()
+                    .ok()
+                    .map(|_| name.trim().to_owned())
+            })
+            .collect(),
+    )
+}
+
+/// Addresses per interface, from `ip -brief address` (`name state addr…`).
+pub fn addresses(brief: &str) -> BTreeMap<String, Vec<String>> {
+    brief
+        .lines()
+        .filter_map(|l| {
+            let mut f = l.split_whitespace();
+            let name = f.next()?.split('@').next()?.to_owned();
+            let _state = f.next()?;
+            Some((name, f.map(str::to_owned).collect()))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ocinye_image_contracts::oie::{classify, DiskProtection};
+
+    #[test]
+    fn o_que_a_sessao_le_e_o_que_nao_sabe() {
+        let x86 = "processor\t: 0\nvendor_id\t: GenuineIntel\nmodel name\t: Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz\n";
+        assert_eq!(
+            cpu_model(x86).as_deref(),
+            Some("Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz")
+        );
+        assert_eq!(cpu_model("processor\t: 0\nBogoMIPS\t: 48.00\n"), None);
+
+        let root = std::env::temp_dir().join(format!("oie-hw-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        // Nothing there: every fact is unknown, never "none".
+        assert_eq!(wifi_radios(&root), None);
+        assert_eq!(bluetooth_controllers(&root), None);
+        assert_eq!(displays(&root), None);
+        assert_eq!(secure_boot(&root), None);
+        assert_eq!(machine(&root), None);
+
+        fs::create_dir_all(root.join("class/ieee80211")).unwrap();
+        assert_eq!(wifi_radios(&root), Some(0));
+        fs::create_dir_all(root.join("class/ieee80211/phy0")).unwrap();
+        assert_eq!(wifi_radios(&root), Some(1));
+        for (c, st) in [
+            ("card0-HDMI-A-1", "connected"),
+            ("card0-DP-1", "disconnected"),
+            ("card0-eDP-1", "connected"),
+        ] {
+            fs::create_dir_all(root.join("class/drm").join(c)).unwrap();
+            fs::write(
+                root.join("class/drm").join(c).join("status"),
+                format!("{st}\n"),
+            )
+            .unwrap();
+        }
+        fs::create_dir_all(root.join("class/drm/card0")).unwrap();
+        assert_eq!(
+            displays(&root),
+            Some(vec!["HDMI-A-1".to_owned(), "eDP-1".to_owned()])
+        );
+        let id = root.join("class/dmi/id");
+        fs::create_dir_all(&id).unwrap();
+        fs::write(id.join("sys_vendor"), "LENOVO\n").unwrap();
+        fs::write(id.join("product_name"), "20L8S02E00\n").unwrap();
+        fs::write(id.join("bios_vendor"), "To Be Filled By O.E.M.\n").unwrap();
+        assert_eq!(machine(&root).as_deref(), Some("LENOVO 20L8S02E00"));
+        assert_eq!(firmware(&root), None);
+        let vars = root.join("firmware/efi/efivars");
+        fs::create_dir_all(&vars).unwrap();
+        let sb = vars.join("SecureBoot-8be4df61-93ca-11d2-aa0d-e98e8a39a0f6");
+        fs::write(&sb, [6, 0, 0, 0, 1]).unwrap();
+        assert_eq!(secure_boot(&root), Some(true));
+        fs::write(&sb, [6, 0, 0, 0, 0]).unwrap();
+        assert_eq!(secure_boot(&root), Some(false));
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(audio(None), None);
+        assert_eq!(audio(Some("--- no soundcards ---\n")), Some(vec![]));
+        let cards = " 0 [PCH            ]: HDA-Intel - HDA Intel PCH\n                      HDA Intel PCH at 0xf1340000 irq 135\n";
+        assert_eq!(audio(Some(cards)), Some(vec!["HDA Intel PCH".to_owned()]));
+
+        let a = addresses("enp1s0           UP             10.0.2.15/24 fec0::5054:ff:fe12:3456/64\nwlan0            DOWN           \n");
+        assert_eq!(
+            a["enp1s0"],
+            vec!["10.0.2.15/24", "fec0::5054:ff:fe12:3456/64"]
+        );
+        assert!(a["wlan0"].is_empty());
+    }
 
     /// Three disks as QEMU shows them for the ISO-3 gate: the ISO on a virtual
     /// CD, a mounted data disk, a blank target, and two identical serial-less disks.

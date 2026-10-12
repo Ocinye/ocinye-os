@@ -59,8 +59,8 @@ ainda com uma Instância instalada pela imagem.
 O suporte (OIE) traz as mesmas peças gráficas, com outro programa no ecrã:
 `ocinye-oie-display.service` arranca o compositor com
 `ocinye-system-ui --installer`, e `ocinye-oie-window.service` serve-lhe a
-conversa deste arranque (`ocinye-oie run --window`). É a conversa que os
-terminais têm — instalador em `ocinye.mode=install`, sessão não destrutiva nos
-outros modos — e a primeira consola a continuar fica com a instalação, como
-entre o ecrã e a linha série. A janela não tem capacidade nenhuma do sistema:
+conversa deste arranque (`ocinye-oie run --window`). Em `ocinye.mode=install` é a
+conversa que os terminais têm, e a primeira consola a continuar fica com a
+instalação, como entre o ecrã e a linha série; nos outros modos é a sessão só
+de leitura desse modo, desenhada (passo `MEDIA`). A janela não tem capacidade nenhuma do sistema:
 lê o que o motor diz e devolve uma linha.

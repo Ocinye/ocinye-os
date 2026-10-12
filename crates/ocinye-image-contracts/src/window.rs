@@ -11,6 +11,7 @@ use std::net::Ipv4Addr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::bootmode::MediaMode;
 use crate::oie::{InstallationTargetDisk, OieError};
 
 /// Version of this exchange. 2: keyboard, network and advanced settings.
@@ -193,6 +194,120 @@ pub struct FixedLayout {
     pub swap: bool,
 }
 
+/// A disk as a non-destructive session lists it: what the kernel already
+/// says, without opening the device.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaDisk {
+    /// Kernel name, for reading only: no action names a disk by it.
+    pub device: String,
+    /// Size.
+    pub bytes: u64,
+    /// Model as reported (may be empty).
+    pub model: String,
+    /// Connection (`nvme`, `sata`, `usb`, …), empty when the kernel does not say.
+    pub connection: String,
+    /// It holds the medium this session started from.
+    pub boot_media: bool,
+}
+
+/// A network interface as a non-destructive session sees it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaInterface {
+    /// Kernel name.
+    pub name: String,
+    /// Wired (`false`: wireless).
+    pub wired: bool,
+    /// Whether a link is up.
+    pub carrier: bool,
+    /// Addresses with prefix, as the kernel holds them now.
+    pub addresses: Vec<String>,
+}
+
+/// What a non-destructive session read about this computer.
+///
+/// `None` always means *unknown*: the session could not read it. It never
+/// means *absent*, and the window must say «unknown», not «none».
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HardwareReport {
+    /// `x86_64`, `aarch64`.
+    pub arch: String,
+    /// Maker and model of the computer, from the firmware tables.
+    pub machine: Option<String>,
+    /// Processor model.
+    pub cpu_model: Option<String>,
+    /// Online processors.
+    pub cpus: u32,
+    /// Memory.
+    pub memory_bytes: u64,
+    /// Started through UEFI.
+    pub uefi: bool,
+    /// Secure Boot enforced by the firmware.
+    pub secure_boot: Option<bool>,
+    /// Firmware vendor and version.
+    pub firmware: Option<String>,
+    /// Disks.
+    pub disks: Vec<MediaDisk>,
+    /// Network interfaces.
+    pub network: Vec<MediaInterface>,
+    /// Wireless radios.
+    pub wifi_radios: Option<u32>,
+    /// Bluetooth controllers.
+    pub bluetooth_controllers: Option<u32>,
+    /// Connected display outputs.
+    pub displays: Option<Vec<String>>,
+    /// Sound cards.
+    pub audio: Option<Vec<String>>,
+}
+
+/// Whether this computer could take an installation, judged without
+/// touching a disk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaCompatibility {
+    /// UEFI firmware (required).
+    pub uefi: bool,
+    /// A supported architecture.
+    pub architecture_supported: bool,
+    /// Memory the installation needs.
+    pub memory_required: u64,
+    /// The least a target disk must hold.
+    pub minimum_disk_bytes: u64,
+    /// Disks large enough that are not the medium. Eligibility proper is
+    /// decided by the installer, which also reads what each disk holds.
+    pub large_enough_disks: u32,
+}
+
+impl MediaCompatibility {
+    /// Judge a report.
+    #[must_use]
+    pub fn of(report: &HardwareReport, architecture_supported: bool, memory_required: u64) -> Self {
+        let large = report
+            .disks
+            .iter()
+            .filter(|d| !d.boot_media && d.bytes >= crate::oie::MIN_DISK_BYTES)
+            .count();
+        Self {
+            uefi: report.uefi,
+            architecture_supported,
+            memory_required,
+            minimum_disk_bytes: crate::oie::MIN_DISK_BYTES,
+            large_enough_disks: u32::try_from(large).unwrap_or(u32::MAX),
+        }
+    }
+
+    /// Whether nothing found stands in the way.
+    #[must_use]
+    pub const fn ready(&self, memory_bytes: u64) -> bool {
+        self.uefi
+            && self.architecture_supported
+            && memory_bytes >= self.memory_required
+            && self.large_enough_disks > 0
+    }
+}
+
 /// What the window asks of the engine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
@@ -243,8 +358,12 @@ pub enum WindowAction {
         /// Whether to authorise it.
         authorise: bool,
     },
-    /// Restart the machine (after an installation, or after a failure).
+    /// Restart the machine (after an installation, after a failure, or from
+    /// a non-destructive session). A normal firmware restart: nothing steers
+    /// the next boot.
     Restart,
+    /// Power the machine off (non-destructive sessions).
+    PowerOff,
 }
 
 /// Where the installation stands, as the engine tells the window.
@@ -262,8 +381,24 @@ pub enum WindowStep {
     },
     /// Another console of this machine is driving the installation.
     DrivenElsewhere,
-    /// This boot is not an installation: the window has nothing to do.
-    NotInstalling,
+    /// A non-destructive session of the medium: Live, Hardware Check or
+    /// Recovery. Read-only: no action here writes or mounts a disk.
+    Media {
+        /// Which session.
+        mode: MediaMode,
+        /// The release on the medium.
+        release_id: String,
+        /// Whether it is a development build.
+        development: bool,
+        /// The language chosen in the boot menu.
+        language: String,
+        /// The storage policy could not be proven: nothing was probed.
+        restricted: bool,
+        /// What the session read.
+        report: Box<HardwareReport>,
+        /// Whether an installation could proceed.
+        compatibility: MediaCompatibility,
+    },
     /// What the engine found about this computer.
     Compatibility {
         /// UEFI firmware (required).

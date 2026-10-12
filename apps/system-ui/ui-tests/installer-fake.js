@@ -2,7 +2,7 @@
    janela (ocinye_image_contracts::window) — passos tipados para lá, acções
    tipadas para cá — com discos de todos os géneros e um modelo com marcação
    hostil. O cenário vem do fragmento: #ok (omissão), #blocked, #fail,
-   #elsewhere, #key. Não instala nada, e não prova nada sobre o motor. */
+   #elsewhere, #key; e as sessões que não instalam: #live, #hardware, #recovery. Não instala nada, e não prova nada sobre o motor. */
 (function () {
   'use strict';
   const scenario = (location.hash || '#ok').slice(1);
@@ -24,8 +24,19 @@
   const ip = (v) => /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(v) && v.split('.').every((n) => Number(n) <= 255);
   const step = (state) => { F.at = state.step; F.out.push({ event: 'step', state }); };
   const storage = (refused) => step({ step: 'STORAGE', disks: DISKS, minimum_bytes: 20e9, refused: refused || null });
-  F.out.push({ event: 'hello', protocol: 1 });
-  step({ step: 'WELCOME', release_id: '9d2c3d2197b8', development: true, language: 'pt' });
+  F.out.push({ event: 'hello', protocol: 2 });
+  // As sessões que não instalam: o relatório só de leitura, e mais nada.
+  const MODES = { live: 'live', hardware: 'hardware-check', recovery: 'recovery' };
+  const report = () => ({
+    arch: 'x86_64', machine: scenario === 'recovery' ? null : 'LENOVO 20L8S02E00 <b>x</b>', cpu_model: 'Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz', cpus: 8, memory_bytes: 16 * 1073741824,
+    uefi: true, secure_boot: scenario === 'hardware' ? true : null, firmware: scenario === 'recovery' ? null : 'LENOVO N24ET75W (1.50)',
+    disks: [{ device: 'sda', bytes: 15.5e9, model: 'SanDisk Ultra', connection: 'usb', boot_media: true }, { device: 'nvme0n1', bytes: 512.1e9, model: 'Samsung SSD 990', connection: 'nvme', boot_media: false }],
+    network: [{ name: 'enp0s31f6', wired: true, carrier: true, addresses: ['192.168.1.37/24', 'fe80::1/64'] }, { name: 'wlp2s0', wired: false, carrier: false, addresses: [] }],
+    wifi_radios: 1, bluetooth_controllers: scenario === 'hardware' ? 1 : null, displays: ['eDP-1', 'HDMI-A-1'], audio: scenario === 'recovery' ? null : ['HDA Intel PCH'],
+  });
+  const media = () => { const r = report(); step({ step: 'MEDIA', mode: MODES[scenario], release_id: '9d2c3d2197b8-r1', development: true, language: 'pt', restricted: scenario === 'recovery', report: r, compatibility: { uefi: true, architecture_supported: true, memory_required: 2 * 1073741824, minimum_disk_bytes: 20e9, large_enough_disks: 1 } }); };
+  if (MODES[scenario]) media();
+  else step({ step: 'WELCOME', release_id: '9d2c3d2197b8', development: true, language: 'pt' });
 
   function install() {
     step({ step: 'INSTALLING' });
@@ -44,6 +55,11 @@
 
   function act(a) {
     F.actions.push(a);
+    if (F.at === 'MEDIA') {
+      if (a.action === 'rescan') media();
+      if (a.action === 'restart' || a.action === 'power_off') F.ended = a.action;
+      return;
+    }
     const right = () => F.disk && a.typed.trim().toUpperCase() === F.disk.confirmation_token.toUpperCase();
     if (F.at === 'WELCOME' || F.at === 'DRIVEN_ELSEWHERE') {
       if (a.action !== 'begin') return;

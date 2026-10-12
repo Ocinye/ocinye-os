@@ -12,13 +12,14 @@
 use std::io::{BufRead, Write};
 
 use ocinye_image_contracts::bootmode::InstallAuthority;
+use ocinye_image_contracts::bootmode::MediaMode;
 use ocinye_image_contracts::oie::{
     authorize_installation, classify, confirm, select, InstallationTargetDisk, OieError,
     MIN_DISK_BYTES,
 };
 use ocinye_image_contracts::window::{
-    FixedLayout, KeyboardLayout, SystemSettings, WindowAction, WindowEvent, WindowStep,
-    KEYBOARD_LAYOUTS, WINDOW_PROTOCOL,
+    FixedLayout, HardwareReport, KeyboardLayout, MediaCompatibility, SystemSettings, WindowAction,
+    WindowEvent, WindowStep, KEYBOARD_LAYOUTS, WINDOW_PROTOCOL,
 };
 
 use crate::flow::{Machine, Outcome, MIN_OIE_RAM};
@@ -69,6 +70,76 @@ fn hint(disk: &InstallationTargetDisk) -> String {
     disk.serial
         .clone()
         .unwrap_or_else(|| disk.confirmation_token.clone())
+}
+
+/// What a non-destructive session of the window needs from the machine.
+/// There is nothing here that selects, writes or mounts a disk.
+pub trait MediaMachine {
+    /// Read the computer again.
+    fn report(&self) -> HardwareReport;
+    /// The storage policy could not be proven.
+    fn restricted(&self) -> bool;
+    /// A supported architecture.
+    fn architecture_supported(&self) -> bool;
+    /// A normal firmware restart.
+    fn restart(&self);
+    /// Power off.
+    fn poweroff(&self);
+}
+
+/// How a non-destructive window session ended.
+#[derive(Debug, PartialEq, Eq)]
+pub enum MediaOutcome {
+    /// The window went away.
+    Abandoned,
+    /// A restart was asked for and requested.
+    Restarting,
+    /// A power-off was asked for and requested.
+    PoweringOff,
+}
+
+/// Live, Hardware Check or Recovery, for the window: the report, read again
+/// on request, and the two ways out. Every other action is ignored.
+pub fn media(
+    link: &mut Link<'_>,
+    m: &dyn MediaMachine,
+    mode: MediaMode,
+    release_id: &str,
+    development: bool,
+    language: &str,
+) -> MediaOutcome {
+    link.send(&WindowEvent::Hello {
+        protocol: WINDOW_PROTOCOL,
+    });
+    loop {
+        let report = m.report();
+        let compatibility =
+            MediaCompatibility::of(&report, m.architecture_supported(), MIN_OIE_RAM);
+        link.at(WindowStep::Media {
+            mode,
+            release_id: release_id.to_owned(),
+            development,
+            language: language.to_owned(),
+            restricted: m.restricted(),
+            report: Box::new(report),
+            compatibility,
+        });
+        loop {
+            match link.next() {
+                None => return MediaOutcome::Abandoned,
+                Some(WindowAction::Rescan) => break,
+                Some(WindowAction::Restart) => {
+                    m.restart();
+                    return MediaOutcome::Restarting;
+                }
+                Some(WindowAction::PowerOff) => {
+                    m.poweroff();
+                    return MediaOutcome::PoweringOff;
+                }
+                Some(_) => {}
+            }
+        }
+    }
 }
 
 /// The installer. As in the text host, it can only be entered with an
@@ -860,5 +931,127 @@ mod tests {
         );
         assert_eq!(stage("curtin: [OK] something else"), None);
         assert_eq!(stage("  [OK] Not A Stage"), None);
+    }
+
+    struct Media {
+        reads: Cell<u32>,
+        restarted: Cell<bool>,
+        off: Cell<bool>,
+    }
+
+    impl MediaMachine for Media {
+        fn report(&self) -> HardwareReport {
+            self.reads.set(self.reads.get() + 1);
+            HardwareReport {
+                arch: "x86_64".into(),
+                machine: None,
+                cpu_model: Some("CPU".into()),
+                cpus: 4,
+                memory_bytes: 8 << 30,
+                uefi: true,
+                secure_boot: None,
+                firmware: None,
+                disks: vec![
+                    ocinye_image_contracts::window::MediaDisk {
+                        device: "sr0".into(),
+                        bytes: 3_000_000_000,
+                        model: "QEMU DVD-ROM".into(),
+                        connection: "sata".into(),
+                        boot_media: true,
+                    },
+                    ocinye_image_contracts::window::MediaDisk {
+                        device: "vda".into(),
+                        bytes: 64_000_000_000,
+                        model: String::new(),
+                        connection: String::new(),
+                        boot_media: false,
+                    },
+                ],
+                network: vec![],
+                wifi_radios: None,
+                bluetooth_controllers: Some(0),
+                displays: Some(vec!["Virtual-1".into()]),
+                audio: None,
+            }
+        }
+        fn restricted(&self) -> bool {
+            false
+        }
+        fn architecture_supported(&self) -> bool {
+            true
+        }
+        fn restart(&self) {
+            self.restarted.set(true);
+        }
+        fn poweroff(&self) {
+            self.off.set(true);
+        }
+    }
+
+    fn media_drive(m: &Media, actions: &[&str]) -> (MediaOutcome, Vec<serde_json::Value>) {
+        let script: String = actions.iter().map(|a| format!("{a}\n")).collect();
+        let mut input = BufReader::new(script.as_bytes());
+        let mut out = Vec::new();
+        let r = media(
+            &mut Link {
+                input: &mut input,
+                out: &mut out,
+            },
+            m,
+            MediaMode::HardwareCheck,
+            "f3fc6ba0863b-r1",
+            true,
+            "pt",
+        );
+        let events = String::from_utf8(out)
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        (r, events)
+    }
+
+    #[test]
+    fn a_sessao_de_hardware_le_de_novo_e_so_sai_por_reiniciar_ou_desligar() {
+        let m = Media {
+            reads: Cell::new(0),
+            restarted: Cell::new(false),
+            off: Cell::new(false),
+        };
+        // Nothing an installation would send does anything here.
+        let (r, ev) = media_drive(
+            &m,
+            &[
+                r#"{"action":"begin"}"#,
+                r#"{"action":"select_disk","by_path":"pci-0000:00:04.0"}"#,
+                r#"{"action":"confirm","typed":"vda"}"#,
+                r#"{"action":"rescan"}"#,
+                r#"{"action":"restart"}"#,
+            ],
+        );
+        assert_eq!(r, MediaOutcome::Restarting);
+        assert!(m.restarted.get() && !m.off.get());
+        assert_eq!(m.reads.get(), 2, "read once, and again on rescan");
+        let steps: Vec<_> = ev.iter().filter(|e| e["event"] == "step").collect();
+        assert_eq!(steps.len(), 2);
+        let st = &steps[0]["state"];
+        assert_eq!(st["step"], "MEDIA");
+        assert_eq!(st["mode"], "hardware-check");
+        // Unknown stays unknown on the wire.
+        assert!(st["report"]["wifi_radios"].is_null());
+        assert_eq!(st["report"]["bluetooth_controllers"], 0);
+        // The medium is not counted as a place to install.
+        assert_eq!(st["compatibility"]["large_enough_disks"], 1);
+
+        let m = Media {
+            reads: Cell::new(0),
+            restarted: Cell::new(false),
+            off: Cell::new(false),
+        };
+        let (r, _) = media_drive(&m, &[r#"{"action":"power_off"}"#]);
+        assert_eq!(r, MediaOutcome::PoweringOff);
+        assert!(m.off.get() && !m.restarted.get());
+        let (r, _) = media_drive(&m, &[]);
+        assert_eq!(r, MediaOutcome::Abandoned);
     }
 }
