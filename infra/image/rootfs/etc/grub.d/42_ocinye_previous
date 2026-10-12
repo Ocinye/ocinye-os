@@ -13,15 +13,24 @@ exec_prefix="/usr"
 datarootdir="/usr/share"
 . "${pkgdatadir:-/usr/share/grub}/grub-mkconfig_lib"
 
-[ -e /boot/vmlinuz ] && [ -e /boot/initrd.img ] || exit 0
+# The newest installed kernel and its initrd, chosen as 10_linux does: the
+# /boot/vmlinuz and /boot/initrd.img links are not always there.
+kernels=""
+for k in /boot/vmlinuz-*; do
+  [ -f "$k" ] && kernels="$kernels $k"
+done
+[ -n "$kernels" ] || exit 0
+latest="$(printf "%s\n" $kernels | version_sort -r | head -n 1)"
+version="${latest#/boot/vmlinuz-}"
+[ -f "/boot/initrd.img-$version" ] || exit 0
 
 if [ -n "${GRUB_DEVICE_UUID}" ] && [ "x${GRUB_DISABLE_LINUX_UUID}" != "xtrue" ]; then
   root="UUID=${GRUB_DEVICE_UUID}"
 else
   root="${GRUB_DEVICE}"
 fi
-kernel="$(make_system_path_relative_to_its_root /boot/vmlinuz)"
-initrd="$(make_system_path_relative_to_its_root /boot/initrd.img)"
+kernel="$(make_system_path_relative_to_its_root "$latest")"
+initrd="$(make_system_path_relative_to_its_root "/boot/initrd.img-$version")"
 
 echo "menuentry 'Ocinye OS - release anterior' --class ocinye --class gnu-linux --class os --id ocinye-previous-release {"
 prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | sed -e 's/^/\t/'
