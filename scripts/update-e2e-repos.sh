@@ -67,17 +67,29 @@ publish() { # repo bin_dir revision what synthetic number [keys]
   echo "$v"
 }
 
+# A copy of a repository: metadata copied (a publish rewrites it), targets
+# hard-linked — they are named by their content and never change, and four
+# full copies of ~600 MB releases do not fit on the build machine.
+copy_repo() { # from to
+  local c
+  for c in "$1"/*/; do
+    c="$(basename "$c")"
+    mkdir -p "$2/$c"
+    cp -a "$1/$c/metadata" "$2/$c/metadata"
+    cp -al "$1/$c/targets" "$2/$c/targets"
+  done
+}
 rm -rf "$OUT"; mkdir -p "$OUT"
 # BAD: the same binaries, but a session service that exits at once.
 bad_bins="$work/bad-bins"; mkdir -p "$bad_bins"
 cp -p "$bins"/ocinye-* "$bad_bins/"
 printf '#!/bin/sh\n# Synthetic: an unhealthy release for the rollback test.\nexit 1\n' > "$bad_bins/ocinye-session-service"
 chmod 0755 "$bad_bins/ocinye-session-service"
-cp -a "$UPDATE_CACHE/repo" "$OUT/unhealthy"
+copy_repo "$UPDATE_CACHE/repo" "$OUT/unhealthy"
 bad="$(publish "$OUT/unhealthy" "$bad_bins" 1 "unhealthy" "rollback-health-gate" $(( $(latest "$OUT/unhealthy") + 1 )))"
-cp -a "$OUT/unhealthy" "$OUT/good"
+copy_repo "$OUT/unhealthy" "$OUT/good"
 good="$(publish "$OUT/good" "$bins" 2 "N+1" "update-n-plus-1" $(( $(latest "$OUT/good") + 1 )))"
-cp -a "$OUT/good" "$OUT/offline"
+copy_repo "$OUT/good" "$OUT/offline"
 good2="$(REBOOT=1 publish "$OUT/offline" "$bins" 3 "offline" "offline-power-loss" $(( $(latest "$OUT/offline") + 1 )))"
 "$rel" bundle --repo "$OUT/offline" --channel development --version "$good2" --out "$OUT/offline.ocu" >&2
 # FOREIGN: a whole repository under keys the machine has never trusted.
