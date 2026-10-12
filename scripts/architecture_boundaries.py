@@ -115,7 +115,12 @@ NORMAIS = {
     "ocinye-installer-contracts": {"ocinye-contracts"},
     "ocinye-installer-controller": {"ocinye-contracts", "ocinye-installer-contracts"},
     "ocinye-bootstrap": {"ocinye-contracts", "ocinye-installer-contracts"},
-    "ocinye-release-tool": {"ocinye-contracts", "ocinye-installer-contracts"},
+    "ocinye-release-tool": {
+        "ocinye-contracts",
+        "ocinye-installer-contracts",
+        "ocinye-update-contracts",
+        "ocinye-update-repository",
+    },
     # As imagens do Ocinye OS (D013, ADR-0027/0028), desde 2026-10-05 —
     # PROVISIONAL_PENDING_D011_CERTIFICATION. Os contratos das imagens assentam
     # nos do instalador (forma canónica, manifesto do release; PD-01/PD-02) e
@@ -132,9 +137,24 @@ NORMAIS = {
     # máquina. O cliente só conhece os contratos; o serviço conhece os dois e
     # mais ninguém — não liga o Core, o domínio, a persistência nem o Workspace.
     # A autoridade sobre a máquina não é a autoridade institucional.
-    "ocinye-system-contracts": set(),
+    "ocinye-system-contracts": {"ocinye-update-contracts"},
     "ocinye-system-client": {"ocinye-system-contracts"},
-    "ocinye-system-service": {"ocinye-system-contracts", "ocinye-system-client"},
+    "ocinye-system-service": {
+        "ocinye-system-contracts",
+        "ocinye-system-client",
+        "ocinye-update-contracts",
+    },
+    # O Update Engine (ADR-0032), desde 2026-10-12. Os contratos das
+    # actualizações não assentam em nada; o repositório (TUF) conhece-os e,
+    # para ler o pacote da D011 que um release carrega, os contratos do
+    # instalador. O motor conhece contratos e repositório; o publicador
+    # (`ocinye-release-tool`, acima) também. Os contratos do sistema citam os
+    # das actualizações (o estado que `update.*` devolve), e o System Service
+    # passa-lhes os pedidos: é a única porta para o motor. Nenhum destes liga o
+    # Core, o domínio, a persistência ou o Workspace.
+    "ocinye-update-contracts": set(),
+    "ocinye-update-repository": {"ocinye-update-contracts", "ocinye-installer-contracts"},
+    "ocinye-update-engine": {"ocinye-update-contracts", "ocinye-update-repository"},
     # O Session Service: a autoridade da sessão local. Conhece os contratos do
     # sistema e a forma canónica (para a assinatura da política); não liga o
     # Core — fala com ele por um contrato, como qualquer outro cliente.
