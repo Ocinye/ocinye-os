@@ -185,7 +185,7 @@ catalogue! {
     SystemInfo          = "system.info",            System,       Presence, None,        None,     None,                mutating false, locked true,  headless true,  ai true;
     SystemCapabilities  = "system.capabilities",    System,       Presence, None,        None,     None,                mutating false, locked true,  headless true,  ai true;
     NetworkStatus       = "network.status",         Network,      Presence, None,        None,     NetworkInterface,    mutating false, locked true,  headless true,  ai true;
-    NetworkConfigure    = "network.configure",      Network,      Operator, CoreStepUp,  Security, NetworkInterface,    mutating true,  locked false, headless true,  ai false;
+    NetworkConfigure    = "network.configure",      Network,      Operator, LocalReauth, Security, NetworkInterface,    mutating true,  locked false, headless true,  ai false;
     WifiScan            = "wifi.scan",              Network,      Presence, None,        None,     WifiRadio,           mutating false, locked false, headless true,  ai true;
     WifiConnect         = "wifi.connect",           Network,      Member,   None,        Security, WifiRadio,           mutating true,  locked false, headless true,  ai false;
     WifiDisconnect      = "wifi.disconnect",        Network,      Member,   None,        Change,   WifiRadio,           mutating true,  locked false, headless true,  ai true;

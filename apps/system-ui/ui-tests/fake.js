@@ -170,7 +170,7 @@
         if (!n) return no('NOT_FOUND');
         n.known = false; if (F.wifi.connected === n.ssid) F.wifi.connected = null; return READS['network.status']();
       }
-      case 'network.configure': { const f = fresh('CORE_STEP_UP'); if (f) return f; return READS['network.status'](); }
+      case 'network.configure': { const f = fresh('LOCAL_REAUTH'); if (f) return f; return READS['network.status'](); }
       case 'bluetooth.set_power': if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' }); F.bt.powered = request.powered; if (!request.powered) F.bt.devices.forEach((d) => { d.connected = false; }); return READS['bluetooth.status']();
       case 'bluetooth.scan':
         if (!member) return no('NOT_AUTHORIZED', { needs: 'MEMBER' });

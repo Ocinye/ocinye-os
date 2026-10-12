@@ -80,8 +80,10 @@ segunda, enquanto a primeira corre, é `OPERATION_IN_PROGRESS`.
   (`net.connman.iwd.Failed`, `InvalidFormat`, `NoAgent`) é
   `WIFI_AUTHENTICATION_FAILED`; o iwd não distingue, no nome do erro, uma
   palavra-passe errada de outra recusa da rede.
-- **Na interface**, `network.configure` pede `CORE_STEP_UP`, que o ecrã ainda
-  não oferece; faz-se pelo cliente sem ecrã, como operador de recuperação.
+- `network.configure` pede `LOCAL_REAUTH`: o operador volta a escrever a
+  palavra-passe local no diálogo de confiança. Pedia `CORE_STEP_UP`, que o ecrã
+  ainda não oferece, e o botão ficava sem efeito; a mudança é a mesma das
+  actualizações (ADR-0032). Continua só de operador e auditada como segurança.
 
 ### Transporte D-Bus
 
