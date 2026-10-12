@@ -36,7 +36,7 @@ if [ "$cenario" = window ]; then corre window --iso "$dist/$stem.iso" || rc=1; f
 # As actualizações de rotina (ADR-0032) de uma máquina instalada a partir da
 # ISO: o disco que `window` instalou, e os repositórios de
 # scripts/update-e2e-repos.sh. Depois de `window`, fora de `all`.
-if [ "$cenario" = update ]; then corre update --qcow2 "$work/window/target.qcow2" --update-repos "$HOME/.cache/ocinye-update/e2e" || rc=1; fi
+if [ "$cenario" = update ]; then corre update --qcow2 "$work/window/target.qcow2" --update-repos "$CACHE/update-e2e" || rc=1; fi
 mkdir -p "$CACHE/e2e/$nome"
 # Copy the verdicts and serial logs out, and — for a failed install — the
 # OFFLINE diagnostics the harness gathered (curtin's saved log/config, the ESP

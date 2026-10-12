@@ -6,7 +6,8 @@
 #   scripts/update-e2e-repos.sh PACOTE_N1 amd64|arm64
 #
 # The image build already published release N (the image's own) to
-# ~/.cache/ocinye-update/repo. From there, under ~/.cache/ocinye-update/e2e:
+# ~/.cache/ocinye-update/repo. From there, under
+# ~/.cache/ocinye-image-builder/update-e2e:
 #
 #   unhealthy/  N, then BAD   = PACOTE_N1 -r1 whose session service exits at
 #                               once: it passes every signature and fails the
@@ -26,7 +27,9 @@ RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 pacote="${1:?PACOTE_N1}"; arch="${2:?amd64|arm64}"
 BUNDLES="$HOME/.cache/ocinye-installer-test/bundles"
 UPDATE_CACHE="$HOME/.cache/ocinye-update"
-OUT="$UPDATE_CACHE/e2e"
+# Under the image builder's cache: the folder its VM mounts, where the E2E
+# harness serves them from.
+OUT="$HOME/.cache/ocinye-image-builder/update-e2e"
 [ -d "$BUNDLES/$pacote" ] || { echo "no bundle $BUNDLES/$pacote" >&2; exit 2; }
 [ -d "$UPDATE_CACHE/repo/development" ] || { echo "no development repository: build an image first" >&2; exit 2; }
 case "$arch" in
