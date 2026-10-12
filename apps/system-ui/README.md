@@ -143,8 +143,9 @@ fixo), **Bluetooth** (ligar, procurar, emparelhar, ligar, desligar, remover),
 (ligados, modo preferido, brilho) e **Privacidade** (microfone e câmara)
 mostram o estado que o System Service lê e agem por ele. Foram vistas só na
 bancada, contra o duplo; **não** foram provadas numa máquina. O endereçamento
-pede uma prova reforçada do Core (`CORE_STEP_UP`) que este ecrã ainda não
-oferece: o diálogo di-lo, e não se aplica daqui.
+pede a palavra-passe local do operador no diálogo de confiança
+(`LOCAL_REAUTH`). **Dispositivos** lista cada classe de hardware do inventário:
+disponível, indisponível com a razão tipada, ou inexistente.
 
 ## Construir
 

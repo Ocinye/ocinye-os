@@ -462,11 +462,11 @@
       </div></section></div>`;
   }
 
-  const NAV = [['home', 'home'], ['network', 'wifi'], ['bluetooth', 'bt'], ['sound', 'sound'], ['displays', 'monitor'], ['power', 'battery'], ['input', 'keyboard'], ['language', 'globe'], ['time', 'clock'], ['accessibility', 'person'], ['privacy', 'eye'], ['security', 'shield'], ['storage', 'disk'], ['updates', 'update'], ['diagnostics', 'pulse'], ['about', 'info']];
+  const NAV = [['home', 'home'], ['network', 'wifi'], ['bluetooth', 'bt'], ['sound', 'sound'], ['displays', 'monitor'], ['power', 'battery'], ['input', 'keyboard'], ['language', 'globe'], ['time', 'clock'], ['accessibility', 'person'], ['privacy', 'eye'], ['security', 'shield'], ['storage', 'disk'], ['devices', 'usb'], ['updates', 'update'], ['diagnostics', 'pulse'], ['about', 'info']];
   const READS = {
     home: ['system.health', 'network.status', 'power.status', 'update.status'], network: ['network.status'], bluetooth: ['bluetooth.status'], sound: ['audio.status', 'privacy.status'], displays: ['display.status'],
     power: ['power.status'], input: ['keyboard.status'], language: ['locale.status'], time: ['time.status'], accessibility: ['accessibility.status'],
-    privacy: ['privacy.status'], security: ['system.info', 'remote_access.status', 'recovery.status'], storage: ['storage.status'], updates: ['update.status', 'update.history', 'base.status', 'recovery.status'],
+    privacy: ['privacy.status'], security: ['system.info', 'remote_access.status', 'recovery.status'], storage: ['storage.status'], devices: ['system.capabilities'], updates: ['update.status', 'update.history', 'base.status', 'recovery.status'],
     diagnostics: ['system.health', 'system.capabilities'], about: ['system.info'],
   };
   // O que uma leitura dá: o valor, ou a razão dita em vez dele.
@@ -655,6 +655,16 @@
       group(t('g.session'), [row(t('k.member'), esc(S.session.member_name)), row(t('k.lock.now'), btn('', t('q.lock'), 'lock', { icon: 'lock' })), row(t('power.signout'), btn('', t('power.signout'), 'signout', { icon: 'logout' }))]),
       group(t('g.boot'), need('system.info', (i) => [row(t('k.uefi'), yes(i.uefi, 'k.uefi.yes', 'k.uefi.no')), row(t('k.secureboot'), status(i.secure_boot === 'ENABLED' ? 'ok' : 'mute', t('k.sb.' + i.secure_boot)))])),
       group(t('g.remote'), need('remote_access.status', (r) => [row(t('k.ssh'), toggle(r.ssh_enabled, 'ssh', { label: t('k.ssh') }), { op: true, sub: `${t('k.ssh.sub')} · ${t(r.ssh_active ? 'k.ssh.running' : 'k.ssh.stopped')}` })])),
+    ],
+    // Cada classe de hardware que o System Service conhece, como ele a vê:
+    // presente, indisponível com a razão tipada, ou inexistente.
+    devices: () => [
+      group(t('g.devices.hw'), need('system.capabilities', (c) => c.hardware.filter((h) => h.hardware !== 'NONE').map((h) => {
+        const a = h.availability;
+        const tone = a.state === 'PRESENT' ? 'ok' : a.state === 'UNAVAILABLE' ? 'warn' : 'mute';
+        return row(t('hw.' + h.hardware), status(tone, t('avail.' + a.state)), { sub: a.state === 'UNAVAILABLE' ? t('unav.' + a.cause) : a.state === 'ABSENT' ? t('k.absent') : '' });
+      }))),
+      note(t('dev.note')),
     ],
     storage: () => [
       group(t('g.volumes'), need('storage.status', (s) => (s.volumes.length ? s.volumes.map((v) => `<div class="sx-row"><div class="sx-row__l sx-grow"><div class="sx-row__t"><span class="sx-mono">${esc(v.mount_point)}</span> · ${esc(v.filesystem)}</div><div class="sx-row__s">${t('k.free', { free: bytes(v.free_bytes), total: bytes(v.total_bytes) })}</div><div class="sx-meter"><progress max="${v.total_bytes}" value="${v.total_bytes - v.free_bytes}" aria-label="${esc(v.mount_point)}"></progress></div></div></div>`) : [note(t('k.none'))]))),
