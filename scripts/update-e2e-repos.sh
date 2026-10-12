@@ -49,6 +49,9 @@ current_n="$(listing "$UPDATE_CACHE/repo" | sort -k3 -n | tail -1 | awk '{print 
 
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 publish() { # repo bin_dir revision what synthetic number [keys]
+  # Called inside $(…), where bash clears -e: set it again, so a failed step
+  # fails the caller.
+  set -e
   local repo="$1" bin="$2" rv="$3" what="$4" synthetic="$5" num="$6" v
   v="$id-r$rv"
   "$RAIZ/scripts/update-native.sh" "$bin" "$v" "$num" development "$arch" "$work/native-$rv.tar" >&2
@@ -68,16 +71,16 @@ cp -p "$bins"/ocinye-* "$bad_bins/"
 printf '#!/bin/sh\n# Synthetic: an unhealthy release for the rollback test.\nexit 1\n' > "$bad_bins/ocinye-session-service"
 chmod 0755 "$bad_bins/ocinye-session-service"
 cp -a "$UPDATE_CACHE/repo" "$OUT/unhealthy"
-bad="$(publish "$OUT/unhealthy" "$bad_bins" 1 "unhealthy" "rollback: the session service fails the health gate" $(( $(latest "$OUT/unhealthy") + 1 )))"
+bad="$(publish "$OUT/unhealthy" "$bad_bins" 1 "unhealthy" "rollback-health-gate" $(( $(latest "$OUT/unhealthy") + 1 )))"
 cp -a "$OUT/unhealthy" "$OUT/good"
-good="$(publish "$OUT/good" "$bins" 2 "N+1" "update: N to N+1 with an expand migration" $(( $(latest "$OUT/good") + 1 )))"
+good="$(publish "$OUT/good" "$bins" 2 "N+1" "update-n-plus-1" $(( $(latest "$OUT/good") + 1 )))"
 cp -a "$OUT/good" "$OUT/offline"
-good2="$(REBOOT=1 publish "$OUT/offline" "$bins" 3 "offline" "offline bundle and power loss during install" $(( $(latest "$OUT/offline") + 1 )))"
+good2="$(REBOOT=1 publish "$OUT/offline" "$bins" 3 "offline" "offline-power-loss" $(( $(latest "$OUT/offline") + 1 )))"
 "$rel" bundle --repo "$OUT/offline" --channel development --version "$good2" --out "$OUT/offline.ocu" >&2
 # FOREIGN: a whole repository under keys the machine has never trusted.
 "$rel" keys init "$work/foreign-keys" >&2
 "$rel" root create --keys "$work/foreign-keys" --out "$work/foreign-root.json" --days 30 >&2
 "$rel" channel init --repo "$OUT/foreign" --channel development --root "$work/foreign-root.json" >&2
-publish "$OUT/foreign" "$bins" 4 "foreign" "bad signature: a root the machine does not trust" $(( $(latest "$OUT/offline") + 1 )) "$work/foreign-keys" >/dev/null
+publish "$OUT/foreign" "$bins" 4 "foreign" "foreign-root" $(( $(latest "$OUT/offline") + 1 )) "$work/foreign-keys" >/dev/null
 printf 'N=%s\nBAD=%s\nGOOD=%s\nGOOD2=%s\n' "$current_n" "$bad" "$good" "$good2" > "$OUT/versions.env"
 cat "$OUT/versions.env"
