@@ -1,0 +1,30 @@
+[Unit]
+Description=Ocinye Update Engine (signed releases, applied without reinstalling)
+Documentation=file:///usr/share/doc/ocinye/images.md
+# The engine reconciles its journal at start: a release that asked for a
+# restart is validated here, after the services it checks are up.
+After=local-fs.target network-online.target ocinye-system.service ocinye-session.service docker.service
+Wants=network-online.target
+# If the engine of a newly activated release cannot run, the previous
+# release's engine takes over the same journal (ADR-0032 §8, self-update).
+OnFailure=ocinye-update-fallback.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+ExecStart=/usr/lib/ocinye/ocinye-update-engine serve
+StateDirectory=ocinye/update
+Restart=on-failure
+RestartSec=5
+# Root, without a shell: it runs a closed set of tools by absolute path
+# (systemctl, docker, apt-get, dpkg) and a release's own installer.
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

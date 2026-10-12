@@ -12,13 +12,17 @@
 #   provision.sh finalize clean everything a clone must not share, then power off
 #
 # Inputs are files under /root/ocinye-build (uploaded by the builder):
-#   build.env            ARCH, APT_SNAPSHOT, RELEASE_ID, DOCKER_KEY_FPR, BUILD_USER
+#   build.env            ARCH, APT_SNAPSHOT, RELEASE_ID, DOCKER_KEY_FPR, BUILD_USER,
+#                        UPDATE_VERSION, UPDATE_CHANNEL
 #   release/             the D011 bundle without images/ (MANIFEST.json, install/, …)
 #   images/*.tar         the release images (docker save)
 #   third-party.txt      one `repo:tag@sha256:digest` per line
 #   bin/                 ocinye-firstboot, ocinye-oie, ocinye-system-service,
 #                        ocinye-session-service, ocinye-system (static, target arch);
 #                        ocinye-compositor, ocinye-system-ui (built on this base, target arch)
+#                        (only ocinye-oie is installed from here; the rest come in the native layer)
+#   update/native.tar    the native layer of this release (ADR-0032)
+#   update/root.json     the channel's trusted TUF root (public keys only)
 #   rootfs.tar           infra/image/rootfs
 # Outputs under /root/ocinye-build/out (read back by the builder before finalize):
 #   oci.json  dpkg-runtime.txt
@@ -55,15 +59,37 @@ apt_update() {
   return 22
 }
 
-# The seat (ADR-0031): the two services, their headless client, the compositor
-# and the native system interface. Installed by `common` and again at
-# `finalize`, so that a reused common layer never carries older ones.
-install_seat_binaries() {
-  install -m 0755 "$B/bin/ocinye-system-service" /usr/lib/ocinye/ocinye-system-service
-  install -m 0755 "$B/bin/ocinye-session-service" /usr/lib/ocinye/ocinye-session-service
-  install -m 0755 "$B/bin/ocinye-system" /usr/bin/ocinye-system
-  install -m 0755 "$B/bin/ocinye-compositor" /usr/lib/ocinye/ocinye-compositor
-  install -m 0755 "$B/bin/ocinye-system-ui" /usr/lib/ocinye/ocinye-system-ui
+# The native layer (ADR-0032): every Ocinye binary of the machine lives in a
+# versioned release, /usr/lib/ocinye/releases/<version>/, with `current`
+# pointing at it; the stable paths units and clients use are links through
+# `current`, so the Update Engine replaces a whole release by one pointer.
+# The trusted root of the channel (public keys only) and the default update
+# configuration (no repository) come with it. Installed by `common` and again
+# at `finalize`, so that a reused common layer never carries older ones.
+install_native_layer() {
+  local v="$UPDATE_VERSION" dir
+  [[ "$v" =~ ^[0-9a-f]{12}-r[1-9][0-9]*$ ]] || { echo "UPDATE_VERSION invalid" >&2; exit 23; }
+  dir="/usr/lib/ocinye/releases/$v"
+  rm -rf /usr/lib/ocinye/releases /usr/lib/ocinye/previous
+  install -d -m 0755 "$dir"
+  tar -C "$dir" --no-same-owner --no-same-permissions -xf "$B/update/native.tar"
+  chown -R root:root /usr/lib/ocinye/releases
+  grep -q "\"version\":\"$v\"" "$dir/release.json" || { echo "native layer is not $v" >&2; exit 23; }
+  ln -sfn "releases/$v" /usr/lib/ocinye/current
+  for b in ocinye-system-service ocinye-session-service ocinye-compositor ocinye-system-ui \
+           ocinye-update-engine ocinye-firstboot; do
+    [ -x "$dir/bin/$b" ] || { echo "native layer lacks $b" >&2; exit 23; }
+    ln -sfn "current/bin/$b" "/usr/lib/ocinye/$b"
+  done
+  ln -sfn /usr/lib/ocinye/current/bin/ocinye-system /usr/bin/ocinye-system
+  install -d -m 0755 "/usr/share/ocinye/update/trust/$UPDATE_CHANNEL"
+  install -m 0644 "$B/update/root.json" "/usr/share/ocinye/update/trust/$UPDATE_CHANNEL/root.json"
+  if [ ! -f /etc/ocinye/update.json ]; then
+    install -d -m 0755 /etc/ocinye
+    printf '{"schema":1,"channel":"%s","repository":null,"auto_check":false,"auto_download":false}\n' \
+      "$UPDATE_CHANNEL" > /etc/ocinye/update.json
+    chmod 0644 /etc/ocinye/update.json
+  fi
 }
 
 stage_common() {
@@ -139,7 +165,7 @@ SRC
     libwebkit2gtk-4.1-0 libgtk-3-0 dbus iproute2 rfkill
   policy_off
   install -d -m 0755 /usr/lib/ocinye
-  install_seat_binaries
+  install_native_layer
   # No password and no shell. `video` is the group seatd serves (its socket),
   # and what lets the compositor's account ask it for the display and the
   # input devices; the account is in no group that reaches an input device.
@@ -151,12 +177,11 @@ SRC
     if ldd "$b" | grep -q 'not found'; then ldd "$b" | grep 'not found' >&2; echo "SEAT_LIBRARY_MISSING $b" >&2; exit 22; fi
   done
 
-  log "release payload and ocinye-firstboot"
+  log "release payload"
   dest="/usr/lib/ocinye/release/$RELEASE_ID"
   rm -rf "$dest"; install -d -m 0755 "$dest"
   cp -a "$B/release/." "$dest/"
   chown -R root:root "$dest"; chmod -R go-w "$dest"
-  install -m 0755 "$B/bin/ocinye-firstboot" /usr/lib/ocinye/ocinye-firstboot
   tar -C / --no-same-owner -xf "$B/rootfs.tar"
   chmod 0440 /etc/sudoers.d/60-ocinye-image
   visudo -c
@@ -329,8 +354,7 @@ stage_finalize() {
   log "finalize $profile: what a clone must not share"
   # The binaries and fragments of this run (a reused common layer may carry
   # older ones).
-  install -m 0755 "$B/bin/ocinye-firstboot" /usr/lib/ocinye/ocinye-firstboot
-  install_seat_binaries
+  install_native_layer
   tar -C / --no-same-owner -xf "$B/rootfs.tar"
   chmod 0440 /etc/sudoers.d/60-ocinye-image
   visudo -c >/dev/null
@@ -342,7 +366,10 @@ stage_finalize() {
       # (ocinye-display.service) is never enabled — see the unit. With the
       # screen on tty1, the text console and its pairing code are on tty2.
       systemctl enable seatd.service ocinye-system.service ocinye-session.service ocinye-seat-link.path \
-        ocinye-seat-start.service ocinye-console@tty2.service ;;
+        ocinye-seat-start.service ocinye-console@tty2.service
+      # The Update Engine (ADR-0032): ready from the first start, with no
+      # repository until an operator configures one.
+      systemctl enable ocinye-update.service ;;
     oie)
       systemctl disable ssh.service ssh.socket cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
       systemctl enable ocinye-oie@tty1.service "ocinye-oie@$SERIAL.service"
