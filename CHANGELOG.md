@@ -7,6 +7,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Capacidades do sistema — 2026-10-12 (ramo `feat/ocinye-os-v1-system-caps`)
+
+- **System Service**: Wi-Fi (iwd por D-Bus, palavra-passe provisionada no
+  formato do iwd e reposta se a rede a recusar), Bluetooth (BlueZ por D-Bus,
+  sem agente: só emparelha o que não pede código), som (ALSA com `amixer`),
+  ecrãs (conectores DRM), endereçamento com fios (netplan, reposto se o
+  `apply` falhar) e privacidade (captação desligada; regra do udev para as
+  câmaras) deixam de responder `NOT_IMPLEMENTED`. `audio.set_input` e
+  `display.configure` continuam, com a razão no
+  [README](services/system-service/README.md). Nova dependência: `zbus`.
+  Testado contra duplos; **não** provado numa máquina.
+- **Contrato**: `DisplayOutput` ganha `enabled` e passa a ter `refresh_mhz` e
+  `scale_percent` opcionais; `PrivacyState` diz se há microfone e câmara.
+- **Imagem**: `iwd`, `bluez` e `alsa-utils`; o `systemd-networkd` dá o endereço
+  do Wi-Fi; os dois serviços activos nas imagens instaláveis e mascarados no
+  suporte de instalação, verificado pela inspecção offline.
+- **Interface do sistema**: Rede (Wi-Fi e endereçamento), Bluetooth, Som,
+  Ecrãs e Privacidade mostram o estado lido e agem, em `pt`, `en` e `fr`.
+- **Cliente sem ecrã**: `network dhcp|static`, `wifi …`, `bluetooth …`,
+  `privacy …`; a palavra-passe de uma rede só por `--passphrase-stdin`.
+
 ### Ocinye OS v1 em `amd64` — 2026-10-12 (ramo `fix/ocinye-os-v1-amd64-proof`)
 
 - **Ecrã em `amd64`**: o compositor arranca a interface com
