@@ -1611,7 +1611,18 @@ def scenario_update(a):
         run("sudo -n ocinye-system keyboard layout us && sudo -n systemctl restart ocinye-display.service")
         time.sleep(25)
 
+    def evidence(run):
+        # What the engine and the installer said, kept whatever the outcome.
+        out = run("sudo -n sh -c 'for f in /var/lib/ocinye/update/audit.jsonl /var/lib/ocinye/update/history.json /var/lib/ocinye/update/journal.json /var/lib/ocinye/update/instance-*.log; do echo \"=== $f\"; tail -c 20000 \"$f\"; done; journalctl -u ocinye-update --no-pager -n 200 -o short-iso'", timeout=120)
+        open(os.path.join(a.work, "update-evidence.txt"), "w").write(redact(out.stdout.decode(errors="replace")))
+
     def journey(r, vm, run, shots, k1, chosen, secret):
+        try:
+            steps(r, vm, run, shots, k1, chosen, secret)
+        finally:
+            evidence(run)
+
+    def steps(r, vm, run, shots, k1, chosen, secret):
         def status():
             out = run("sudo -n ocinye-system --json update status").stdout.decode(errors="replace")
             try:
@@ -1653,17 +1664,23 @@ def scenario_update(a):
         repository("foreign")
         run("sudo -n ocinye-system update check")
         st = status()
-        audit = run("sudo -n tail -n 3 /var/lib/ocinye/update/audit.jsonl").stdout.decode(errors="replace")
+        refused = [json.loads(l) for l in run("sudo -n cat /var/lib/ocinye/update/audit.jsonl").stdout.decode(errors="replace").splitlines() if l.strip()]
+        refused = [e for e in refused if e.get("event") == "check" and e.get("outcome") == "refused"]
         r.check("update: a repository signed by other keys is refused before anything is offered", st.get("available") is None and version(st) == versions["N"], st)
-        r.check("update: the refusal is in the update audit, with its reason", '"refused"' in audit and '"reason":null' not in audit.splitlines()[-1], audit[-400:])
+        r.check("update: the refusal is in the update audit, with its reason", refused and refused[-1].get("reason") == "METADATA_UNTRUSTED", refused[-1:])
 
         # 2. Signed, and unhealthy.
         repository("unhealthy")
         run("sudo -n ocinye-system update check")
         offered = (status().get("available") or {}).get("version")
         r.check("update: the unhealthy release is offered (its signatures are good)", offered == versions["BAD"], offered)
+        # Download and install return once the engine has taken the job; the
+        # work goes on in the engine, and the next step waits for it.
         run("sudo -n ocinye-system update download", timeout=3600)
+        st = settle()
+        r.check("update: the unhealthy release was downloaded, verified and staged", st.get("phase") == "AWAITING_INSTALL", st)
         run("sudo -n ocinye-system update install", timeout=3600)
+        time.sleep(10)
         st = settle()
         hist = history()
         r.check("update: the unhealthy release failed its health gate and the machine rolled back on its own",
@@ -1771,6 +1788,7 @@ def scenario_update(a):
         offered = status().get("available") or {}
         r.check("update: the offline bundle is verified and offered, from no repository", offered.get("version") == versions["GOOD2"] and offered.get("source") == "offline", offered)
         run("sudo -n ocinye-system update download", timeout=1800)
+        r.check("update: the offline release was staged", settle().get("phase") == "AWAITING_INSTALL", status())
         # The install runs in the background of the engine; the cut comes
         # once it is activating.
         run("sudo -n sh -c 'ocinye-system update install >/dev/null 2>&1 &'")
@@ -1802,6 +1820,7 @@ def scenario_update(a):
         r.check("update: once settled, the native layer is the release the engine says runs", native.endswith(version(st) or "?"), (st.get("phase"), version(st), native))
         if version(st) != versions["GOOD2"] or st.get("phase") != "COMPLETED":
             run("sudo -n ocinye-system update install", timeout=3600)
+            time.sleep(10)
             st = through_reboot(settle())
         hist = history()
         r.check("update: the offline release finished installing, committed after a healthy restart",

@@ -47,7 +47,7 @@ limactl shell "$VM" sudo -n sh -c "
   cp $work/*/result-*.json $work/*/*-serial.log '$CACHE/e2e/$nome/' 2>/dev/null
   [ -d $work/seat/screens ] && cp -r $work/seat/screens $work/seat/install.log '$CACHE/e2e/$nome/' 2>/dev/null
   [ -d $work/window/screens ] && mkdir -p '$CACHE/e2e/$nome/window' && cp -r $work/window/screens '$CACHE/e2e/$nome/window/' 2>/dev/null
-  [ -d $work/update/screens ] && mkdir -p '$CACHE/e2e/$nome/update' && cp -r $work/update/screens $work/update/update-history.json '$CACHE/e2e/$nome/update/' 2>/dev/null
+  [ -d $work/update/screens ] && mkdir -p '$CACHE/e2e/$nome/update' && for f in screens update-history.json update-evidence.txt; do cp -r $work/update/\$f '$CACHE/e2e/$nome/update/' 2>/dev/null; done
   for f in $work/*/failure $work/*/failure-*; do
     [ -d \"\$f\" ] || continue
     s=\$(basename \"\$(dirname \"\$f\")\")-\$(basename \"\$f\")

@@ -43,6 +43,14 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ecrã), o System Service escreve-o atomicamente só com um layout e uma
   variante que a lista de regras do XKB tem, e a imagem gera as três línguas,
   com uma inspecção offline que o exige.
+- **Instalar um release a sério** (encontrado no E2E `update`): um alvo TUF
+  traz bytes e não modo, pelo que o `install/ocinye` do pacote descarregado não
+  era executável e toda a mudança de Instância falhava
+  (`INSTANCE_UPGRADE_FAILED`); depois da verificação, o motor volta a tornar
+  executáveis os dois programas do pacote (ADR-0701) e mais nada. O motor passa
+  também a guardar o que o instalador disse (`instance-upgrade.log`,
+  `instance-rollback.log`, só root) e a drenar a saída de um programa para lá
+  do limite, em vez de fechar o tubo e o matar a meio.
 - **Guarda `release_strings.py`** (no `verify.sh` e na CI): nenhum texto das
   superfícies gráficas chega ao ecrã com um campo por preencher.
 - **E2E das imagens**: cenário `update`, numa máquina instalada a partir da ISO,

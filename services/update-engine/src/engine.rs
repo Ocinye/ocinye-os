@@ -110,6 +110,25 @@ pub struct Engine<H: Host> {
 }
 
 /// Sixteen random hex digits.
+/// The programs of a D011 bundle, by their place in it (ADR-0701).
+pub const BUNDLE_PROGRAMS: [&str; 2] = ["install/ocinye", "ocinye-bootstrap"];
+
+/// Make the bundle's programs executable (0755), when they are there.
+fn restore_bundle_programs(bundle: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    for p in BUNDLE_PROGRAMS {
+        let path = bundle.join(p);
+        match std::fs::symlink_metadata(&path) {
+            Ok(m) if m.file_type().is_file() => {
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+            }
+            Ok(_) => return Err(std::io::Error::other("a bundle program is not a file")),
+            Err(_) => {}
+        }
+    }
+    Ok(())
+}
+
 fn random_id() -> String {
     use std::io::Read;
     let mut b = [0u8; 8];
@@ -647,6 +666,16 @@ impl<H: Host> Engine<H> {
                     )
                 }
             }
+        }
+        // A target carries bytes, not a mode: the bundle's two programs
+        // (ADR-0701) are made executable again, and nothing else is.
+        if restore_bundle_programs(&verified.join("bundle")).is_err() {
+            return failed(
+                self,
+                &mut j,
+                Phase::VerificationFailed,
+                UpdateReason::ArtifactMismatch,
+            );
         }
         self.go(&mut j, Phase::Verified)?;
         self.crash(Fault::AfterVerify)?;

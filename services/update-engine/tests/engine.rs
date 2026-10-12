@@ -412,6 +412,22 @@ fn um_pacote_offline_de_outra_raiz_e_recusado() {
 }
 
 #[test]
+fn o_instalador_do_pacote_descarregado_e_executavel() {
+    use std::os::unix::fs::PermissionsExt;
+    let b = Bench::new(true);
+    let r = b.publish_n1();
+    let e = engine(&b);
+    e.check().unwrap();
+    e.download("member-1", "settings").unwrap();
+    let installer = b
+        .paths
+        .verified(&r.manifest.version.to_string())
+        .join("bundle/install/ocinye");
+    let mode = std::fs::metadata(&installer).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o755, "{}", installer.display());
+}
+
+#[test]
 fn reverter_a_mao_volta_ao_release_anterior() {
     let b = Bench::new(true);
     let r = b.publish_n1();

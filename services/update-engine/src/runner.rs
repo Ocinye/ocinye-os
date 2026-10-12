@@ -43,6 +43,8 @@ pub struct Ran {
     pub code: Option<i32>,
     /// Standard output, at most [`OUTPUT_LIMIT`] bytes.
     pub stdout: String,
+    /// Standard error, at most [`OUTPUT_LIMIT`] bytes.
+    pub stderr: String,
 }
 
 /// Output kept from a tool.
@@ -86,20 +88,27 @@ fn run_program(
         .env("DEBIAN_FRONTEND", "noninteractive")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .current_dir(cwd.map_or_else(|| PathBuf::from("/"), Path::to_path_buf));
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
     let mut child = cmd.spawn()?;
-    let stdout = child.stdout.take();
-    let reader = std::thread::spawn(move || {
-        let mut out = Vec::new();
-        if let Some(s) = stdout {
-            let _ = s.take(OUTPUT_LIMIT).read_to_end(&mut out);
-        }
-        out
-    });
+    // Keep the first OUTPUT_LIMIT bytes of each stream and drain the rest: a
+    // reader that stops leaves a talkative child blocked on a full pipe until
+    // the deadline kills it.
+    fn keep<R: Read + Send + 'static>(stream: Option<R>) -> std::thread::JoinHandle<Vec<u8>> {
+        std::thread::spawn(move || {
+            let mut out = Vec::new();
+            if let Some(mut s) = stream {
+                let _ = (&mut s).take(OUTPUT_LIMIT).read_to_end(&mut out);
+                let _ = std::io::copy(&mut s, &mut std::io::sink());
+            }
+            out
+        })
+    }
+    let reader = keep(child.stdout.take());
+    let errors = keep(child.stderr.take());
     let start = Instant::now();
     let code = loop {
         if let Some(status) = child.try_wait()? {
@@ -113,15 +122,38 @@ fn run_program(
         std::thread::sleep(Duration::from_millis(200));
     };
     let out = reader.join().unwrap_or_default();
+    let err = errors.join().unwrap_or_default();
     Ok(Ran {
         code,
         stdout: String::from_utf8_lossy(&out).into_owned(),
+        stderr: String::from_utf8_lossy(&err).into_owned(),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn um_programa_que_escreve_muito_nao_fica_preso_ao_limite() {
+        // Four times the limit on each stream: kept to the limit, and the
+        // rest drained — a closed pipe would kill the writer (SIGPIPE), and an
+        // installer killed half-way through its own output fails.
+        let r = run_program(
+            Path::new("/bin/sh"),
+            &[
+                "-c",
+                "head -c 1048576 /dev/zero || exit 9; head -c 1048576 /dev/zero >&2 || exit 9; exit 3",
+            ],
+            None,
+            &[],
+            Duration::from_secs(20),
+        )
+        .unwrap();
+        assert_eq!(r.code, Some(3));
+        assert_eq!(r.stdout.len() as u64, OUTPUT_LIMIT);
+        assert_eq!(r.stderr.len() as u64, OUTPUT_LIMIT);
+    }
 
     #[test]
     fn as_ferramentas_sao_caminhos_absolutos() {

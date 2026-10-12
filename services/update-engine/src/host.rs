@@ -77,6 +77,22 @@ impl LinuxHost {
     pub fn new(paths: Paths) -> Self {
         Self { paths }
     }
+
+    /// What the release's installer said, for whoever has to find out why an
+    /// Instance did not move: the last run of each kind, root-only. The
+    /// installer never prints a secret (it hands the credential over in a
+    /// file), and the record is bounded by the runner's limit.
+    fn keep_installer_output(&self, what: &str, r: &crate::runner::Ran) {
+        use std::os::unix::fs::PermissionsExt;
+        let path = self.paths.state.join(format!("instance-{what}.log"));
+        let text = format!(
+            "exit: {:?}\n--- stdout\n{}\n--- stderr\n{}\n",
+            r.code, r.stdout, r.stderr
+        );
+        if crate::store::write_atomic(&path, text.as_bytes()).is_ok() {
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        }
+    }
 }
 
 const MINUTE: Duration = Duration::from_secs(60);
@@ -160,6 +176,7 @@ impl Host for LinuxHost {
         let installer = bundle.join("install/ocinye");
         let r = run_installer(&installer, &["upgrade"], bundle, 90 * MINUTE)
             .map_err(|_| UpdateReason::InstanceUpgradeFailed)?;
+        self.keep_installer_output("upgrade", &r);
         if ok(r.code) {
             Ok(())
         } else {
@@ -172,6 +189,7 @@ impl Host for LinuxHost {
         let installer = current.join("install/ocinye");
         let r = run_installer(&installer, &["rollback", "--confirm"], current, 60 * MINUTE)
             .map_err(|_| UpdateReason::RollbackUnsafe)?;
+        self.keep_installer_output("rollback", &r);
         if ok(r.code) {
             Ok(())
         } else {
