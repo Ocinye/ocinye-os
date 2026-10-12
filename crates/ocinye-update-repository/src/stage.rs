@@ -83,15 +83,22 @@ pub fn stage(input: &StageInput) -> Result<UpdateManifest> {
     std::fs::create_dir_all(&input.out_dir)?;
     let result = (|| -> Result<UpdateManifest> {
         let mut artifacts = Vec::new();
-        let mut listed = vec![
-            ("MANIFEST.json".to_owned(), None),
-            ("SHA256SUMS".to_owned(), None),
-        ];
-        listed.extend(
+        // MANIFEST.json first (release_manifest_sha256 names it), then what
+        // SHA256SUMS lists, then SHA256SUMS itself; each file once.
+        let sums_hash = |name: &str| {
             bundle_files
                 .iter()
-                .map(|(p, h)| (p.clone(), Some(h.clone()))),
-        );
+                .find(|(p, _)| p == name)
+                .map(|(_, h)| h.clone())
+        };
+        let mut listed: Vec<(String, Option<String>)> =
+            vec![("MANIFEST.json".to_owned(), sums_hash("MANIFEST.json"))];
+        for (p, h) in &bundle_files {
+            if p != "MANIFEST.json" && p != "SHA256SUMS" {
+                listed.push((p.clone(), Some(h.clone())));
+            }
+        }
+        listed.push(("SHA256SUMS".to_owned(), None));
         for (path, expected) in listed {
             let (sha, bytes) = copy(
                 &input.bundle_dir.join(&path),

@@ -4223,9 +4223,13 @@ name = "ocinye-release-tool"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "jiff",
  "ocinye-contracts",
  "ocinye-installer-contracts",
+ "ocinye-update-contracts",
+ "ocinye-update-repository",
  "sha2 0.10.9",
+ "tokio",
 ]
 
 [[package]]
