@@ -29,7 +29,10 @@ B=/root/ocinye-build
 # shellcheck source=/dev/null
 . "$B/build.env"
 export DEBIAN_FRONTEND=noninteractive
-APT=(apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y)
+# A download cut mid-transfer by the snapshot mirror is retried, not fatal: the
+# package and its hash are fixed by the snapshot, so a retry fetches the same
+# bytes or fails the same way.
+APT=(apt-get -o Acquire::Retries=5 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y)
 SNAPSHOT_URI="https://snapshot.ubuntu.com/ubuntu/$APT_SNAPSHOT"
 SOURCES=/etc/apt/sources.list.d/ubuntu.sources
 case "$ARCH" in arm64) SERIAL=ttyAMA0 ;; *) SERIAL=ttyS0 ;; esac
