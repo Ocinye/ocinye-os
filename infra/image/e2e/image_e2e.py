@@ -68,6 +68,10 @@ def firmware(arch):
 
 RUNNING = []
 
+# Seconds between two keys the bench presses (see `Vm.press`).
+KEY_GAP_NATIVE = 0.04
+KEY_GAP_EMULATED = 0.3
+
 
 class Vm:
     """One QEMU guest with its serial console on a unix socket."""
@@ -220,6 +224,13 @@ class Vm:
         if shift:
             events = [k("shift", True)] + events + [k("shift", False)]
         self.qmp({"execute": "input-send-event", "arguments": {"events": events}})
+        # One key at a time, at a pace the guest keeps up with. Key repeat is
+        # the client's (Wayland): a press whose release reaches it more than
+        # the compositor's repeat delay later is repeated. Under full
+        # emulation a guest that falls behind a burst of keys delivers them
+        # that late, and the amd64 set-up form received extra Tabs and spaces
+        # (boxes ticked, a name typed into the wrong field).
+        time.sleep(KEY_GAP_NATIVE if native(self.arch) else KEY_GAP_EMULATED)
 
     def type(self, text):
         """Type on the guest's keyboard (US layout). The text is never logged."""
@@ -234,7 +245,6 @@ class Vm:
                 self.press(ch)
             else:
                 raise RuntimeError("a character the bench keyboard cannot type")
-            time.sleep(0.04)
 
     def stop(self):
         if self.proc and self.proc.poll() is None:
@@ -665,7 +675,9 @@ def scenario_seat(a):
         vm.type("Admin de Prova")
         vm.press("tab")
         vm.type("admin@ocinye-seat.test")
-        time.sleep(1)
+        # The picture of the filled form is the one taken after the guest has
+        # drawn the last field, and Enter follows it.
+        time.sleep(1 if native(a.arch) else 15)
         vm.screenshot(os.path.join(shots, "2-set-up-filled.png"))
         vm.press("ret")
         time.sleep(15)
