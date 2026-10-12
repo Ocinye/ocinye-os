@@ -1677,7 +1677,11 @@ def scenario_update(a):
         # 3. N+1, from Settings. The session ended with the rollback's
         # restarts: sign in again first.
         def sign_in():
+            # The screen restarted with the services: an empty sign-in, the
+            # address first.
             time.sleep(20)
+            vm.type("admin@ocinye-seat.test")
+            vm.press("tab")
             vm.type(chosen)
             vm.press("ret")
             time.sleep(10)
@@ -1693,8 +1697,6 @@ def scenario_update(a):
 
         if session_state(vm.port, k1).get("state") != "ACTIVE":
             vm.screenshot(os.path.join(shots, "u1-after-rollback.png"))
-            # The sign-in remembers the address; the password is next.
-            vm.press("tab")
             r.check("update: signed in again after the rollback", sign_in())
         repository("good")
         run("sudo -n ocinye-system update check")
@@ -1750,7 +1752,6 @@ def scenario_update(a):
         health = run("curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8480/api/v1/auth/machine-session/key; systemctl is-active ocinye-system.service ocinye-session.service ocinye-display.service").stdout.decode().split()
         r.check("update: Core, System, Session and the screen are up on N+1", health == ["200", "active", "active", "active"], health)
         if session_state(vm.port, k1).get("state") != "ACTIVE":
-            vm.press("tab")
             r.check("update: sign-in works on N+1", sign_in())
         lock = session_ask(vm.port, k1, {"request": "lock"})
         time.sleep(6)
