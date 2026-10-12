@@ -1370,7 +1370,10 @@ def scenario_window(a):
         # nothing — the engine is never asked to confirm, and nothing is written.
         before = size()
         vm.type("0000")
-        time.sleep(4)
+        # The same wait as for the right confirmation below: Enter must reach
+        # a dialog the engine has answered for the wrong value, or the check
+        # proves nothing.
+        time.sleep(4 if native(a.arch) else 45)
         vm.press("ret")
         time.sleep(12)
         vm.screenshot(os.path.join(shots, "8-confirm-wrong.png"))
@@ -1382,7 +1385,13 @@ def scenario_window(a):
             vm.press("backspace")
             time.sleep(0.1)
         vm.type("7F3A")
-        time.sleep(5)
+        # Enter is pressed once, after the engine has checked what was typed:
+        # the window never decides a confirmation, it asks the engine
+        # (`check_confirmation`) and enables the action only on its answer, so
+        # an earlier Enter is rightly ignored, and a second Enter after the
+        # engine accepted would land on the next step. Under full emulation
+        # (amd64 on this arm64 bench) that round trip took more than 5 s.
+        time.sleep(5 if native(a.arch) else 45)
         vm.screenshot(os.path.join(shots, "9-confirm-right.png"))
         vm.press("ret")
         need("window: the confirmation typed in the dialog was accepted by the engine", reached(vm, "confirmation=accepted", 120))
