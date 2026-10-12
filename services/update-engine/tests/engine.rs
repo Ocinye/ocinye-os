@@ -428,6 +428,54 @@ fn reverter_a_mao_volta_ao_release_anterior() {
 }
 
 #[test]
+fn a_entrada_de_recuperacao_do_arranque_volta_ao_anterior_uma_vez_por_arranque() {
+    let b = Bench::new(true);
+    let r = b.publish_n1();
+    let e = engine(&b);
+    // Nothing asked: nothing done.
+    assert!(e
+        .recovery_request("BOOT_IMAGE=/vmlinuz root=UUID=x ro")
+        .is_none());
+    // Asked with nothing to return to: refused, nothing changed.
+    let before = current(&b);
+    let refused = e
+        .recovery_request("root=UUID=x ro ocinye.update=rollback")
+        .unwrap();
+    assert!(matches!(
+        refused,
+        Err(Stop::Reason(UpdateReason::RollbackUnsafe))
+    ));
+    assert_eq!(current(&b), before);
+
+    run_through(&e).unwrap();
+    assert_eq!(current(&b).unwrap(), r.manifest.version.to_string());
+    // A new boot, from the recovery entry.
+    b.host.state.lock().unwrap().boot_id = "boot-2".into();
+    // A parameter after `--` is for init, not for this.
+    assert!(e.recovery_request("ro -- ocinye.update=rollback").is_none());
+    let s = e
+        .recovery_request("root=UUID=x ro ocinye.update=rollback")
+        .unwrap()
+        .unwrap();
+    assert_eq!(s.phase, Phase::RolledBack);
+    assert_eq!(current(&b).unwrap(), b.n.to_string());
+    assert_eq!(e.history().entries[0].via, "recovery");
+    // The audit says who: the boot menu, not a member.
+    let audit = std::fs::read_to_string(b.paths.audit()).unwrap();
+    let last: serde_json::Value = serde_json::from_str(audit.lines().last().unwrap()).unwrap();
+    assert_eq!(last["event"], "rollback");
+    assert_eq!(last["actor"], "boot-menu");
+    assert_eq!(last["to"], b.n.to_string());
+    // The engine restarts itself after a rollback: the same boot does not
+    // roll back again.
+    let again = engine(&b);
+    assert!(again
+        .recovery_request("root=UUID=x ro ocinye.update=rollback")
+        .is_none());
+    assert_eq!(current(&b).unwrap(), b.n.to_string());
+}
+
+#[test]
 fn cancelar_antes_de_instalar_nao_deixa_nada() {
     let b = Bench::new(false);
     let r = b.publish_n1();

@@ -238,7 +238,19 @@ impl<H: Host> Engine<H> {
     }
 
     fn audit(&self, j: &Journal, event: &str, outcome: &str, reason: Option<UpdateReason>) {
-        let t = j.transaction.as_ref();
+        self.audit_with(j, j.transaction.as_ref(), event, outcome, reason);
+    }
+
+    /// Audit with the transaction that just ended (already taken off the
+    /// journal), so the record still says who, from where, and to what.
+    fn audit_with(
+        &self,
+        j: &Journal,
+        t: Option<&Transaction>,
+        event: &str,
+        outcome: &str,
+        reason: Option<UpdateReason>,
+    ) {
         self.store.audit(&serde_json::json!({
             "at": self.host.now(),
             "event": event,
@@ -922,9 +934,9 @@ impl<H: Host> Engine<H> {
         j.last_outcome = Some(UpdateOutcome::Failed);
         self.go(j, Phase::InstallFailed)?;
         self.finish_history(j, UpdateOutcome::Failed, Some(reason));
-        j.transaction = None;
+        let ended = j.transaction.take();
         self.save(j)?;
-        self.audit(j, "install", "failed", Some(reason));
+        self.audit_with(j, ended.as_ref(), "install", "failed", Some(reason));
         Err(Stop::Reason(reason))
     }
 
@@ -975,7 +987,7 @@ impl<H: Host> Engine<H> {
         j.offered = None;
         j.reason = None;
         j.last_outcome = Some(UpdateOutcome::Committed);
-        j.transaction = None;
+        let ended = j.transaction.take();
         self.go(j, Phase::Completed)?;
         // Retention: the active release, the rollback target, nothing else.
         let keep: Vec<String> = [j.current.as_ref(), j.previous.as_ref()]
@@ -989,7 +1001,7 @@ impl<H: Host> Engine<H> {
         let _ = std::fs::remove_dir_all(self.paths.offline());
         let _ = std::fs::remove_dir_all(self.paths.carried_previous());
         let _ = std::fs::remove_file(self.paths.state.join("awaiting-boot"));
-        self.audit(j, "commit", "committed", None);
+        self.audit_with(j, ended.as_ref(), "commit", "committed", None);
         self.host.restart_engine_later();
         Ok(self.status())
     }
@@ -1044,9 +1056,9 @@ impl<H: Host> Engine<H> {
             j.last_outcome = Some(UpdateOutcome::RolledBack);
             self.go(j, Phase::RolledBack)?;
             self.finish_history(j, UpdateOutcome::RolledBack, Some(reason));
-            j.transaction = None;
+            let ended = j.transaction.take();
             self.save(j)?;
-            self.audit(j, "rollback", "rolled-back", Some(reason));
+            self.audit_with(j, ended.as_ref(), "rollback", "rolled-back", Some(reason));
             Err(Stop::Reason(reason))
         } else {
             j.reason = Some(UpdateReason::RollbackUnsafe);
@@ -1149,9 +1161,9 @@ impl<H: Host> Engine<H> {
             j.reason = None;
             self.go(&mut j, Phase::RolledBack)?;
             self.finish_history(&j, UpdateOutcome::RolledBack, None);
-            j.transaction = None;
+            let ended = j.transaction.take();
             self.save(&mut j)?;
-            self.audit(&j, "rollback", "rolled-back", None);
+            self.audit_with(&j, ended.as_ref(), "rollback", "rolled-back", None);
             self.host.restart_engine_later();
             Ok(self.status())
         } else {
@@ -1166,6 +1178,36 @@ impl<H: Host> Engine<H> {
             );
             Err(Stop::Reason(UpdateReason::RollbackUnsafe))
         }
+    }
+
+    /// The kernel parameter of the installed system's recovery boot entry:
+    /// return to the release kept as previous.
+    pub const RECOVERY_PARAM: &'static str = "ocinye.update=rollback";
+
+    /// Act on the recovery boot entry, once per boot.
+    ///
+    /// Whoever chose the entry in the boot menu is at the machine, which is
+    /// the authority the menu already demands; the rollback is the same
+    /// journaled one Settings offers, recorded with the boot menu as actor.
+    /// The boot is marked before acting, so the engine restarting itself
+    /// after the rollback does not roll back again. `None`: nothing asked.
+    pub fn recovery_request(&self, cmdline: &str) -> Option<Fallible<UpdateState>> {
+        let asked = cmdline
+            .split_ascii_whitespace()
+            .take_while(|a| *a != "--" && *a != "---")
+            .any(|a| a == Self::RECOVERY_PARAM);
+        if !asked {
+            return None;
+        }
+        let boot = self.host.boot_id();
+        let marker = self.paths.recovery_boot();
+        if std::fs::read_to_string(&marker).is_ok_and(|b| b.trim() == boot) {
+            return None;
+        }
+        if write_atomic(&marker, boot.as_bytes()).is_err() {
+            return Some(Err(Stop::Reason(UpdateReason::JournalInvalid)));
+        }
+        Some(self.rollback("boot-menu", "recovery"))
     }
 
     // ── cancel, configure ────────────────────────────────────────────────

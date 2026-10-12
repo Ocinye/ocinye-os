@@ -57,6 +57,28 @@ fn main() -> ExitCode {
                     }
                     Err(Stop::Crashed(_)) => return ExitCode::FAILURE,
                 };
+            // The installed system's recovery boot entry: return to the
+            // previous release, once for this boot.
+            let recovery = Arc::clone(&engine);
+            std::thread::spawn(move || {
+                let cmdline = std::fs::read_to_string("/proc/cmdline").unwrap_or_default();
+                if recovery.reserve("rollback").is_ok() {
+                    if let Some(r) = recovery.recovery_request(&cmdline) {
+                        match r {
+                            Ok(_) => eprintln!(
+                                "ocinye-update-engine: recovery: returned to the previous release"
+                            ),
+                            Err(Stop::Reason(r)) => {
+                                eprintln!("ocinye-update-engine: recovery: {}", r.code())
+                            }
+                            Err(Stop::Crashed(_)) => {
+                                eprintln!("ocinye-update-engine: recovery: interrupted")
+                            }
+                        }
+                    }
+                    recovery.release();
+                }
+            });
             let auto = Arc::clone(&engine);
             std::thread::spawn(move || {
                 let mut last: Option<u64> = None;

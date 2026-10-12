@@ -85,6 +85,11 @@ impl Paths {
     pub fn audit(&self) -> PathBuf {
         self.state.join("audit.jsonl")
     }
+    /// The boot whose recovery request was already acted on.
+    #[must_use]
+    pub fn recovery_boot(&self) -> PathBuf {
+        self.state.join("recovery-boot")
+    }
     /// The base maintenance record.
     #[must_use]
     pub fn base(&self) -> PathBuf {

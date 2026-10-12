@@ -687,6 +687,21 @@ pub fn inspect(m: &Mounted, profile: &str, arch: &str, release_id: &str) -> Insp
             guard_present.is_empty(),
             (!guard_present.is_empty()).then(|| guard_present.join(",")),
         );
+        // The installed system's recovery entry (ADR-0032): the script that
+        // writes it, executable, and the boot menu generated with it.
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let script = r.join("etc/grub.d/42_ocinye_previous");
+            let executable =
+                fs::metadata(&script).is_ok_and(|m| m.permissions().mode() & 0o111 != 0);
+            let in_menu = fs::read_to_string(r.join("boot/grub/grub.cfg"))
+                .is_ok_and(|g| g.contains("ocinye.update=rollback"));
+            c(
+                "recovery_boot_entry",
+                executable && in_menu,
+                (!(executable && in_menu)).then(|| format!("script={executable} menu={in_menu}")),
+            );
+        }
         // What the System Service asks for Wi-Fi and Bluetooth (ADR-0031).
         c(
             "radio_daemons_enabled",
