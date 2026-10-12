@@ -31,7 +31,7 @@ pedido ─▶ posição ─▶ autorização ─▶ prova fresca ─▶ validaç
 
 ## Estado
 
-`IMPLEMENTED`, provado numa imagem `arm64` construída (`scripts/image-e2e.sh seat`). Fazem trabalho real: estado do sistema,
+`IMPLEMENTED`, provado em imagens `arm64` e `amd64` construídas (`scripts/image-e2e.sh seat`). Fazem trabalho real: estado do sistema,
 inventário, rede (leitura), energia, brilho, hora, idioma, teclado,
 acessibilidade, privacidade (preferências), armazenamento (leitura), estado de
 actualizações, diagnóstico, acesso remoto e recuperação (leitura). Wi-Fi,

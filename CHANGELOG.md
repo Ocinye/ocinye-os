@@ -7,6 +7,26 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ocinye OS v1 em `amd64` — 2026-10-12 (ramo `fix/ocinye-os-v1-amd64-proof`)
+
+- **Ecrã em `amd64`**: o compositor arranca a interface com
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` e `WEBKIT_DISABLE_COMPOSITING_MODE=1`. Numa
+  imagem `amd64` construída o processo web do WebKitGTK 2.52 morria no `llvmpipe`
+  e a janela ficava em branco; qualquer uma das variáveis, sozinha, fazia a
+  interface aparecer. O grupo `render` foi experimentado e não mudava nada.
+- **Construtor**: espera pelo `udev` antes de montar as partições de uma imagem
+  (a etiqueta da ESP chegava tarde em `amd64`), e o `apt-get` repete um
+  descarregamento que o espelho do snapshot corta a meio.
+- **Prova da ESP por arquitectura**: o `shim` e o `grub` procuram-se no
+  directório do fornecedor (`EFI/ubuntu` em `arm64`), mais o caminho de recurso.
+- **Banco de ensaio sob emulação**: uma tecla de cada vez a um ritmo que o
+  convidado acompanha (a repetição de teclas do cliente Wayland disparava), e
+  espera pela resposta do motor à confirmação antes do Enter.
+- **Exemplos só em `.com`**: os exemplos de nome na rede e os do Installer
+  (`ocinye.empresa.com`, `os.empresa.com`).
+- Provado em imagens `amd64` construídas: `image-e2e.sh window` PASS (17
+  verificações) e `seat` PASS (44), sob emulação completa.
+
 ### Ocinye System Service — primeiro bloco — 2026-10-11 (ramo `feat/ocinye-os-v1-system-experience`)
 
 [ADR-0031](docs/adrs/0031-rust-system-authority-and-native-system-surfaces.md),
@@ -61,7 +81,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   destrutiva só fica disponível depois disso. Os terminais (VT e série)
   continuam, como recurso. O Live e a verificação de hardware ficam nas
   consolas de texto. Passos de teclado e de rede **não existem**: o motor não
-  os tem. Provado numa ISO `arm64` construída (`image-e2e.sh window`): a
+  os tem. Provado em ISOs `arm64` e `amd64` construídas (`image-e2e.sh window`): a
   instalação inteira só por controlos da janela, e o arranque do instalado.
 - Corrigido «Apagar o disco {d}?»: o título da confirmação saía com o campo por
   preencher. Dois testes recusam um texto mostrado com `{…}` ou `${…}` por
@@ -72,7 +92,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   shell; a credencial do primeiro administrador é entregue uma vez. O ecrã
   gráfico passa a arrancar em qualquer máquina com dispositivo de ecrã, a
   consola de texto fica em `Ctrl+Alt+F2`, e o compositor passa essas teclas ao
-  núcleo. Provado numa imagem `arm64` construída (`image-e2e.sh seat`).
+  núcleo. Provado em imagens `arm64` e `amd64` construídas (`image-e2e.sh seat`).
 - **Inscrição do segundo factor no ecrã da máquina**: uma conta que o exige e
   ainda não o tem (o primeiro administrador) inscreve-o ali — a chave do
   autenticador, o código, e os códigos de recuperação mostrados uma vez — pelos
@@ -97,7 +117,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **O posto na imagem**: as imagens instaláveis trazem os dois serviços, o
   compositor e a interface, com as suas unidades. O ecrã gráfico só arranca
   depois de haver uma Instância ligada; até lá `tty1` é da consola de texto e
-  do seu código de emparelhamento. Provado numa imagem `arm64` construída.
+  do seu código de emparelhamento. Provado em imagens `arm64` e `amd64` construídas.
 - **Porta da própria máquina**: o proxy publica `127.0.0.1:8480`, só no
   loopback, e por ela passam apenas entrar, o segundo factor, a política de
   sessão e a sua chave, e sair. O Core continua sem porto no host.

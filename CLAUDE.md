@@ -291,14 +291,14 @@ sem que nada falhe.
   ADR-0107), e é só isso que o System Service pergunta antes de uma capacidade
   de operador. As imagens instaláveis trazem o posto e as suas unidades, e
   uma máquina sem Instância cria-a no seu próprio ecrã (**activação local**,
-  `activation.*`, com o instalador do release que a imagem traz). Provado numa
-  imagem QCOW2 `arm64` construída (`scripts/image-e2e.sh seat`): configuração
+  `activation.*`, com o instalador do release que a imagem traz). Provado em
+  imagens QCOW2 `arm64` e `amd64` construídas (`scripts/image-e2e.sh seat`): configuração
   no primeiro arranque, credencial do primeiro administrador entregue uma vez,
   primeiro acesso com mudança de palavra-passe e inscrição do segundo factor,
   sessão de operador, janela do Workspace, bloqueio e desbloqueio, reinício. O
   suporte de instalação traz um **instalador gráfico** — um assistente que é
   cliente tipado do Motor de Instalação (`ocinye_image_contracts::window`) e
-  não decide nada sobre discos —, provado numa ISO `arm64` construída
+  não decide nada sobre discos —, provado em ISOs `arm64` e `amd64` construídas
   (`scripts/image-e2e.sh window`): instalação completa só por controlos da
   janela, confirmação errada recusada sem escrita, e arranque do sistema
   instalado. O assistente **não tem** passos de teclado nem de rede; o Live e a

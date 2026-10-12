@@ -73,8 +73,9 @@ que a política lhe dá.
 (`infra/system-ui/bench/`): toma o ecrã, mostra a interface do sistema (Tauri
 sobre WebKitGTK), recebe teclado e ponteiro, dá a barra à superfície de
 confiança e o resto à janela do Workspace, e esconde-a quando a interface pede o
-ecrã. **Não** provado: `amd64`, hardware físico, segunda saída, mudança de
-terminal virtual. Ainda **não** tem: cursores por contexto (há uma seta só),
+ecrã. Provado também em imagens `arm64` e `amd64` construídas, sob QEMU com
+`virtio-gpu` (`scripts/image-e2e.sh seat` e `window`). **Não** provado:
+hardware físico, segunda saída, mudança de terminal virtual. Ainda **não** tem: cursores por contexto (há uma seta só),
 toque, e escala de saída diferente de 1.
 
 O desenho é concluído (`glFinish`) antes de cada troca de página: um
