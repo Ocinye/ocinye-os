@@ -27,6 +27,10 @@
     busy: false,
     focusNext: null,       // o controlo que deve receber o foco no próximo desenho
     langChosen: false,
+    // Definições do sistema instalado: o formulário local até o motor as aceitar.
+    net: null,             // { mode, interface, address, prefix, gateway, dns }
+    host: null,            // o nome escrito, por enviar
+    pending: null,         // 'network' | 'advanced': continuar quando o motor aceitar
   };
   const UNRESOLVED = [];
   const MISSING = [];
@@ -66,12 +70,22 @@
       S.engine = event.state;
       S.busy = false;
       if (event.state.step !== was) {
+        if (was) S.focusNext = null;
         S.dialog = false; S.typed = ''; S.checks = []; S.checked = null; S.refusedConfirm = false;
         if (event.state.step === 'WELCOME') { S.page = 'welcome'; S.chosen = null; S.stages = []; S.details = []; S.showDetails = false; }
       }
       // O motor volta a listar os discos em cada passagem: uma escolha que já
       // não existe, ou que deixou de poder ser feita, cai.
       if (event.state.step === 'STORAGE' && !event.state.disks.some((d) => d.by_path === S.chosen && selectable(d))) S.chosen = null;
+      // Uma definição enviada e aceite: o passo segue sozinho; recusada, fica
+      // e diz porquê.
+      if (S.pending && event.state.step === ({ network: 'NETWORK', advanced: 'ADVANCED' })[S.pending]) {
+        const was = S.pending; S.pending = null;
+        if (!event.state.refused) { S.busy = true; send({ action: 'continue' }); }
+        else if (was === 'network') S.focusNext = 'n-address';
+      }
+      if (event.state.step === 'NETWORK' && !S.net) S.net = netForm(event.state.settings, event.state.interfaces);
+      if (event.state.step === 'ADVANCED' && S.host === null) S.host = event.state.hostname || '';
     } else if (event.event === 'confirmation_checked') {
       // Responde, pela ordem, ao que foi perguntado. Uma recusa sem pergunta
       // pendente é a de uma confirmação que o motor não aceitou.
@@ -89,12 +103,20 @@
   const step = () => (S.engine ? S.engine.step : null);
 
   // ── o trilho
-  const RAIL = ['welcome', 'language', 'computer', 'disk', 'review', 'install', 'done'];
+  const RAIL = ['welcome', 'language', 'computer', 'keyboard', 'network', 'disk', 'options', 'review', 'install', 'done'];
   function at() {
     const e = step();
     if (!e || e === 'WELCOME') return S.page === 'language' ? 1 : 0;
-    return { DRIVEN_ELSEWHERE: 1, NOT_INSTALLING: 0, COMPATIBILITY: 2, STORAGE: 3, REVIEW: 4, KEY_OFFER: 5, INSTALLING: 5, INSTALLED: 6, FAILED: 5 }[e];
+    return { DRIVEN_ELSEWHERE: 1, NOT_INSTALLING: 0, COMPATIBILITY: 2, KEYBOARD: 3, NETWORK: 4, STORAGE: 5, ADVANCED: 6, REVIEW: 7, KEY_OFFER: 8, INSTALLING: 8, INSTALLED: 9, FAILED: 8 }[e];
   }
+  // O formulário da rede a partir do que o motor diz.
+  function netForm(s, ifaces) {
+    const wired = ifaces.filter((i) => i.wired);
+    if (s.mode === 'STATIC') return { mode: 'STATIC', interface: s.interface, address: s.address, prefix: String(s.prefix), gateway: s.gateway, dns: s.dns.join(', ') };
+    return { mode: 'AUTOMATIC', interface: (wired[0] || ifaces[0] || {}).name || '', address: '', prefix: '24', gateway: '', dns: '' };
+  }
+  const netSettings = () => (S.net.mode === 'AUTOMATIC' ? { mode: 'AUTOMATIC' } : { mode: 'STATIC', interface: S.net.interface, address: S.net.address.trim(), prefix: Number(S.net.prefix), gateway: S.net.gateway.trim(), dns: S.net.dns.split(/[\s,]+/).filter(Boolean) });
+  const layoutName = (code) => { const l = S.layouts && S.layouts.find((x) => x.code === code); return l ? esc(l.name) : esc(code); };
   const kicker = () => `<div class="oi-k">${t('step.of', { n: at() + 1, m: RAIL.length })}</div>`;
   function rail() {
     const cur = at();
@@ -139,6 +161,41 @@
           ? `<span class="oi-foot__gap"></span>${btn('gold', t('b.restart'), 'restart', { before: 'restart', af: true })}`
           : `<span class="oi-foot__gap"></span>${btn('gold', t('b.next'), 'continue', { after: 'arrow-r', af: true })}` };
     },
+    KEYBOARD() {
+      const e = S.engine;
+      S.layouts = e.layouts;
+      const opt = (l) => `<button class="oi-opt" type="button" role="radio" id="kb-${esc(l.code)}" aria-checked="${e.chosen === l.code}" data-act="keyboard" data-arg="${esc(l.code)}"${e.chosen === l.code ? ' data-af' : ''}><span class="oi-opt__ic">${ic('keyboard')}</span><span><span class="oi-opt__t">${esc(l.name)}</span> <span class="oi-opt__code">— ${esc(l.code)}</span></span></button>`;
+      return { body: `${kicker()}<h1 class="oi-h" id="oi-h">${t('kb.h')}</h1><p class="oi-d">${t('kb.d')}</p>
+        <div class="oi-opts oi-opts--grid" role="radiogroup" aria-labelledby="oi-h">${e.layouts.map(opt).join('')}</div>`,
+        foot: `${btn('quiet', t('b.cancel'), 'restart')}<span class="oi-foot__gap"></span>${btn('gold', t('b.next'), 'continue', { after: 'arrow-r' })}` };
+    },
+    NETWORK() {
+      const e = S.engine;
+      const f = S.net || netForm(e.settings, e.interfaces);
+      const iface = (i) => row(`<span class="oi-mono">${esc(i.name)}</span> · ${t(i.wired ? 'net.wired' : 'net.wireless')}`, i.carrier ? badge('ok', t('net.link'), 'check') : badge('mute', t('net.nolink')));
+      const mode = (m, icon) => `<button class="oi-opt" type="button" role="radio" id="nm-${m}" aria-checked="${f.mode === m}" data-act="net-mode" data-arg="${m}"${f.mode === m ? ' data-af' : ''}><span class="oi-opt__ic">${ic(icon)}</span><span><span class="oi-opt__t">${t('net.' + m)}</span><span class="oi-opt__s">${t('net.' + m + '.s')}</span></span></button>`;
+      const field = (id, label, value, o = {}) => `<label class="oi-field" for="n-${id}"><span>${label}</span><input class="oi-input oi-input--plain" id="n-${id}" data-net="${id}" type="text" value="${esc(value)}" autocomplete="off" spellcheck="false" inputmode="${o.mode || 'decimal'}"${o.help ? ` aria-describedby="n-${id}-h"` : ''}>${o.help ? `<span class="oi-field__hint" id="n-${id}-h">${o.help}</span>` : ''}</label>`;
+      const wired = e.interfaces.filter((i) => i.wired);
+      const staticForm = f.mode !== 'STATIC' ? '' : `<div class="oi-grid2">
+          <label class="oi-field" for="n-interface"><span>${t('net.iface')}</span><select class="oi-input oi-input--plain" id="n-interface" data-net="interface">${(wired.length ? wired : e.interfaces).map((i) => `<option value="${esc(i.name)}"${i.name === f.interface ? ' selected' : ''}>${esc(i.name)}</option>`).join('')}</select></label>
+          ${field('address', t('net.addr'), f.address)}${field('prefix', t('net.prefix'), f.prefix, { mode: 'numeric' })}${field('gateway', t('net.gw'), f.gateway)}
+          ${field('dns', t('net.dns'), f.dns, { help: t('net.dns.h') })}</div>`;
+      return { body: `${kicker()}<h1 class="oi-h" id="oi-h">${t('net.h')}</h1><p class="oi-d">${t('net.d')}</p>
+        <div class="oi-rows">${e.interfaces.length ? e.interfaces.map(iface).join('') : row(t('net.ifaces'), badge('mute', t('net.none')))}</div>
+        ${e.refused ? note('warn', 'warn', t('set.' + e.refused)) : ''}
+        <div class="oi-opts" role="radiogroup" aria-label="${t('net.h')}">${mode('AUTOMATIC', 'eth')}${e.interfaces.length ? mode('STATIC', 'gear') : ''}</div>${staticForm}`,
+        foot: `${btn('', t('b.back'), 'back', { before: 'arrow-l' })}${btn('quiet', t('b.cancel'), 'restart')}<span class="oi-foot__gap"></span>${btn('gold', t('b.next'), 'net-next', { after: 'arrow-r' })}` };
+    },
+    ADVANCED() {
+      const e = S.engine;
+      const host = S.host === null ? e.hostname || '' : S.host;
+      return { body: `${kicker()}<h1 class="oi-h" id="oi-h">${t('adv.h')}</h1><p class="oi-d">${t('adv.d')}</p>
+        ${e.refused ? note('warn', 'warn', t('set.' + e.refused)) : ''}
+        <label class="oi-field" for="a-host"><span>${t('adv.host')}</span><input class="oi-input oi-input--plain" id="a-host" data-host type="text" value="${esc(host)}" autocomplete="off" spellcheck="false" maxlength="63" aria-describedby="a-host-h" data-af><span class="oi-field__hint" id="a-host-h">${t('adv.host.h')}</span></label>
+        <div class="oi-rows">${row(t('adv.layout'), t('r.layoutv'))}</div>
+        ${note('', 'shield', t('adv.layout.note'))}`,
+        foot: `${btn('', t('b.back'), 'back', { before: 'arrow-l' })}${btn('quiet', t('b.cancel'), 'restart')}<span class="oi-foot__gap"></span>${btn('gold', t('b.next'), 'adv-next', { after: 'arrow-r' })}` };
+    },
     STORAGE() {
       const e = S.engine;
       const content = (d) => (d.partitions === 0 ? t('d.empty') : t(d.partitions === 1 ? 'd.parts1' : 'd.parts', { n: d.partitions, fs: d.filesystems.length ? d.filesystems.join(', ') : T['d.nofs'][LI()] }));
@@ -174,6 +231,9 @@
           ${row(t('r.size'), size(d.bytes))}
           ${row(t('r.now'), d.partitions === 0 ? t('d.empty') : t(d.partitions === 1 ? 'd.parts1' : 'd.parts', { n: d.partitions, fs: d.filesystems.length ? d.filesystems.join(', ') : T['d.nofs'][LI()] }))}
           ${row(t('r.layout'), t('r.layoutv'))}
+          ${row(t('r.keyboard'), layoutName(S.engine.settings.keyboard))}
+          ${row(t('r.network'), S.engine.settings.network.mode === 'STATIC' ? `<span class="oi-mono">${esc(S.engine.settings.network.interface)} · ${esc(S.engine.settings.network.address)}/${esc(S.engine.settings.network.prefix)}</span>` : t('net.AUTOMATIC'))}
+          ${row(t('r.host'), S.engine.settings.hostname ? `<span class="oi-mono">${esc(S.engine.settings.hostname)}</span>` : t('r.host.image'))}
           ${S.release ? row(t('r.release'), `<span class="oi-mono">${esc(S.release)}</span>`) : ''}
         </div>
         ${note('', 'shield', `<strong>${t('r.remote')}.</strong> ${t('r.remotev')}`)}`,
@@ -261,7 +321,12 @@
         ${page.over || ''}
       </div></div></div>`;
     document.documentElement.lang = LOCALE();
-    if (html === lastHtml) return;
+    if (html === lastHtml) {
+      // Nada mudou no ecrã, mas pode ter sido pedido o foco noutro controlo.
+      const wanted = S.focusNext && document.getElementById(S.focusNext);
+      if (wanted && !wanted.disabled) { wanted.focus(); S.focusNext = null; }
+      return;
+    }
     lastHtml = html;
     const root = document.getElementById('root');
     const active = document.activeElement;
@@ -273,7 +338,11 @@
     lastFocus = focusKey;
     const scope = root.querySelector('.oi-dialog') || root.querySelector('.oi-main');
     let target = null;
-    if (S.focusNext && document.getElementById(S.focusNext) && !document.getElementById(S.focusNext).disabled) target = document.getElementById(S.focusNext);
+    // O controlo pedido recebe o foco quando existir e estiver activo — à
+    // espera da resposta do motor está desactivado, e o pedido aguarda.
+    const wanted = S.focusNext && document.getElementById(S.focusNext);
+    if (wanted && !wanted.disabled) { target = wanted; S.focusNext = null; }
+    else if (S.focusNext && S.busy) { target = null; }
     else if (moved) target = scope.querySelector('[data-af]') || scope.querySelector('button:not([disabled])') || root.querySelector('#oi-h');
     else {
       if (root.querySelector('.oi-body')) root.querySelector('.oi-body').scrollTop = scroll;
@@ -282,7 +351,7 @@
       // o tinha deixou de existir): o foco vai para a acção natural do passo.
       if (!target || target.disabled) target = scope.querySelector('[data-af]:not([disabled])');
     }
-    S.focusNext = null;
+    if (!S.busy) S.focusNext = null;
     if (target) {
       target.focus();
       if (!moved && keep && keep.a != null && target.setSelectionRange) { try { target.setSelectionRange(keep.a, keep.b); } catch (err) { /* sem selecção */ } }
@@ -309,6 +378,11 @@
     'key-no': () => { S.busy = true; send({ action: 'answer_key', authorise: false }); },
     details: () => { S.showDetails = !S.showDetails; },
     restart: () => { S.busy = true; send({ action: 'restart' }); },
+    // Escolher é marcar e passar o foco para «Continuar», como nos discos.
+    keyboard: (arg) => { S.busy = true; S.focusNext = 'b-continue'; send({ action: 'choose_keyboard', layout: arg }); },
+    'net-mode': (arg) => { S.net = Object.assign({}, S.net || netForm(S.engine.settings, S.engine.interfaces), { mode: arg }); S.focusNext = arg === 'STATIC' ? 'n-address' : 'b-net-next'; },
+    'net-next': () => { S.busy = true; S.pending = 'network'; send({ action: 'set_network', settings: netSettings() }); },
+    'adv-next': () => { const h = (S.host || '').trim().toLowerCase(); S.busy = true; S.pending = 'advanced'; send({ action: 'set_hostname', hostname: h || null }); },
   };
 
   document.addEventListener('click', (e) => {
@@ -318,6 +392,10 @@
     if (f) { f(el.dataset.arg); render(); }
   });
   document.addEventListener('input', (e) => {
+    const n = e.target.closest('[data-net]');
+    if (n) { S.net = Object.assign({}, S.net || netForm(S.engine.settings, S.engine.interfaces), { [n.dataset.net]: n.value }); return; }
+    const h = e.target.closest('[data-host]');
+    if (h) { S.host = h.value; return; }
     const el = e.target.closest('[data-f="typed"]');
     if (!el) return;
     S.typed = el.value;
@@ -336,7 +414,13 @@
     send({ action: 'confirm', typed: S.typed });
     render();
   });
+  document.addEventListener('change', (e) => {
+    const n = e.target.closest('select[data-net]');
+    if (n) { S.net = Object.assign({}, S.net, { [n.dataset.net]: n.value }); render(); }
+  });
   document.addEventListener('keydown', (e) => {
+    // Enter no nome do computador é «Continuar».
+    if (e.key === 'Enter' && e.target.closest('[data-host]')) { e.preventDefault(); ACTIONS['adv-next'](); render(); return; }
     if (e.key === 'Escape' && S.dialog) { S.dialog = false; S.typed = ''; S.checked = null; render(); }
   });
   document.addEventListener('contextmenu', (e) => e.preventDefault());

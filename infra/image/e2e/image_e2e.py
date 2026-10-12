@@ -1113,6 +1113,24 @@ def installed_root_identity(disk, run=None, pick_dev=None):
     return facts
 
 
+def installed_settings(disk, run=None):
+    """Read, offline and read-only, what the installer wrote from the
+    window's settings: the keyboard layout and the machine's name."""
+    run = run or _run_cmd
+    facts = {}
+    try:
+        with NbdAttach(disk, run=run) as nbd:
+            mnt = disk + ".setmnt"
+            with RoMount(f"{nbd.dev}p2", mnt, run=run):
+                kb = open(os.path.join(mnt, "etc/default/keyboard"), encoding="utf-8").read()
+                m = re.search(r'^XKBLAYOUT="([a-z]+)"', kb, re.M)
+                facts["keyboard"] = m.group(1) if m else None
+                facts["hostname"] = open(os.path.join(mnt, "etc/hostname"), encoding="utf-8").read().strip()
+    except Exception as e:  # noqa: BLE001
+        facts["error"] = f"{type(e).__name__}: {e}"
+    return facts
+
+
 def _unique_dir(base):
     """`base`, or `base-2`, `base-3`… so repeated failures never overwrite
     earlier evidence silently."""
@@ -1361,23 +1379,46 @@ def scenario_window(a):
         time.sleep(4)
         vm.screenshot(os.path.join(shots, "3-compatibility.png"))
         vm.press("ret")
-        need("window: Continue on the compatibility summary opened storage", reached(vm, "step=STORAGE", 300))
-        time.sleep(4)
-        vm.screenshot(os.path.join(shots, "4-storage.png"))
+        need("window: Continue on the compatibility summary opened the keyboard step", reached(vm, "step=KEYBOARD", 300))
+        settle = 4 if native(a.arch) else 20
+        time.sleep(settle)
+        # The layouts are cards in order (pt, br, us, gb, fr…): four Tabs from
+        # the chosen one reach French; Enter chooses it and moves to Continue.
+        for _ in range(4):
+            vm.press("tab")
+        vm.press("ret")
+        time.sleep(settle)
+        vm.screenshot(os.path.join(shots, "4-keyboard.png"))
+        vm.press("ret")
+        need("window: Continue on the keyboard step opened the network step", reached(vm, "step=NETWORK", 120))
+        time.sleep(settle)
+        vm.screenshot(os.path.join(shots, "5-network.png"))
+        # Automatic (DHCP) is chosen: Enter keeps it and moves to Continue.
+        vm.press("ret")
+        time.sleep(settle)
+        vm.press("ret")
+        need("window: the network settings were accepted and storage opened", reached(vm, "step=STORAGE", 120))
+        time.sleep(settle)
+        vm.screenshot(os.path.join(shots, "6-storage.png"))
         # No disk is chosen until a card is: Enter on the focused card chooses
         # it and moves to Continue; Enter there sends the choice.
         vm.press("ret")
         time.sleep(3)
-        vm.screenshot(os.path.join(shots, "5-storage-chosen.png"))
         vm.press("ret")
         need("window: a disk card was chosen with the keyboard, and the engine selected it", reached(vm, "selected=vd[a-z]", 120))
-        need("window: the engine showed the review", reached(vm, "step=REVIEW", 60))
+        need("window: the options step followed the disk", reached(vm, "step=ADVANCED", 60))
+        time.sleep(settle)
+        vm.type("posto-e2e")
+        time.sleep(settle)
+        vm.screenshot(os.path.join(shots, "7-options.png"))
+        vm.press("ret")
+        need("window: the engine showed the review", reached(vm, "step=REVIEW", 120))
         time.sleep(4)
-        vm.screenshot(os.path.join(shots, "6-review.png"))
+        vm.screenshot(os.path.join(shots, "8-review.png"))
         # The destructive action opens the confirmation dialog.
         vm.press("ret")
         time.sleep(4)
-        vm.screenshot(os.path.join(shots, "7-confirm-empty.png"))
+        vm.screenshot(os.path.join(shots, "9-confirm-empty.png"))
         # A wrong confirmation: the action stays disabled, and Enter does
         # nothing — the engine is never asked to confirm, and nothing is written.
         before = size()
@@ -1388,7 +1429,7 @@ def scenario_window(a):
         time.sleep(4 if native(a.arch) else 45)
         vm.press("ret")
         time.sleep(12)
-        vm.screenshot(os.path.join(shots, "8-confirm-wrong.png"))
+        vm.screenshot(os.path.join(shots, "10-confirm-wrong.png"))
         with vm.lock:
             asked = "OCINYE-WINDOW confirmation=" in vm.buf or "OCINYE-WINDOW step=INSTALLING" in vm.buf
         r.check("window: a wrong confirmation leaves the action disabled; the engine is not asked", not asked)
@@ -1404,17 +1445,17 @@ def scenario_window(a):
         # engine accepted would land on the next step. Under full emulation
         # (amd64 on this arm64 bench) that round trip took more than 5 s.
         time.sleep(5 if native(a.arch) else 45)
-        vm.screenshot(os.path.join(shots, "9-confirm-right.png"))
+        vm.screenshot(os.path.join(shots, "11-confirm-right.png"))
         vm.press("ret")
         need("window: the confirmation typed in the dialog was accepted by the engine", reached(vm, "confirmation=accepted", 120))
         need("window: the installation started", reached(vm, "step=INSTALLING", 120))
         time.sleep(60)
-        vm.screenshot(os.path.join(shots, "10-installing.png"))
+        vm.screenshot(os.path.join(shots, "12-installing.png"))
         done = reached(vm, "step=INSTALLED", 5400)
         r.check("window: the installation wrote the chosen disk", size() > (64 << 20), size())
         r.check("window: the engine finished and the window was told", done)
         time.sleep(6)
-        vm.screenshot(os.path.join(shots, "11-installed.png"))
+        vm.screenshot(os.path.join(shots, "13-installed.png"))
         # Restart is the focused control: the machine goes down and its
         # firmware starts again. The window says to remove the medium when it
         # does; the bench removes it, and the installed disk starts on its own,
@@ -1436,6 +1477,9 @@ def scenario_window(a):
             # is in use: the boot configuration names the target's own root.
             ident = installed_root_identity(target)
             r.check("window: the installed boot configuration resolves to the target's own root", ident["ok"], ident["detail"])
+            chosen = installed_settings(target)
+            r.check("window: the keyboard and the name chosen in the window are on the installed disk",
+                    chosen.get("keyboard") == "fr" and chosen.get("hostname") == "posto-e2e", chosen)
             vm2 = Vm("window", a.arch, work, memory=2048)
             vm2.start([{"file": target, "serial": "OCY-TARGET-7F3A", "boot": True}])
             try:

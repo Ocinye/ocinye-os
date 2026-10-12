@@ -14,7 +14,14 @@
     disk('sdb', '', null, 64.0e9, 'AMBIGUOUS', 1, []),
     disk('sdc', 'Kingston DataTraveler', 'SMALL-0001', 8.0e9, 'TOO_SMALL', 1, ['vfat']),
   ];
-  const F = window.OI_FAKE_STATE = { out: [], actions: [], at: 'WELCOME', disk: null, wrote: null };
+  const F = window.OI_FAKE_STATE = { out: [], actions: [], at: 'WELCOME', disk: null, wrote: null, settings: { keyboard: 'pt', network: { mode: 'AUTOMATIC' }, hostname: null } };
+  const LAYOUTS = [['pt', 'Português (Portugal)'], ['br', 'Português (Brasil)'], ['us', 'English (US)'], ['gb', 'English (UK)'], ['fr', 'Français'], ['es', 'Español'], ['de', 'Deutsch'], ['it', 'Italiano'], ['ch', 'Suisse / Schweiz'], ['be', 'Belgique']].map(([code, name]) => ({ code, name }));
+  const IFACES = [{ name: 'enp1s0', wired: true, carrier: true, mac: '52:54:00:12:34:56' }, { name: 'wlp2s0', wired: false, carrier: false, mac: '52:54:00:ab:cd:ef' }];
+  const keyboard = () => step({ step: 'KEYBOARD', layouts: LAYOUTS, chosen: F.settings.keyboard });
+  const network = (refused) => step({ step: 'NETWORK', interfaces: IFACES, settings: F.settings.network, refused: refused || null });
+  const advanced = (refused) => step({ step: 'ADVANCED', hostname: F.settings.hostname, layout: { efi_bytes: 1073741824, filesystem: 'ext4', swap: false }, refused: refused || null });
+  const review = () => step({ step: 'REVIEW', disk: F.disk, settings: F.settings, confirmation_hint: F.disk.serial || F.disk.confirmation_token, confirmation_length: F.disk.confirmation_token.length });
+  const ip = (v) => /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(v) && v.split('.').every((n) => Number(n) <= 255);
   const step = (state) => { F.at = state.step; F.out.push({ event: 'step', state }); };
   const storage = (refused) => step({ step: 'STORAGE', disks: DISKS, minimum_bytes: 20e9, refused: refused || null });
   F.out.push({ event: 'hello', protocol: 1 });
@@ -44,18 +51,50 @@
       const blocked = scenario === 'blocked' ? { code: 'STORAGE_PROTECTION_UNVERIFIED', reason: 'swap_active' } : null;
       return step({ step: 'COMPATIBILITY', uefi: true, architecture_supported: true, memory_bytes: 16 * 1073741824, memory_required: 2 * 1073741824, storage_protected: !blocked, blocked });
     }
-    if (F.at === 'COMPATIBILITY') { if (a.action === 'continue' && scenario !== 'blocked') storage(); return; }
+    if (F.at === 'COMPATIBILITY') { if (a.action === 'continue' && scenario !== 'blocked') keyboard(); return; }
+    if (F.at === 'KEYBOARD') {
+      if (a.action === 'choose_keyboard' && LAYOUTS.some((l) => l.code === a.layout)) F.settings.keyboard = a.layout;
+      if (a.action === 'continue') return network();
+      return keyboard();
+    }
+    if (F.at === 'NETWORK') {
+      if (a.action === 'back') return keyboard();
+      if (a.action === 'continue') return storage();
+      if (a.action === 'set_network') {
+        const n = a.settings;
+        if (n.mode === 'STATIC' && !IFACES.some((i) => i.name === n.interface)) return network('UNKNOWN_INTERFACE');
+        if (n.mode === 'STATIC' && (!ip(n.address) || !ip(n.gateway) || !(n.prefix >= 1 && n.prefix <= 32) || !n.dns.every(ip))) return network('INVALID_ADDRESS');
+        // The gateway on the address's own network, as the engine checks.
+        const num = (v) => v.split('.').reduce((a, n) => a * 256 + Number(n), 0);
+        const mask = n.prefix >= 32 ? 0xffffffff : (0xffffffff - (2 ** (32 - n.prefix) - 1));
+        if (n.mode === 'STATIC' && n.prefix < 31 && Math.floor(num(n.address) / 2 ** (32 - n.prefix)) !== Math.floor(num(n.gateway) / 2 ** (32 - n.prefix))) return network('INVALID_ADDRESS');
+        void mask;
+        F.settings.network = n;
+      }
+      return network();
+    }
+    if (F.at === 'ADVANCED') {
+      if (a.action === 'back') return storage();
+      if (a.action === 'continue') return review();
+      if (a.action === 'set_hostname') {
+        if (a.hostname && !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(a.hostname)) return advanced('INVALID_HOSTNAME');
+        F.settings.hostname = a.hostname;
+      }
+      return advanced();
+    }
     if (F.at === 'STORAGE') {
       if (a.action === 'rescan') return storage();
+      if (a.action === 'back') return network();
       if (a.action !== 'select_disk') return;
       const d = DISKS.find((x) => x.by_path === a.by_path);
       if (!d) return storage({ code: 'AMBIGUOUS_DISK' });
       if (d.protection !== 'ELIGIBLE' && d.protection !== 'AMBIGUOUS') return storage({ code: 'DISK_PROTECTED', protection: d.protection });
       F.disk = d;
-      return step({ step: 'REVIEW', disk: d, confirmation_hint: d.serial || d.confirmation_token, confirmation_length: d.confirmation_token.length });
+      return advanced();
     }
+    if (F.at === 'STORAGE' && a.action === 'back') return network();
     if (F.at === 'REVIEW') {
-      if (a.action === 'back') { F.disk = null; return storage(); }
+      if (a.action === 'back') return advanced();
       if (a.action === 'check_confirmation') return void F.out.push({ event: 'confirmation_checked', valid: right() });
       if (a.action === 'confirm') {
         if (!right()) return void F.out.push({ event: 'confirmation_checked', valid: false });

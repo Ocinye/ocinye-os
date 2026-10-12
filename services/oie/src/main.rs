@@ -27,6 +27,7 @@ mod session;
 mod strings;
 mod window;
 
+use ocinye_image_contracts::window::{NetworkInterface, SystemSettings};
 use std::fs;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -453,10 +454,14 @@ impl flow::Machine for Real {
         let v = policy::verify(&policy::read_system(self.fault_injected));
         policy::first_reason(&v).map_or(Ok(()), Err)
     }
+    fn interfaces(&self) -> Vec<NetworkInterface> {
+        install::interfaces(Path::new("/sys/class/net"))
+    }
     fn install(
         &self,
         target: &ConfirmedTarget<'_>,
         key: Option<&PublicKeyLine>,
+        settings: &SystemSettings,
         say: &mut dyn FnMut(&str),
     ) -> Result<(), OieError> {
         let disk = target.disk();
@@ -535,7 +540,10 @@ impl flow::Machine for Real {
                 device: "journal".into(),
             }
         })?;
-        let r = install::prepare_first_boot(target, key, &text).map(|_| ());
+        // The settings chosen in the window (or the text installer's
+        // defaults) go into the installed system with its first-start record.
+        let r = install::configure_system(target, settings)
+            .and_then(|()| install::prepare_first_boot(target, key, &text).map(|_| ()));
         say(&format!(
             "  [{}] first_boot",
             if r.is_ok() { "OK" } else { "DISK_WRITE_FAILED" }

@@ -16,7 +16,10 @@ use ocinye_image_contracts::oie::{
     authorize_installation, classify, confirm, select, InstallationTargetDisk, OieError,
     MIN_DISK_BYTES,
 };
-use ocinye_image_contracts::window::{WindowAction, WindowEvent, WindowStep, WINDOW_PROTOCOL};
+use ocinye_image_contracts::window::{
+    FixedLayout, KeyboardLayout, SystemSettings, WindowAction, WindowEvent, WindowStep,
+    KEYBOARD_LAYOUTS, WINDOW_PROTOCOL,
+};
 
 use crate::flow::{Machine, Outcome, MIN_OIE_RAM};
 
@@ -136,140 +139,258 @@ pub fn run(
             _ => {}
         }
     }
-    // STORAGE → REVIEW → the typed confirmation. Disks are probed again on
-    // every pass; a choice is a stable path the engine itself listed.
+    // KEYBOARD → NETWORK → STORAGE → ADVANCED → REVIEW. Settings are the
+    // engine's to validate; nothing is written until the confirmation, and
+    // Back from any step changes nothing on any disk.
+    let layouts: Vec<KeyboardLayout> = KEYBOARD_LAYOUTS
+        .iter()
+        .map(|(code, name)| KeyboardLayout {
+            code: (*code).to_owned(),
+            name: (*name).to_owned(),
+        })
+        .collect();
+    let interfaces = m.interfaces();
+    let mut settings = SystemSettings::defaults(language);
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum At {
+        Keyboard,
+        Network,
+        Storage,
+        Advanced,
+        Review,
+    }
+    let mut at = At::Keyboard;
     let mut refused = None;
-    loop {
-        let disks = classify(&m.disks());
-        link.at(WindowStep::Storage {
-            disks: disks.clone(),
-            minimum_bytes: MIN_DISK_BYTES,
-            refused: refused.take(),
-        });
-        let chosen = loop {
-            match link.next() {
-                None => return Outcome::Abandoned,
-                Some(WindowAction::Rescan) => break None,
-                Some(WindowAction::SelectDisk { by_path }) => break Some(by_path),
-                // Giving up before anything was confirmed: nothing was written.
-                Some(WindowAction::Restart) => {
-                    m.reboot();
-                    return Outcome::Abandoned;
-                }
-                Some(_) => {}
-            }
-        };
-        let Some(by_path) = chosen else { continue };
-        let disk = match select(&disks, &by_path) {
-            Ok(d) => d,
-            Err(e) => {
-                refused = Some(e);
-                continue;
-            }
-        };
-        eprintln!("OCINYE-WINDOW selected={}", disk.device);
-        link.at(WindowStep::Review {
-            disk: disk.clone(),
-            confirmation_hint: hint(disk),
-            confirmation_length: u32::try_from(disk.confirmation_token.chars().count())
-                .unwrap_or(0),
-        });
-        let target = loop {
-            match link.next() {
-                None => return Outcome::Abandoned,
-                Some(WindowAction::Back) => break None,
-                Some(WindowAction::Restart) => {
-                    m.reboot();
-                    return Outcome::Abandoned;
-                }
-                // The window may ask as often as it likes whether what was
-                // typed is right; the answer grants nothing.
-                Some(WindowAction::CheckConfirmation { typed }) => {
-                    link.send(&WindowEvent::ConfirmationChecked {
-                        valid: confirm(disk, &typed).is_ok(),
-                    });
-                }
-                // The typed confirmation is what grants write authority over
-                // this disk, and over no other.
-                Some(WindowAction::Confirm { typed }) => {
-                    match authorize_installation(authority, disk, &typed) {
-                        Ok(target) => break Some(target),
-                        Err(_) => {
-                            eprintln!("OCINYE-WINDOW confirmation=refused");
-                            link.send(&WindowEvent::ConfirmationChecked { valid: false });
+    let mut settings_refused = None;
+    let mut chosen_path: Option<String> = None;
+    // The disks the confirmation is checked against; the write authority
+    // borrows from them, so they outlive the conversation.
+    let mut reviewed: Vec<InstallationTargetDisk>;
+    let target = loop {
+        match at {
+            At::Keyboard => {
+                link.at(WindowStep::Keyboard {
+                    layouts: layouts.clone(),
+                    chosen: settings.keyboard.clone(),
+                });
+                match link.next() {
+                    None => return Outcome::Abandoned,
+                    Some(WindowAction::ChooseKeyboard { layout }) => {
+                        let mut s = settings.clone();
+                        s.keyboard = layout;
+                        if s.validate(&interfaces).is_ok() {
+                            settings = s;
                         }
                     }
+                    Some(WindowAction::Continue) => at = At::Network,
+                    Some(WindowAction::Restart) => {
+                        m.reboot();
+                        return Outcome::Abandoned;
+                    }
+                    Some(_) => {}
                 }
-                Some(_) => {}
             }
-        };
-        let Some(target) = target else { continue };
-        eprintln!("OCINYE-WINDOW confirmation=accepted");
-        // OPERATOR KEY: looked for on removable media, never on the target.
-        let key = match m.operator_key(&target) {
-            Some(k) => {
-                link.at(WindowStep::KeyOffer {
-                    fingerprint: k.fingerprint().0,
+            At::Network => {
+                link.at(WindowStep::Network {
+                    interfaces: interfaces.clone(),
+                    settings: Box::new(settings.network.clone()),
+                    refused: settings_refused.take(),
                 });
-                loop {
+                match link.next() {
+                    None => return Outcome::Abandoned,
+                    Some(WindowAction::SetNetwork { settings: network }) => {
+                        let mut s = settings.clone();
+                        s.network = network;
+                        match s.validate(&interfaces) {
+                            Ok(()) => settings = s,
+                            Err(e) => settings_refused = Some(e),
+                        }
+                    }
+                    Some(WindowAction::Continue) => at = At::Storage,
+                    Some(WindowAction::Back) => at = At::Keyboard,
+                    Some(WindowAction::Restart) => {
+                        m.reboot();
+                        return Outcome::Abandoned;
+                    }
+                    Some(_) => {}
+                }
+            }
+            At::Storage => {
+                // Disks are probed again on every pass; a choice is a stable
+                // path the engine itself listed.
+                let disks = classify(&m.disks());
+                link.at(WindowStep::Storage {
+                    disks: disks.clone(),
+                    minimum_bytes: MIN_DISK_BYTES,
+                    refused: refused.take(),
+                });
+                match link.next() {
+                    None => return Outcome::Abandoned,
+                    Some(WindowAction::Rescan) => {}
+                    Some(WindowAction::Back) => at = At::Network,
+                    Some(WindowAction::SelectDisk { by_path }) => match select(&disks, &by_path) {
+                        Ok(d) => {
+                            eprintln!("OCINYE-WINDOW selected={}", d.device);
+                            chosen_path = Some(by_path);
+                            at = At::Advanced;
+                        }
+                        Err(e) => refused = Some(e),
+                    },
+                    // Giving up before anything was confirmed: nothing was written.
+                    Some(WindowAction::Restart) => {
+                        m.reboot();
+                        return Outcome::Abandoned;
+                    }
+                    Some(_) => {}
+                }
+            }
+            At::Advanced => {
+                link.at(WindowStep::Advanced {
+                    hostname: settings.hostname.clone(),
+                    layout: FixedLayout {
+                        efi_bytes: 1 << 30,
+                        filesystem: "ext4".into(),
+                        swap: false,
+                    },
+                    refused: settings_refused.take(),
+                });
+                match link.next() {
+                    None => return Outcome::Abandoned,
+                    Some(WindowAction::SetHostname { hostname }) => {
+                        let mut s = settings.clone();
+                        s.hostname = hostname.filter(|h| !h.is_empty());
+                        match s.validate(&interfaces) {
+                            Ok(()) => settings = s,
+                            Err(e) => settings_refused = Some(e),
+                        }
+                    }
+                    Some(WindowAction::Continue) => at = At::Review,
+                    Some(WindowAction::Back) => at = At::Storage,
+                    Some(WindowAction::Restart) => {
+                        m.reboot();
+                        return Outcome::Abandoned;
+                    }
+                    Some(_) => {}
+                }
+            }
+            At::Review => {
+                // The disk is chosen again from a fresh probe: what was
+                // listed a moment ago must still be there, and the same.
+                reviewed = classify(&m.disks());
+                let Some(disk) = chosen_path
+                    .as_deref()
+                    .and_then(|p| select(&reviewed, p).ok())
+                else {
+                    refused = None;
+                    at = At::Storage;
+                    continue;
+                };
+                link.at(WindowStep::Review {
+                    disk: Box::new(disk.clone()),
+                    settings: Box::new(settings.clone()),
+                    confirmation_hint: hint(disk),
+                    confirmation_length: u32::try_from(disk.confirmation_token.chars().count())
+                        .unwrap_or(0),
+                });
+                let confirmed = loop {
                     match link.next() {
                         None => return Outcome::Abandoned,
-                        Some(WindowAction::AnswerKey { authorise }) => {
-                            break authorise.then_some(k)
-                        }
-                        Some(_) => {}
-                    }
-                }
-            }
-            None => None,
-        };
-        // INSTALLING: everything that writes.
-        link.at(WindowStep::Installing);
-        let mut touched = false;
-        let r = m.install(&target, key.as_ref(), &mut |line| {
-            if let Some((name, ok)) = stage(line) {
-                // `install` is the stage that partitions and writes: once it
-                // is reported, in either sense, the disk is no longer as it was.
-                touched |= name == "install";
-                link.send(&WindowEvent::Stage {
-                    name: name.to_owned(),
-                    ok,
-                });
-            }
-            link.send(&WindowEvent::Detail {
-                line: line.trim().to_owned(),
-            });
-        });
-        return match r {
-            Ok(()) => {
-                link.at(WindowStep::Installed);
-                loop {
-                    match link.next() {
-                        None | Some(WindowAction::Restart) => break,
-                        Some(_) => {}
-                    }
-                }
-                m.reboot();
-                Outcome::Installed
-            }
-            Err(error) => {
-                link.at(WindowStep::Failed {
-                    error: error.clone(),
-                    disk_touched: touched,
-                });
-                loop {
-                    match link.next() {
-                        None => break,
+                        Some(WindowAction::Back) => break None,
                         Some(WindowAction::Restart) => {
                             m.reboot();
-                            break;
+                            return Outcome::Abandoned;
+                        }
+                        // The window may ask as often as it likes whether what was
+                        // typed is right; the answer grants nothing.
+                        Some(WindowAction::CheckConfirmation { typed }) => {
+                            link.send(&WindowEvent::ConfirmationChecked {
+                                valid: confirm(disk, &typed).is_ok(),
+                            });
+                        }
+                        // The typed confirmation is what grants write authority over
+                        // this disk, and over no other.
+                        Some(WindowAction::Confirm { typed }) => {
+                            match authorize_installation(authority, disk, &typed) {
+                                Ok(target) => break Some(target),
+                                Err(_) => {
+                                    eprintln!("OCINYE-WINDOW confirmation=refused");
+                                    link.send(&WindowEvent::ConfirmationChecked { valid: false });
+                                }
+                            }
                         }
                         Some(_) => {}
                     }
+                };
+                match confirmed {
+                    Some(t) => break t,
+                    None => at = At::Advanced,
                 }
-                Outcome::Failed(error)
             }
-        };
+        }
+    };
+    eprintln!("OCINYE-WINDOW confirmation=accepted");
+    // OPERATOR KEY: looked for on removable media, never on the target.
+    let key = match m.operator_key(&target) {
+        Some(k) => {
+            link.at(WindowStep::KeyOffer {
+                fingerprint: k.fingerprint().0,
+            });
+            loop {
+                match link.next() {
+                    None => return Outcome::Abandoned,
+                    Some(WindowAction::AnswerKey { authorise }) => break authorise.then_some(k),
+                    Some(_) => {}
+                }
+            }
+        }
+        None => None,
+    };
+    // INSTALLING: everything that writes.
+    link.at(WindowStep::Installing);
+    let mut touched = false;
+    let r = m.install(&target, key.as_ref(), &settings, &mut |line| {
+        if let Some((name, ok)) = stage(line) {
+            // `install` is the stage that partitions and writes: once it
+            // is reported, in either sense, the disk is no longer as it was.
+            touched |= name == "install";
+            link.send(&WindowEvent::Stage {
+                name: name.to_owned(),
+                ok,
+            });
+        }
+        link.send(&WindowEvent::Detail {
+            line: line.trim().to_owned(),
+        });
+    });
+    match r {
+        Ok(()) => {
+            link.at(WindowStep::Installed);
+            loop {
+                match link.next() {
+                    None | Some(WindowAction::Restart) => break,
+                    Some(_) => {}
+                }
+            }
+            m.reboot();
+            Outcome::Installed
+        }
+        Err(error) => {
+            link.at(WindowStep::Failed {
+                error: error.clone(),
+                disk_touched: touched,
+            });
+            loop {
+                match link.next() {
+                    None => break,
+                    Some(WindowAction::Restart) => {
+                        m.reboot();
+                        break;
+                    }
+                    Some(_) => {}
+                }
+            }
+            Outcome::Failed(error)
+        }
     }
 }
 
@@ -290,6 +411,7 @@ mod tests {
     use ocinye_image_contracts::bootmode::ResolvedMode;
     use ocinye_image_contracts::firstboot::PublicKeyLine;
     use ocinye_image_contracts::oie::{ConfirmedTarget, ProbedDisk};
+    use ocinye_image_contracts::window::{NetworkInterface, NetworkSettings};
 
     use super::*;
 
@@ -300,6 +422,7 @@ mod tests {
         fail: Option<OieError>,
         installed: RefCell<Vec<String>>,
         rebooted: Cell<u32>,
+        settings: RefCell<Option<SystemSettings>>,
     }
 
     impl Fake {
@@ -311,6 +434,7 @@ mod tests {
                 fail: None,
                 installed: RefCell::new(vec![]),
                 rebooted: Cell::new(0),
+                settings: RefCell::new(None),
             }
         }
     }
@@ -349,6 +473,14 @@ mod tests {
                 d("vdc", Some("SMALL-0001"), false, 8_000_000_000),
             ]
         }
+        fn interfaces(&self) -> Vec<NetworkInterface> {
+            vec![NetworkInterface {
+                name: "enp1s0".into(),
+                wired: true,
+                carrier: true,
+                mac: "52:54:00:12:34:56".into(),
+            }]
+        }
         fn operator_key(&self, _: &ConfirmedTarget<'_>) -> Option<PublicKeyLine> {
             None
         }
@@ -356,8 +488,10 @@ mod tests {
             &self,
             target: &ConfirmedTarget<'_>,
             _: Option<&PublicKeyLine>,
+            settings: &SystemSettings,
             say: &mut dyn FnMut(&str),
         ) -> Result<(), OieError> {
+            self.settings.replace(Some(settings.clone()));
             say("  [OK] media_check");
             if let Some(e) = &self.fail {
                 say("  [DISK_WRITE_FAILED] install");
@@ -417,20 +551,29 @@ mod tests {
     const VDA: &str = r#"{"action":"select_disk","by_path":"/dev/disk/by-path/vda"}"#;
     const RESTART: &str = r#"{"action":"restart"}"#;
 
+    /// From the welcome to the disks with the default settings.
+    const TO_STORAGE: [&str; 4] = [BEGIN, CONTINUE, CONTINUE, CONTINUE];
+
+    fn seq(parts: &[&[&'static str]]) -> Vec<&'static str> {
+        parts.iter().flat_map(|p| p.iter().copied()).collect()
+    }
+
     #[test]
     fn instala_no_disco_escolhido_e_confirmado_e_em_mais_nenhum() {
         let m = Fake::new();
         let (outcome, events) = drive(
             &m,
-            &[
-                BEGIN,
-                CONTINUE,
-                VDA,
-                r#"{"action":"check_confirmation","typed":"7F3"}"#,
-                r#"{"action":"check_confirmation","typed":"7f3a"}"#,
-                r#"{"action":"confirm","typed":"7F3A"}"#,
-                RESTART,
-            ],
+            &seq(&[
+                &TO_STORAGE,
+                &[
+                    VDA,
+                    CONTINUE,
+                    r#"{"action":"check_confirmation","typed":"7F3"}"#,
+                    r#"{"action":"check_confirmation","typed":"7f3a"}"#,
+                    r#"{"action":"confirm","typed":"7F3A"}"#,
+                    RESTART,
+                ],
+            ]),
         );
         assert_eq!(outcome, Outcome::Installed);
         assert_eq!(*m.installed.borrow(), ["/dev/disk/by-path/vda"]);
@@ -439,7 +582,10 @@ mod tests {
             [
                 "WELCOME",
                 "COMPATIBILITY",
+                "KEYBOARD",
+                "NETWORK",
                 "STORAGE",
+                "ADVANCED",
                 "REVIEW",
                 "INSTALLING",
                 "INSTALLED"
@@ -452,6 +598,97 @@ mod tests {
             .collect();
         assert_eq!(checks, [false, true]);
         assert_eq!(m.rebooted.get(), 1);
+        // The defaults of a Portuguese boot: pt keyboard, DHCP, the image's name.
+        assert_eq!(
+            m.settings.borrow().clone().unwrap(),
+            SystemSettings::defaults("pt")
+        );
+    }
+
+    #[test]
+    fn as_escolhas_da_janela_chegam_a_instalacao_e_as_invalidas_nao() {
+        let m = Fake::new();
+        let (outcome, events) = drive(
+            &m,
+            &[
+                BEGIN,
+                CONTINUE,
+                r#"{"action":"choose_keyboard","layout":"klingon"}"#,
+                r#"{"action":"choose_keyboard","layout":"fr"}"#,
+                CONTINUE,
+                // An interface this machine does not have, then a gateway off
+                // the network: refused, and the step says so.
+                r#"{"action":"set_network","settings":{"mode":"STATIC","interface":"eth9","address":"192.168.1.20","prefix":24,"gateway":"192.168.1.1","dns":[]}}"#,
+                r#"{"action":"set_network","settings":{"mode":"STATIC","interface":"enp1s0","address":"192.168.1.20","prefix":24,"gateway":"10.0.0.1","dns":[]}}"#,
+                r#"{"action":"set_network","settings":{"mode":"STATIC","interface":"enp1s0","address":"192.168.1.20","prefix":24,"gateway":"192.168.1.1","dns":["192.168.1.1"]}}"#,
+                CONTINUE,
+                VDA,
+                r#"{"action":"set_hostname","hostname":"Posto 1"}"#,
+                r#"{"action":"set_hostname","hostname":"posto-1"}"#,
+                CONTINUE,
+                r#"{"action":"confirm","typed":"7F3A"}"#,
+                RESTART,
+            ],
+        );
+        assert_eq!(outcome, Outcome::Installed);
+        let got = m.settings.borrow().clone().unwrap();
+        assert_eq!(got.keyboard, "fr");
+        assert_eq!(got.hostname.as_deref(), Some("posto-1"));
+        assert!(
+            matches!(got.network, NetworkSettings::Static { ref interface, .. } if interface == "enp1s0")
+        );
+        let refusals: Vec<&str> = events
+            .iter()
+            .filter(|e| !e["state"]["refused"].is_null() && e["state"]["refused"].is_string())
+            .map(|e| e["state"]["refused"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            refusals,
+            ["UNKNOWN_INTERFACE", "INVALID_ADDRESS", "INVALID_HOSTNAME"]
+        );
+        let review = events
+            .iter()
+            .find(|e| e["state"]["step"] == "REVIEW")
+            .unwrap();
+        assert_eq!(review["state"]["settings"]["keyboard"], "fr");
+    }
+
+    #[test]
+    fn voltar_atras_percorre_os_passos_sem_escrever_nada() {
+        let m = Fake::new();
+        let back = r#"{"action":"back"}"#;
+        let (outcome, events) = drive(
+            &m,
+            &seq(&[
+                &TO_STORAGE,
+                &[
+                    back, back, CONTINUE, CONTINUE, VDA, back, VDA, CONTINUE, back, CONTINUE,
+                    RESTART,
+                ],
+            ]),
+        );
+        assert_eq!(outcome, Outcome::Abandoned);
+        assert!(m.installed.borrow().is_empty());
+        assert_eq!(
+            steps(&events),
+            [
+                "WELCOME",
+                "COMPATIBILITY",
+                "KEYBOARD",
+                "NETWORK",
+                "STORAGE",
+                "NETWORK",
+                "KEYBOARD",
+                "NETWORK",
+                "STORAGE",
+                "ADVANCED",
+                "STORAGE",
+                "ADVANCED",
+                "REVIEW",
+                "ADVANCED",
+                "REVIEW"
+            ]
+        );
     }
 
     #[test]
@@ -459,20 +696,25 @@ mod tests {
         let m = Fake::new();
         let (outcome, events) = drive(
             &m,
-            &[
-                BEGIN,
-                CONTINUE,
-                // Actions out of turn, a made-up one, and the other disk's token.
-                r#"{"action":"confirm","typed":"7F3A"}"#,
-                r#"{"action":"install","by_path":"/dev/disk/by-path/vda"}"#,
-                VDA,
-                r#"{"action":"confirm","typed":""}"#,
-                r#"{"action":"confirm","typed":"9K2M"}"#,
-                r#"{"action":"confirm","typed":"OCY-TARGET-7F3A"}"#,
-                CONTINUE,
-                // Giving up restarts the machine; still nothing was written.
-                RESTART,
-            ],
+            &seq(&[
+                &[BEGIN, CONTINUE],
+                // Actions out of turn and a made-up one, at the settings steps.
+                &[
+                    r#"{"action":"confirm","typed":"7F3A"}"#,
+                    r#"{"action":"install","by_path":"/dev/disk/by-path/vda"}"#,
+                    CONTINUE,
+                    r#"{"action":"confirm","typed":"7F3A"}"#,
+                    CONTINUE,
+                    VDA,
+                    CONTINUE,
+                    r#"{"action":"confirm","typed":""}"#,
+                    r#"{"action":"confirm","typed":"9K2M"}"#,
+                    r#"{"action":"confirm","typed":"OCY-TARGET-7F3A"}"#,
+                    CONTINUE,
+                    // Giving up restarts the machine; still nothing was written.
+                    RESTART,
+                ],
+            ]),
         );
         assert_eq!(outcome, Outcome::Abandoned);
         assert!(m.installed.borrow().is_empty());
@@ -485,19 +727,22 @@ mod tests {
         let m = Fake::new();
         let (_, events) = drive(
             &m,
-            &[
-                BEGIN,
-                CONTINUE,
-                r#"{"action":"select_disk","by_path":"/dev/disk/by-path/sr0"}"#,
-                r#"{"action":"select_disk","by_path":"/dev/disk/by-path/vdc"}"#,
-                r#"{"action":"select_disk","by_path":"/dev/sda"}"#,
-            ],
+            &seq(&[
+                &TO_STORAGE,
+                &[
+                    r#"{"action":"select_disk","by_path":"/dev/disk/by-path/sr0"}"#,
+                    r#"{"action":"select_disk","by_path":"/dev/disk/by-path/vdc"}"#,
+                    r#"{"action":"select_disk","by_path":"/dev/sda"}"#,
+                ],
+            ]),
         );
         assert_eq!(
             steps(&events),
             [
                 "WELCOME",
                 "COMPATIBILITY",
+                "KEYBOARD",
+                "NETWORK",
                 "STORAGE",
                 "STORAGE",
                 "STORAGE",
@@ -521,17 +766,21 @@ mod tests {
         let m = Fake::new();
         let (outcome, _) = drive(
             &m,
-            &[
-                BEGIN,
-                CONTINUE,
-                VDA,
-                r#"{"action":"back"}"#,
-                r#"{"action":"select_disk","by_path":"/dev/disk/by-path/vdb"}"#,
-                // The first disk's confirmation does not confirm the second.
-                r#"{"action":"confirm","typed":"7F3A"}"#,
-                r#"{"action":"confirm","typed":"9K2M"}"#,
-                RESTART,
-            ],
+            &seq(&[
+                &TO_STORAGE,
+                &[
+                    VDA,
+                    CONTINUE,
+                    r#"{"action":"back"}"#,
+                    r#"{"action":"back"}"#,
+                    r#"{"action":"select_disk","by_path":"/dev/disk/by-path/vdb"}"#,
+                    CONTINUE,
+                    // The first disk's confirmation does not confirm the second.
+                    r#"{"action":"confirm","typed":"7F3A"}"#,
+                    r#"{"action":"confirm","typed":"9K2M"}"#,
+                    RESTART,
+                ],
+            ]),
         );
         assert_eq!(outcome, Outcome::Installed);
         assert_eq!(*m.installed.borrow(), ["/dev/disk/by-path/vdb"]);
@@ -574,13 +823,15 @@ mod tests {
         });
         let (outcome, events) = drive(
             &m,
-            &[
-                BEGIN,
-                CONTINUE,
-                VDA,
-                r#"{"action":"confirm","typed":"7F3A"}"#,
-                RESTART,
-            ],
+            &seq(&[
+                &TO_STORAGE,
+                &[
+                    VDA,
+                    CONTINUE,
+                    r#"{"action":"confirm","typed":"7F3A"}"#,
+                    RESTART,
+                ],
+            ]),
         );
         assert!(matches!(
             outcome,

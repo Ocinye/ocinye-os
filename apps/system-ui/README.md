@@ -59,8 +59,15 @@ tradução é contado (`OI_UNRESOLVED`, `OI_MISSING`) e a bancada exige zero.
 Bancada sem máquina: `ui-tests/installer.html` com `#ok`, `#blocked`, `#fail`,
 `#elsewhere`, `#key`. Prova numa imagem: `scripts/image-e2e.sh window`.
 
-**Não existe** passo de teclado nem de rede: o motor não os tem. O Live e a
-verificação de hardware ficam nas consolas de texto.
+Antes dos discos, o assistente pergunta o **teclado** (uma lista fechada do
+contrato, `KEYBOARD_LAYOUTS`) e a **rede** (automática, ou estática numa das
+interfaces que o motor encontrou); depois dos discos, as **opções avançadas**
+(o nome da máquina). É o motor que valida cada escolha — um endereço fora da
+rede, uma porta de saída noutra sub-rede ou um nome inválido voltam com a
+razão, e o passo não avança. A revisão mostra as três antes da confirmação, e
+o motor grava-as no disco instalado (`/etc/default/keyboard`, um netplan
+`0600` só para a escolha estática, `/etc/hostname`). O Live e a verificação de
+hardware ficam nas consolas de texto.
 
 ## Primeiro arranque
 
