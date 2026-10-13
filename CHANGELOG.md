@@ -51,6 +51,14 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   também a guardar o que o instalador disse (`instance-upgrade.log`,
   `instance-rollback.log`, só root) e a drenar a saída de um programa para lá
   do limite, em vez de fechar o tubo e o matar a meio.
+- **Um corte de energia a meio da instalação diz o que foi** (encontrado no
+  E2E `update`, com o corte feito dentro da máquina em `ACTIVATING`): o motor
+  voltava ao release anterior inteiro, como devia, mas registava
+  `HEALTH_GATE_FAILED`, sem o portão de saúde ter corrido, e chamava
+  `DOWNLOAD_INTERRUPTED` a uma instalação parada antes de qualquer efeito.
+  Ambos dizem agora `INSTALL_INTERRUPTED`, com texto em `pt`/`en`/`fr`; uma
+  reversão já em curso guarda a razão com que começou. A matriz de cortes de
+  energia exige-o.
 - **Guarda `release_strings.py`** (no `verify.sh` e na CI): nenhum texto das
   superfícies gráficas chega ao ecrã com um campo por preencher.
 - **E2E das imagens**: cenário `update`, numa máquina instalada a partir da ISO,

@@ -29,5 +29,5 @@ infra/image/base.json:generic-api-key:25
 # Vectores de teste do detector de segredos da inspecção offline: um cabeçalho
 # de chave privada sem chave e o identificador de exemplo da AWS. O teste existe
 # para provar que a inspecção os apanha numa imagem.
-services/image-builder/src/offline.rs:private-key:782
-services/image-builder/src/offline.rs:aws-access-token:786
+services/image-builder/src/offline.rs:private-key:833
+services/image-builder/src/offline.rs:aws-access-token:837
