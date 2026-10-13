@@ -17,8 +17,9 @@ use crate::state::{
     AccessibilityState, ActivationState, AudioState, BluetoothState, CapabilityInventory,
     DiagnosticsReport, DisplayState, Distribution, InitialCredential, KeyboardState, Language,
     LocaleState, NetworkState, Percent, PowerState, PrivacyState, RecoveryState, RemoteAccessState,
-    StorageState, SystemHealth, SystemInfo, TimeState, UpdateState, WifiScan,
+    StorageState, SystemHealth, SystemInfo, TimeState, WifiScan,
 };
+use ocinye_update_contracts::{BaseState, ConfigChange, UpdateHistory, UpdateState};
 
 /// A secret that crosses the socket once (a Wi-Fi passphrase). Zeroized on
 /// drop and never printed. It serialises, because a client must be able to
@@ -298,12 +299,45 @@ pub enum Request {
     /// `update.status`.
     #[serde(rename = "update.status")]
     UpdateStatus {},
-    /// `update.prepare`.
-    #[serde(rename = "update.prepare")]
-    UpdatePrepare {},
-    /// `update.apply`.
-    #[serde(rename = "update.apply")]
-    UpdateApply {},
+    /// `update.check`.
+    #[serde(rename = "update.check")]
+    UpdateCheck {},
+    /// `update.download`: download, verify, preflight and stage.
+    #[serde(rename = "update.download")]
+    UpdateDownload {},
+    /// `update.install`: install the staged release.
+    #[serde(rename = "update.install")]
+    UpdateInstall {},
+    /// `update.cancel`: drop a transaction that changed nothing yet.
+    #[serde(rename = "update.cancel")]
+    UpdateCancel {},
+    /// `update.history`.
+    #[serde(rename = "update.history")]
+    UpdateHistory {},
+    /// `update.rollback`: back to the previous release.
+    #[serde(rename = "update.rollback")]
+    UpdateRollback {},
+    /// `update.configure`.
+    #[serde(rename = "update.configure")]
+    UpdateConfigure {
+        /// What changes.
+        change: ConfigChange,
+    },
+    /// `update.import`: offer the release of a listed offline bundle.
+    #[serde(rename = "update.import")]
+    UpdateImport {
+        /// The bundle's name, as `update.status` lists it.
+        bundle: String,
+    },
+    /// `base.status`.
+    #[serde(rename = "base.status")]
+    BaseStatus {},
+    /// `base.check`.
+    #[serde(rename = "base.check")]
+    BaseCheck {},
+    /// `base.apply`.
+    #[serde(rename = "base.apply")]
+    BaseApply {},
     /// `diagnostics.collect`.
     #[serde(rename = "diagnostics.collect")]
     DiagnosticsCollect {},
@@ -345,6 +379,28 @@ pub enum Request {
     /// credential. Handed over once, then gone from the machine.
     #[serde(rename = "activation.credential")]
     ActivationCredential {},
+    /// `activation.configure`: the first start's language, time zone and,
+    /// optionally, a wired interface's addressing. Offered only while the
+    /// machine has no Instance and offers to create one.
+    #[serde(rename = "activation.configure")]
+    ActivationConfigure {
+        /// The machine's language.
+        language: Language,
+        /// The time zone (`Africa/Luanda`); the clock is set from the network.
+        timezone: String,
+        /// A wired interface's addressing, when it is to be changed.
+        network: Option<FirstNetwork>,
+    },
+}
+
+/// A wired interface's addressing, chosen at the first start.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct FirstNetwork {
+    /// The interface.
+    pub interface: String,
+    /// Its addressing.
+    pub addressing: Addressing,
 }
 
 /// Text sizes the interface offers.
@@ -401,6 +457,24 @@ fn bounded_name(s: &str, max: usize, extra: &[u8]) -> bool {
         && s.len() <= max
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || extra.contains(&b))
+}
+
+/// An IANA zone name as `timedatectl` takes it: `Area/City`, no path tricks.
+fn time_zone(t: &str) -> bool {
+    t.len() <= 64
+        && !t.starts_with('/')
+        && !t.contains("..")
+        && t.split('/').all(|p| bounded_name(p, 32, b"-_+"))
+}
+
+/// The same rule `network.configure` applies.
+fn addressing_ok(interface: &str, addressing: &Addressing) -> bool {
+    Request::NetworkConfigure {
+        interface: interface.to_owned(),
+        addressing: addressing.clone(),
+    }
+    .validate()
+    .is_ok()
 }
 
 fn ipv4(s: &str) -> bool {
@@ -463,8 +537,17 @@ impl Request {
             Self::PrivacySetCamera { .. } => C::PrivacySetCamera,
             Self::StorageStatus {} => C::StorageStatus,
             Self::UpdateStatus {} => C::UpdateStatus,
-            Self::UpdatePrepare {} => C::UpdatePrepare,
-            Self::UpdateApply {} => C::UpdateApply,
+            Self::UpdateCheck {} => C::UpdateCheck,
+            Self::UpdateDownload {} => C::UpdateDownload,
+            Self::UpdateInstall {} => C::UpdateInstall,
+            Self::UpdateCancel {} => C::UpdateCancel,
+            Self::UpdateHistory {} => C::UpdateHistory,
+            Self::UpdateRollback {} => C::UpdateRollback,
+            Self::UpdateConfigure { .. } => C::UpdateConfigure,
+            Self::UpdateImport { .. } => C::UpdateImport,
+            Self::BaseStatus {} => C::BaseStatus,
+            Self::BaseCheck {} => C::BaseCheck,
+            Self::BaseApply {} => C::BaseApply,
             Self::DiagnosticsCollect {} => C::DiagnosticsCollect,
             Self::RemoteAccessStatus {} => C::RemoteAccessStatus,
             Self::RemoteAccessConfigure { .. } => C::RemoteAccessConfigure,
@@ -472,6 +555,7 @@ impl Request {
             Self::ActivationStatus {} => C::ActivationStatus,
             Self::ActivationStart { .. } => C::ActivationStart,
             Self::ActivationCredential {} => C::ActivationCredential,
+            Self::ActivationConfigure { .. } => C::ActivationConfigure,
         }
     }
 
@@ -485,6 +569,16 @@ impl Request {
     /// what it sent.
     pub fn validate(&self) -> Result<(), Reason> {
         let ok = match self {
+            Self::ActivationConfigure {
+                language: _,
+                timezone,
+                network,
+            } => {
+                time_zone(timezone)
+                    && network
+                        .as_ref()
+                        .is_none_or(|n| addressing_ok(&n.interface, &n.addressing))
+            }
             Self::NetworkConfigure {
                 interface,
                 addressing,
@@ -540,12 +634,7 @@ impl Request {
                 automatic,
             } => {
                 (timezone.is_some() || automatic.is_some())
-                    && timezone.as_ref().is_none_or(|t| {
-                        t.len() <= 64
-                            && !t.starts_with('/')
-                            && !t.contains("..")
-                            && t.split('/').all(|p| bounded_name(p, 32, b"-_+"))
-                    })
+                    && timezone.as_deref().is_none_or(time_zone)
             }
             Self::KeyboardConfigure { layout, variant } => {
                 bounded_name(layout, 16, b"_")
@@ -554,6 +643,24 @@ impl Request {
             Self::AccessibilityConfigure {
                 text_scale_percent, ..
             } => TEXT_SCALES.contains(text_scale_percent),
+            Self::UpdateConfigure { change } => {
+                change
+                    .repository
+                    .as_ref()
+                    .is_none_or(|r| r.validate().is_ok())
+                    && !(change.clear_repository && change.repository.is_some())
+                    && (change.channel.is_some()
+                        || change.repository.is_some()
+                        || change.clear_repository
+                        || change.auto_check.is_some()
+                        || change.auto_download.is_some())
+            }
+            Self::UpdateImport { bundle } => {
+                bundle.len() <= 128
+                    && bundle.ends_with(".ocu")
+                    && ocinye_update_contracts::manifest::is_safe_target(bundle)
+                    && !bundle.contains('/')
+            }
             Self::ActivationStart {
                 domain,
                 instance_name,
@@ -614,6 +721,20 @@ impl Request {
                 format!("address={address}")
             }
             Self::RemoteAccessConfigure { ssh_enabled } => format!("ssh_enabled={ssh_enabled}"),
+            Self::UpdateConfigure { change } => format!(
+                "channel={:?} repository={} auto_check={:?} auto_download={:?}",
+                change.channel.map(ocinye_update_contracts::Channel::as_str),
+                if change.clear_repository {
+                    "cleared"
+                } else if change.repository.is_some() {
+                    "set"
+                } else {
+                    "unchanged"
+                },
+                change.auto_check,
+                change.auto_download
+            ),
+            Self::UpdateImport { bundle } => format!("bundle={bundle:?}"),
             Self::TimeConfigure {
                 timezone,
                 automatic,
@@ -673,7 +794,11 @@ pub enum Payload {
     /// Storage state.
     Storage(StorageState),
     /// Update state.
-    Update(UpdateState),
+    Update(Box<UpdateState>),
+    /// Update history.
+    UpdateHistory(UpdateHistory),
+    /// Ubuntu base maintenance state.
+    Base(BaseState),
     /// A diagnostics report.
     Diagnostics(Box<DiagnosticsReport>),
     /// Remote access state, read back.
@@ -728,7 +853,10 @@ mod tests {
             CapabilityId::AccessibilityConfigure => r#"{"capability":"accessibility.configure","text_scale_percent":115,"high_contrast":false,"reduce_motion":true}"#.to_owned(),
             CapabilityId::PrivacySetMicrophone | CapabilityId::PrivacySetCamera => format!(r#"{{"capability":"{}","allowed":false}}"#, id.as_str()),
             CapabilityId::RemoteAccessConfigure => r#"{"capability":"remote_access.configure","ssh_enabled":false}"#.to_owned(),
-            CapabilityId::ActivationStart => r#"{"capability":"activation.start","domain":"ocinye.empresa.example","instance_name":"Instituto","distributions":["research"],"person_name":"Pessoa","person_email":"pessoa@empresa.example","admin_name":"Admin","admin_email":"admin@empresa.example"}"#.to_owned(),
+            CapabilityId::UpdateConfigure => r#"{"capability":"update.configure","change":{"channel":"stable","repository":null,"auto_check":true,"auto_download":null}}"#.to_owned(),
+            CapabilityId::UpdateImport => r#"{"capability":"update.import","bundle":"ocinye-os-d34bbb0a141d-r2.ocu"}"#.to_owned(),
+            CapabilityId::ActivationConfigure => r#"{"capability":"activation.configure","language":"pt","timezone":"Africa/Luanda","network":{"interface":"enp1s0","addressing":{"mode":"STATIC","address":"192.168.1.20","prefix":24,"gateway":"192.168.1.1","dns":["192.168.1.1"]}}}"#.to_owned(),
+            CapabilityId::ActivationStart => r#"{"capability":"activation.start","domain":"ocinye.empresa.com","instance_name":"Instituto","distributions":["research"],"person_name":"Pessoa","person_email":"pessoa@empresa.com","admin_name":"Admin","admin_email":"admin@empresa.com"}"#.to_owned(),
             other => format!(r#"{{"capability":"{}"}}"#, other.as_str()),
         };
         serde_json::from_str(&json).unwrap_or_else(|e| panic!("{}: {e}", id.as_str()))
@@ -795,13 +923,13 @@ mod tests {
 
     fn activation(change: impl FnOnce(&mut Request)) -> Result<(), Reason> {
         let mut r = Request::ActivationStart {
-            domain: "ocinye.empresa.example".into(),
+            domain: "ocinye.empresa.com".into(),
             instance_name: "Instituto de Prova".into(),
             distributions: vec![Distribution::Research, Distribution::Business],
             person_name: "Pessoa de Prova".into(),
-            person_email: "pessoa@empresa.example".into(),
+            person_email: "pessoa@empresa.com".into(),
             admin_name: "Administração".into(),
-            admin_email: "admin+ocinye@empresa.example".into(),
+            admin_email: "admin+ocinye@empresa.com".into(),
         };
         change(&mut r);
         r.validate()
@@ -868,7 +996,7 @@ mod tests {
             },
             |r| {
                 if let Request::ActivationStart { person_email, .. } = r {
-                    *person_email = "a b@empresa.example".into()
+                    *person_email = "a b@empresa.com".into()
                 }
             },
         ];
@@ -882,8 +1010,7 @@ mod tests {
         let mut said = String::new();
         let _ = activation(|r| said = r.audit_summary());
         assert!(
-            said.contains("domain=ocinye.empresa.example")
-                && said.contains("admin+ocinye@empresa.example"),
+            said.contains("domain=ocinye.empresa.com") && said.contains("admin+ocinye@empresa.com"),
             "{said}"
         );
     }

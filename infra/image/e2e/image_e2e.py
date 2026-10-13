@@ -190,10 +190,10 @@ class Vm:
             if not self._pump():
                 time.sleep(0.1)
 
-    def qmp(self, *commands):
+    def qmp(self, *commands, timeout=30):
         """Run monitor commands; raise on a refusal."""
         c = socket.socket(socket.AF_UNIX)
-        c.settimeout(30)
+        c.settimeout(timeout)
         c.connect(self.qmp_sock)
         f = c.makefile("rw")
         f.readline()
@@ -297,7 +297,9 @@ def throttle(port):
 def ssh(port, user, key, remote=None, input_=None, timeout=120):
     throttle(port)
     args = ["ssh", "-i", key, "-p", str(port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-            "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", f"{user}@127.0.0.1"]
+            "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes",
+            # A machine that loses its power mid-command ends the call, not the bench.
+            "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=6", f"{user}@127.0.0.1"]
     if remote:
         args.append(remote)
     return subprocess.run(args, input=input_, capture_output=True, timeout=timeout)
@@ -606,7 +608,7 @@ def png_is_a_picture(path):
     return len(set(pixels[1000:200000:97])) > 8
 
 
-def scenario_seat(a):
+def scenario_seat(a, name="seat", before_setup=None, after_unlock=None):
     """The seat of an installed machine (ADR-0031), end to end on the image.
 
     Everything a person does happens at the machine's own screen, with the
@@ -617,23 +619,23 @@ def scenario_seat(a):
     has a way in to look: what it asserts comes from the services and the
     units, never from pixels.
     """
-    r = Results(f"seat-{a.arch}")
+    r = Results(f"{name}-{a.arch}")
     work = a.work
     k1, k2 = keygen(os.path.join(work, "operator_a")), keygen(os.path.join(work, "operator_x"))
-    disk = os.path.join(work, "seat.qcow2")
+    disk = os.path.join(work, f"{name}.qcow2")
     sh("qemu-img", "create", "-q", "-f", "qcow2", "-F", "qcow2", "-b", a.qcow2, disk, "40G")
     shots = os.path.join(work, "screens")
     os.makedirs(shots, exist_ok=True)
     chosen = "a escolha da bancada 2026"
     try:
-        vm = Vm("seat", a.arch, work, memory=a.memory, cpus=3)
+        vm = Vm(name, a.arch, work, memory=a.memory, cpus=3)
         vm.start([{"file": disk, "boot": True}], screen=True)
         vm.expect(UNCLAIMED_RX, BOOT_BUDGET)
         wait_ssh_port(vm.port, 300)
         facts = claim_by_code(r, vm, k1, k2, "seat")
         if not facts:
             return r.finish(work)
-        run = lambda command, timeout=120: ssh(vm.port, "ocinye", k1, command, timeout=timeout)
+        run = lambda command, timeout=120, input_=None: ssh(vm.port, "ocinye", k1, command, input_, timeout)
         units = run("systemctl is-active ocinye-system.service ocinye-session.service ocinye-display.service ocinye-console@tty2.service; systemctl is-enabled ocinye-seat-link.path; systemctl is-active ocinye-console@tty1.service").stdout.decode().split()
         r.check("seat: the two services run before any Instance exists", units[:2] == ["active", "active"], units)
         r.check("seat: the screen is up on a machine with a display, and the text console is on tty2", units[2:4] == ["active", "active"], units)
@@ -649,6 +651,8 @@ def scenario_seat(a):
             except (ValueError, KeyError):
                 return {"phase": "UNKNOWN", "detail": out[-200:]}
 
+        if before_setup:
+            before_setup(run)
         ready = activation()
         r.check("seat: the machine offers to create its Instance from the release it carries", ready.get("phase") == "READY" and ready.get("release_id"), ready)
         time.sleep(20)
@@ -661,13 +665,21 @@ def scenario_seat(a):
                       "sudo -n journalctl -b -u ocinye-display.service -u seatd.service --no-pager -o cat 2>&1 | tail -n 80; "
                       "pgrep -a -f 'ocinye-|WebKit' 2>&1; id ocinye-ui 2>&1; sudo -n dmesg | grep -iE 'segfault|traps:|killed process|oom' | tail -n 10").stdout.decode(errors="replace")
             log("seat: display diagnosis\n" + why)
-        # The whole set-up, at the keyboard: the form's fields in order, the
-        # four distribution boxes passed over (research is ticked), Enter.
+        # The whole set-up, at the keyboard. Language and region, then the
+        # network, each continued with Enter (their action has the focus);
+        # the Instance (research is ticked) and the people, each sent with
+        # Enter from its last field; then the summary's Create.
+        pace = 1 if native(a.arch) else 15
+        vm.press("ret")
+        time.sleep(pace)
+        vm.press("ret")
+        # The network step sends the first start's settings to the service.
+        time.sleep(pace + 5)
         vm.type("Bancada do posto")
         vm.press("tab")
         vm.type("ocinye-seat.test")
-        for _ in range(5):
-            vm.press("tab")
+        vm.press("ret")
+        time.sleep(pace)
         vm.type("Pessoa de Prova")
         vm.press("tab")
         vm.type("pessoa@ocinye-seat.test")
@@ -675,10 +687,12 @@ def scenario_seat(a):
         vm.type("Admin de Prova")
         vm.press("tab")
         vm.type("admin@ocinye-seat.test")
-        # The picture of the filled form is the one taken after the guest has
-        # drawn the last field, and Enter follows it.
-        time.sleep(1 if native(a.arch) else 15)
+        vm.press("ret")
+        # The summary, drawn, and Create (it has the focus).
+        time.sleep(pace)
         vm.screenshot(os.path.join(shots, "2-set-up-filled.png"))
+        configured = run("sudo -n grep -c activation.configure /var/log/ocinye/system-audit.jsonl").stdout.decode().strip()
+        r.check("seat: the first start's language, zone and network went through the service, audited", configured == "1", configured)
         vm.press("ret")
         time.sleep(15)
         started = activation()
@@ -794,6 +808,8 @@ def scenario_seat(a):
         time.sleep(8)
         r.check("seat: unlocked with the chosen password", session_state(vm.port, k1).get("state") == "ACTIVE")
         vm.screenshot(os.path.join(shots, "10-unlocked.png"))
+        if after_unlock:
+            after_unlock(r, vm, run, shots, k1, chosen, begun["secret_base32"])
         # A restart ends the session and brings the screen back by itself.
         run("sudo -n systemctl reboot", timeout=30)
         time.sleep(20)
@@ -1113,6 +1129,24 @@ def installed_root_identity(disk, run=None, pick_dev=None):
     return facts
 
 
+def installed_settings(disk, run=None):
+    """Read, offline and read-only, what the installer wrote from the
+    window's settings: the keyboard layout and the machine's name."""
+    run = run or _run_cmd
+    facts = {}
+    try:
+        with NbdAttach(disk, run=run) as nbd:
+            mnt = disk + ".setmnt"
+            with RoMount(f"{nbd.dev}p2", mnt, run=run):
+                kb = open(os.path.join(mnt, "etc/default/keyboard"), encoding="utf-8").read()
+                m = re.search(r'^XKBLAYOUT="([a-z]+)"', kb, re.M)
+                facts["keyboard"] = m.group(1) if m else None
+                facts["hostname"] = open(os.path.join(mnt, "etc/hostname"), encoding="utf-8").read().strip()
+    except Exception as e:  # noqa: BLE001
+        facts["error"] = f"{type(e).__name__}: {e}"
+    return facts
+
+
 def _unique_dir(base):
     """`base`, or `base-2`, `base-3`… so repeated failures never overwrite
     earlier evidence silently."""
@@ -1361,23 +1395,46 @@ def scenario_window(a):
         time.sleep(4)
         vm.screenshot(os.path.join(shots, "3-compatibility.png"))
         vm.press("ret")
-        need("window: Continue on the compatibility summary opened storage", reached(vm, "step=STORAGE", 300))
-        time.sleep(4)
-        vm.screenshot(os.path.join(shots, "4-storage.png"))
+        need("window: Continue on the compatibility summary opened the keyboard step", reached(vm, "step=KEYBOARD", 300))
+        settle = 4 if native(a.arch) else 20
+        time.sleep(settle)
+        # The layouts are cards in order (pt, br, us, gb, fr…): four Tabs from
+        # the chosen one reach French; Enter chooses it and moves to Continue.
+        for _ in range(4):
+            vm.press("tab")
+        vm.press("ret")
+        time.sleep(settle)
+        vm.screenshot(os.path.join(shots, "4-keyboard.png"))
+        vm.press("ret")
+        need("window: Continue on the keyboard step opened the network step", reached(vm, "step=NETWORK", 120))
+        time.sleep(settle)
+        vm.screenshot(os.path.join(shots, "5-network.png"))
+        # Automatic (DHCP) is chosen: Enter keeps it and moves to Continue.
+        vm.press("ret")
+        time.sleep(settle)
+        vm.press("ret")
+        need("window: the network settings were accepted and storage opened", reached(vm, "step=STORAGE", 120))
+        time.sleep(settle)
+        vm.screenshot(os.path.join(shots, "6-storage.png"))
         # No disk is chosen until a card is: Enter on the focused card chooses
         # it and moves to Continue; Enter there sends the choice.
         vm.press("ret")
         time.sleep(3)
-        vm.screenshot(os.path.join(shots, "5-storage-chosen.png"))
         vm.press("ret")
         need("window: a disk card was chosen with the keyboard, and the engine selected it", reached(vm, "selected=vd[a-z]", 120))
-        need("window: the engine showed the review", reached(vm, "step=REVIEW", 60))
+        need("window: the options step followed the disk", reached(vm, "step=ADVANCED", 60))
+        time.sleep(settle)
+        vm.type("posto-e2e")
+        time.sleep(settle)
+        vm.screenshot(os.path.join(shots, "7-options.png"))
+        vm.press("ret")
+        need("window: the engine showed the review", reached(vm, "step=REVIEW", 120))
         time.sleep(4)
-        vm.screenshot(os.path.join(shots, "6-review.png"))
+        vm.screenshot(os.path.join(shots, "8-review.png"))
         # The destructive action opens the confirmation dialog.
         vm.press("ret")
         time.sleep(4)
-        vm.screenshot(os.path.join(shots, "7-confirm-empty.png"))
+        vm.screenshot(os.path.join(shots, "9-confirm-empty.png"))
         # A wrong confirmation: the action stays disabled, and Enter does
         # nothing — the engine is never asked to confirm, and nothing is written.
         before = size()
@@ -1388,7 +1445,7 @@ def scenario_window(a):
         time.sleep(4 if native(a.arch) else 45)
         vm.press("ret")
         time.sleep(12)
-        vm.screenshot(os.path.join(shots, "8-confirm-wrong.png"))
+        vm.screenshot(os.path.join(shots, "10-confirm-wrong.png"))
         with vm.lock:
             asked = "OCINYE-WINDOW confirmation=" in vm.buf or "OCINYE-WINDOW step=INSTALLING" in vm.buf
         r.check("window: a wrong confirmation leaves the action disabled; the engine is not asked", not asked)
@@ -1404,17 +1461,17 @@ def scenario_window(a):
         # engine accepted would land on the next step. Under full emulation
         # (amd64 on this arm64 bench) that round trip took more than 5 s.
         time.sleep(5 if native(a.arch) else 45)
-        vm.screenshot(os.path.join(shots, "9-confirm-right.png"))
+        vm.screenshot(os.path.join(shots, "11-confirm-right.png"))
         vm.press("ret")
         need("window: the confirmation typed in the dialog was accepted by the engine", reached(vm, "confirmation=accepted", 120))
         need("window: the installation started", reached(vm, "step=INSTALLING", 120))
         time.sleep(60)
-        vm.screenshot(os.path.join(shots, "10-installing.png"))
+        vm.screenshot(os.path.join(shots, "12-installing.png"))
         done = reached(vm, "step=INSTALLED", 5400)
         r.check("window: the installation wrote the chosen disk", size() > (64 << 20), size())
         r.check("window: the engine finished and the window was told", done)
         time.sleep(6)
-        vm.screenshot(os.path.join(shots, "11-installed.png"))
+        vm.screenshot(os.path.join(shots, "13-installed.png"))
         # Restart is the focused control: the machine goes down and its
         # firmware starts again. The window says to remove the medium when it
         # does; the bench removes it, and the installed disk starts on its own,
@@ -1436,6 +1493,9 @@ def scenario_window(a):
             # is in use: the boot configuration names the target's own root.
             ident = installed_root_identity(target)
             r.check("window: the installed boot configuration resolves to the target's own root", ident["ok"], ident["detail"])
+            chosen = installed_settings(target)
+            r.check("window: the keyboard and the name chosen in the window are on the installed disk",
+                    chosen.get("keyboard") == "fr" and chosen.get("hostname") == "posto-e2e", chosen)
             vm2 = Vm("window", a.arch, work, memory=2048)
             vm2.start([{"file": target, "serial": "OCY-TARGET-7F3A", "boot": True}])
             try:
@@ -1453,20 +1513,406 @@ def scenario_window(a):
     return r.finish(work, invalid=invalid)
 
 
+UPDATE_PORT = 8088
+
+
+def png_pixels(path):
+    """Width, height and RGB rows of a PNG screendump (8-bit RGB or RGBA)."""
+    import zlib
+    data = open(path, "rb").read()
+    pos, raw, w, h, kind = 8, b"", 0, 0, 2
+    while pos < len(data):
+        n = int.from_bytes(data[pos:pos + 4], "big")
+        tag, body = data[pos + 4:pos + 8], data[pos + 8:pos + 8 + n]
+        if tag == b"IHDR":
+            w, h, kind = int.from_bytes(body[0:4], "big"), int.from_bytes(body[4:8], "big"), body[9]
+        elif tag == b"IDAT":
+            raw += body
+        pos += 12 + n
+    bpp = 4 if kind == 6 else 3
+    flat, stride, rows, prev = zlib.decompress(raw), w * bpp, [], bytearray(w * bpp)
+    for y in range(h):
+        f, line = flat[y * (stride + 1)], bytearray(flat[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        for i in range(stride):
+            a_ = line[i - bpp] if i >= bpp else 0
+            b_, c_ = prev[i], prev[i - bpp] if i >= bpp else 0
+            if f == 1:
+                line[i] = (line[i] + a_) & 255
+            elif f == 2:
+                line[i] = (line[i] + b_) & 255
+            elif f == 3:
+                line[i] = (line[i] + (a_ + b_) // 2) & 255
+            elif f == 4:
+                pa, pb, pc = abs(b_ - c_), abs(a_ - c_), abs(a_ + b_ - 2 * c_)
+                line[i] = (line[i] + (a_ if pa <= pb and pa <= pc else b_ if pb <= pc else c_)) & 255
+        rows.append(bytes(line[j] for k in range(w) for j in (k * bpp, k * bpp + 1, k * bpp + 2)))
+        prev = line
+    return w, h, rows
+
+
+def find_colour(path, rgb, top=0, bottom=60, tolerance=6):
+    """The centre of the pixels of one colour in a band of the screen, or None."""
+    w, h, rows = png_pixels(path)
+    xs, ys = [], []
+    for y in range(top, min(bottom, h)):
+        row = rows[y]
+        for x in range(0, w, 2):
+            if all(abs(row[3 * x + i] - rgb[i]) <= tolerance for i in range(3)):
+                xs.append(x)
+                ys.append(y)
+    if len(xs) < 20:
+        return None
+    return (w, h, sum(xs) // len(xs), sum(ys) // len(ys))
+
+
+def click(vm, w, h, x, y):
+    """A click of the guest's tablet at a screen pixel."""
+    ax = lambda axis, v, size: {"type": "abs", "data": {"axis": axis, "value": int(v * 32767 / max(size - 1, 1))}}
+    btn = lambda down: {"type": "btn", "data": {"down": down, "button": "left"}}
+    vm.qmp({"execute": "input-send-event", "arguments": {"events": [ax("x", x, w), ax("y", y, h)]}})
+    time.sleep(0.3)
+    vm.qmp({"execute": "input-send-event", "arguments": {"events": [btn(True)]}})
+    time.sleep(0.15)
+    vm.qmp({"execute": "input-send-event", "arguments": {"events": [btn(False)]}})
+
+
+# The update chip's background (`--warn-bg`), the one place it appears in the bar.
+CHIP_RGB = (0xFD, 0xF6, 0xE7)
+
+
+# Runs as root on the machine: starts the install and cuts the power once the
+# engine reports INSTALLING or ACTIVATING. Prints each phase it sees; the last
+# printed is the one the cut came in.
+CUT_WATCHER = r"""
+import json, subprocess, sys, time
+subprocess.Popen(["ocinye-system", "update", "install"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+end = time.time() + 1500
+while time.time() < end:
+    out = subprocess.run(["ocinye-system", "--json", "update", "status"], capture_output=True).stdout
+    try:
+        phase = json.loads(out)["value"]["phase"]
+    except (ValueError, KeyError):
+        phase = "UNKNOWN"
+    print(phase, flush=True)
+    if phase in ("INSTALLING", "ACTIVATING"):
+        time.sleep(0.5)
+        open("/proc/sysrq-trigger", "w").write("b")
+    if phase in ("AWAITING_REBOOT", "COMPLETED", "INSTALL_FAILED", "ACTIVATION_FAILED", "ROLLED_BACK", "RECOVERY_REQUIRED"):
+        break
+    time.sleep(0.2)
+"""
+
+
+def scenario_update(a):
+    """Routine updates of a machine installed from the candidate ISO (ADR-0032).
+
+    The disk the `window` scenario installed from the ISO is started; the
+    machine is set up and signed in at its own screen exactly as in `seat`.
+    Then, without reinstalling anything, against local signed repositories
+    (scripts/update-e2e-repos.sh, development keys, synthetic releases):
+
+    1. a repository signed by keys the machine never trusted is refused, and
+       nothing changes;
+    2. a release that passes every signature but fails the health gate is
+       installed and rolled back on its own, with the Instance's data as it
+       was;
+    3. the real N+1 is downloaded and installed from Settings › Updates, with
+       the operator's password in the trusted dialog; the machine comes back
+       on N+1, with the same Instance, members and data, and its expand
+       migration applied; sign-in and lock work again;
+    4. an offline bundle of the next release is imported and installed from
+       the command line, and the power is cut in the middle: the machine
+       starts again on one whole release, never half of one, and finishes.
+    """
+    repos = a.update_repos
+    versions = dict(l.split("=", 1) for l in open(os.path.join(repos, "versions.env")).read().split())
+    server = subprocess.Popen([sys.executable, "-m", "http.server", str(UPDATE_PORT), "--bind", "0.0.0.0",
+                               "--directory", repos], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    base = f"http://10.0.2.2:{UPDATE_PORT}"
+
+    def keyboard_us(run):
+        # The window scenario installed with a French keyboard; the bench
+        # types as a US keyboard does.
+        run("sudo -n ocinye-system keyboard layout us && sudo -n systemctl restart ocinye-display.service")
+        time.sleep(25)
+
+    def evidence(run, stage="end"):
+        # What the engine and the installer said, kept whatever the outcome.
+        # A machine that does not answer leaves the earlier record alone.
+        try:
+            out = run("sudo -n sh -c 'for f in /var/lib/ocinye/update/audit.jsonl /var/lib/ocinye/update/history.json /var/lib/ocinye/update/journal.json /var/lib/ocinye/update/instance-*.log; do echo \"=== $f\"; tail -c 20000 \"$f\"; done; journalctl -u ocinye-update --no-pager -n 200 -o short-iso'", timeout=300)
+        except subprocess.TimeoutExpired:
+            return
+        text = out.stdout.decode(errors="replace")
+        if text.strip():
+            open(os.path.join(a.work, f"update-evidence-{stage}.txt"), "w").write(redact(text))
+
+    def journey(r, vm, run, shots, k1, chosen, secret):
+        try:
+            steps(r, vm, run, shots, k1, chosen, secret)
+        finally:
+            evidence(run)
+
+    def steps(r, vm, run, shots, k1, chosen, secret):
+        def status():
+            out = run("sudo -n ocinye-system --json update status").stdout.decode(errors="replace")
+            try:
+                return json.loads(out)["value"]
+            except (ValueError, KeyError):
+                return {"phase": "UNKNOWN", "detail": out[-300:]}
+
+        def history():
+            out = run("sudo -n ocinye-system --json update history").stdout.decode(errors="replace")
+            try:
+                return json.loads(out)["value"]["entries"]
+            except (ValueError, KeyError):
+                return []
+
+        def repository(name):
+            return run(f"sudo -n ocinye-system update repository {base}/{name}/development/metadata/ {base}/{name}/development/targets/").returncode
+
+        def sql(q):
+            return run(f"sudo -n docker exec ocinye-postgres-1 psql -U ocinye -d ocinye -tAc \"{q}\"").stdout.decode().strip()
+
+        def settle(timeout=3600):
+            st = status()
+            for _ in range(timeout // 15):
+                if st.get("phase") not in ("CHECKING", "DOWNLOADING", "DOWNLOADED", "VERIFYING", "VERIFIED", "PREFLIGHT", "STAGED", "INSTALLING", "ACTIVATING", "BOOT_VALIDATING", "COMMITTING", "ROLLING_BACK", "UNKNOWN"):
+                    break
+                time.sleep(15)
+                st = status()
+            return st
+
+        def version(st):
+            return (st.get("current") or {}).get("version")
+
+        facts = {"instance": sql("select id from instance_identity"), "people": sql("select count(*) from people"),
+                 "admin": sql("select count(*) from people where email = 'admin@ocinye-seat.test'")}
+        r.check("update: the machine runs release N", version(status()) == versions["N"], status())
+        r.check("update: the Instance's identity and members are readable before any update", facts["instance"] and facts["admin"] == "1", facts)
+
+        # 1. Keys the machine never trusted.
+        repository("foreign")
+        run("sudo -n ocinye-system update check")
+        st = status()
+        refused = [json.loads(l) for l in run("sudo -n cat /var/lib/ocinye/update/audit.jsonl").stdout.decode(errors="replace").splitlines() if l.strip()]
+        refused = [e for e in refused if e.get("event") == "check" and e.get("outcome") == "refused"]
+        r.check("update: a repository signed by other keys is refused before anything is offered", st.get("available") is None and version(st) == versions["N"], st)
+        r.check("update: the refusal is in the update audit, with its reason", refused and refused[-1].get("reason") == "METADATA_UNTRUSTED", refused[-1:])
+
+        # 2. Signed, and unhealthy.
+        repository("unhealthy")
+        run("sudo -n ocinye-system update check")
+        offered = (status().get("available") or {}).get("version")
+        r.check("update: the unhealthy release is offered (its signatures are good)", offered == versions["BAD"], offered)
+        # Download and install return once the engine has taken the job; the
+        # work goes on in the engine, and the next step waits for it.
+        run("sudo -n ocinye-system update download", timeout=3600)
+        st = settle()
+        r.check("update: the unhealthy release was downloaded, verified and staged", st.get("phase") == "AWAITING_INSTALL", st)
+        run("sudo -n ocinye-system update install", timeout=3600)
+        time.sleep(10)
+        st = settle()
+        hist = history()
+        r.check("update: the unhealthy release failed its health gate and the machine rolled back on its own",
+                version(st) == versions["N"] and hist[:1] and hist[0].get("outcome") == "ROLLED_BACK", (st, hist[:1]))
+        r.check("update: after the rollback the Instance is the same, with the same members",
+                sql("select id from instance_identity") == facts["instance"] and sql("select count(*) from people") == facts["people"])
+        r.check("update: the rollback restored the schema too (the release's migration is gone)",
+                sql("select count(*) from information_schema.tables where table_name = 'update_e2e_probe'") == "0")
+        r.check("update: the system services run again on N", run("systemctl is-active ocinye-system.service ocinye-session.service").stdout.decode().split() == ["active", "active"])
+
+        # 3. N+1, from Settings. The session ended with the rollback's
+        # restarts: sign in again first.
+        def sign_in():
+            # A session the restarts left locked opens with the password
+            # alone; with nobody signed in, the sign-in asks the address first.
+            time.sleep(20)
+            if session_state(vm.port, k1).get("state") == "LOCKED":
+                vm.type(chosen)
+                vm.press("ret")
+                for _ in range(12):
+                    time.sleep(5)
+                    if session_state(vm.port, k1).get("state") == "ACTIVE":
+                        return True
+                return False
+            vm.type("admin@ocinye-seat.test")
+            vm.press("tab")
+            vm.type(chosen)
+            vm.press("ret")
+            time.sleep(10)
+            if time.time() % 30 > 22:
+                time.sleep(9)
+            vm.type(totp(secret))
+            vm.press("ret")
+            for _ in range(12):
+                time.sleep(5)
+                if session_state(vm.port, k1).get("state") == "ACTIVE":
+                    return True
+            return False
+
+        if session_state(vm.port, k1).get("state") != "ACTIVE":
+            vm.screenshot(os.path.join(shots, "u1-after-rollback.png"))
+            r.check("update: signed in again after the rollback", sign_in())
+        repository("good")
+        run("sudo -n ocinye-system update check")
+        r.check("update: N+1 is offered", (status().get("available") or {}).get("version") == versions["GOOD"], status())
+
+        def through_settings(label, tabs):
+            # The bar's update chip, found by its colour, clicked; the
+            # popover's action (Open updates) has the focus; on the page the
+            # release's action follows Close and, when installing, Cancel.
+            time.sleep(15)
+            shot = vm.screenshot(os.path.join(shots, f"u-{label}-bar.png"))
+            spot = find_colour(shot, CHIP_RGB, 0, 60)
+            if not spot:
+                return False
+            w, h, x, y = spot
+            click(vm, w, h, x, y)
+            time.sleep(4)
+            vm.press("ret")
+            time.sleep(6)
+            for _ in range(tabs):
+                vm.press("tab")
+            vm.screenshot(os.path.join(shots, f"u-{label}-page.png"))
+            vm.press("ret")
+            return True
+
+        r.check("update: the download was started from Settings › Updates", through_settings("download", 2))
+        st = settle()
+        r.check("update: N+1 was downloaded and verified", st.get("phase") == "AWAITING_INSTALL", st)
+        r.check("update: the install was started from Settings › Updates", through_settings("install", 3))
+        # The trusted dialog asks for the operator's password.
+        time.sleep(5)
+        vm.screenshot(os.path.join(shots, "u-install-auth.png"))
+        vm.type(chosen)
+        vm.press("ret")
+        time.sleep(30)
+        st = settle()
+        vm.screenshot(os.path.join(shots, "u-installed.png"))
+        if st.get("phase") == "AWAITING_REBOOT":
+            run("sudo -n systemctl reboot", timeout=30)
+            time.sleep(20)
+            wait_ssh_port(vm.port, 900)
+            st = settle()
+        hist = history()
+        r.check("update: the machine runs N+1 now, committed", version(st) == versions["GOOD"] and hist[:1] and hist[0].get("outcome") == "COMMITTED", (st, hist[:1]))
+        r.check("update: N+1 was installed with the operator's fresh proof, by the member, from Settings",
+                hist[:1] and hist[0].get("via") == "settings", hist[:1])
+        r.check("update: the same Instance, the same members, after N+1",
+                sql("select id from instance_identity") == facts["instance"] and sql("select count(*) from people") == facts["people"]
+                and sql("select count(*) from people where email = 'admin@ocinye-seat.test'") == "1")
+        r.check("update: N+1's expand migration is applied", sql("select count(*) from information_schema.tables where table_name = 'update_e2e_probe'") == "1")
+        r.check("update: the configuration is kept (the repository is still the one set)",
+                f"{base}/good/development/metadata/" in run("sudo -n cat /etc/ocinye/update.json").stdout.decode(errors="replace"))
+        health = run("curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8480/api/v1/auth/machine-session/key; systemctl is-active ocinye-system.service ocinye-session.service ocinye-display.service").stdout.decode().split()
+        r.check("update: Core, System, Session and the screen are up on N+1", health == ["200", "active", "active", "active"], health)
+        if session_state(vm.port, k1).get("state") != "ACTIVE":
+            r.check("update: sign-in works on N+1", sign_in())
+        lock = session_ask(vm.port, k1, {"request": "lock"})
+        time.sleep(6)
+        vm.type(chosen)
+        vm.press("ret")
+        time.sleep(8)
+        r.check("update: lock and unlock work on N+1", (lock.get("state") or {}).get("state") == "LOCKED" and session_state(vm.port, k1).get("state") == "ACTIVE")
+        native = run("readlink /usr/lib/ocinye/current /usr/lib/ocinye/previous").stdout.decode().split()
+        r.check("update: the native layer points at N+1, with N kept to return to",
+                len(native) == 2 and native[0].endswith(versions["GOOD"]) and native[1].endswith(versions["N"]), native)
+        engine = run("sudo -n readlink /proc/$(pidof ocinye-update-engine)/exe").stdout.decode().strip()
+        r.check("update: the engine restarted itself into N+1's own binary", f"/releases/{versions['GOOD']}/" in engine, engine)
+
+        evidence(run, "n-plus-1")
+
+        # 4. Offline, with the power cut during the install.
+        run(f"sudo -n install -d -m 0700 /var/lib/ocinye/update/inbox && sudo -n curl -sf -o /var/lib/ocinye/update/inbox/next.ocu {base}/offline.ocu", timeout=1800)
+        run("sudo -n ocinye-system update import next.ocu", timeout=1800)
+        # The import, too, returns once the engine has taken it.
+        offered = {}
+        for _ in range(120):
+            offered = status().get("available") or {}
+            if offered:
+                break
+            time.sleep(10)
+        r.check("update: the offline bundle is verified and offered, from no repository", offered.get("version") == versions["GOOD2"] and offered.get("source") == "offline", offered)
+        run("sudo -n ocinye-system update download", timeout=1800)
+        r.check("update: the offline release was staged", settle().get("phase") == "AWAITING_INSTALL", status())
+        # The cut comes from inside the machine, the moment the engine says it
+        # is installing or activating: a watcher there sees phases the bench
+        # would miss between two SSH calls, and `sysrq b` restarts at once,
+        # without syncing or unmounting anything, as a power failure does.
+        out = run("sudo -n python3 -", input_=CUT_WATCHER.encode(), timeout=1800)
+        seen = out.stdout.decode(errors="replace").split()
+        cut = bool(seen) and seen[-1] in ("INSTALLING", "ACTIVATING")
+        r.check("update: the power was cut during the install", cut, seen[-1:])
+        time.sleep(20)
+        wait_ssh_port(vm.port, 900)
+        st = settle()
+        r.check("update: after the cut the engine decided — no half release, no recovery needed",
+                version(st) in (versions["GOOD"], versions["GOOD2"]) and st.get("phase") not in ("RECOVERY_REQUIRED", "UNKNOWN"), st)
+        def through_reboot(st):
+            # GOOD2 asks for a restart: it is committed only after a healthy
+            # start of the new release.
+            if st.get("phase") == "AWAITING_REBOOT":
+                run("sudo -n systemctl reboot", timeout=30)
+                time.sleep(20)
+                wait_ssh_port(vm.port, 900)
+                st = settle()
+            return st
+
+        st = through_reboot(st)
+        native = run("readlink /usr/lib/ocinye/current").stdout.decode().strip()
+        r.check("update: once settled, the native layer is the release the engine says runs", native.endswith(version(st) or "?"), (st.get("phase"), version(st), native))
+        if st.get("phase") == "ROLLED_BACK":
+            r.check("update: the rollback after the cut says the install was interrupted, not that the health gate failed",
+                    st.get("reason") == "INSTALL_INTERRUPTED", st.get("reason"))
+        if version(st) != versions["GOOD2"] or st.get("phase") != "COMPLETED":
+            # The operator starts again from the bundle: what was rolled back
+            # is offered once more, downloaded from the same file, installed.
+            if st.get("phase") not in ("AWAITING_INSTALL",):
+                run("sudo -n ocinye-system update import next.ocu", timeout=1800)
+                for _ in range(120):
+                    if (status().get("available") or {}).get("version") == versions["GOOD2"]:
+                        break
+                    time.sleep(10)
+                run("sudo -n ocinye-system update download", timeout=1800)
+                settle()
+            run("sudo -n ocinye-system update install", timeout=3600)
+            time.sleep(10)
+            st = through_reboot(settle())
+        hist = history()
+        r.check("update: the offline release finished installing, committed after a healthy restart",
+                version(st) == versions["GOOD2"] and hist[:1] and hist[0].get("outcome") == "COMMITTED" and hist[0].get("rebooted") is True,
+                (st, hist[:1]))
+        r.check("update: the Instance survived the cut, the same",
+                sql("select id from instance_identity") == facts["instance"] and sql("select count(*) from people") == facts["people"])
+        hist = history()
+        r.check("update: the history says what happened, newest first", [h.get("version") for h in hist[:1]] == [versions["GOOD2"]], [(h.get("version"), h.get("outcome"), h.get("via")) for h in hist[:6]])
+        open(os.path.join(a.work, "update-history.json"), "w").write(json.dumps(hist, indent=2))
+        # The seat's last check restarts the machine with a session open.
+        if session_state(vm.port, k1).get("state") != "ACTIVE":
+            r.check("update: sign-in works on the offline release", sign_in())
+
+    try:
+        return scenario_seat(a, name="update", before_setup=keyboard_us, after_unlock=journey)
+    finally:
+        server.terminate()
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("scenario", choices=["virt", "raw", "iso", "seat", "window"])
+    p.add_argument("scenario", choices=["virt", "raw", "iso", "seat", "window", "update"])
     p.add_argument("--arch", required=True, choices=["amd64", "arm64"])
     p.add_argument("--work", required=True)
     p.add_argument("--qcow2")
     p.add_argument("--raw-zst")
     p.add_argument("--raw-sha256")
     p.add_argument("--iso")
+    p.add_argument("--update-repos", help="update: scripts/update-e2e-repos.sh output (versions.env and the repositories)")
     p.add_argument("--memory", type=int, default=4096, help="seat: the guest's memory, MiB (an Instance needs 3500)")
     a = p.parse_args()
     os.makedirs(a.work, exist_ok=True)
     try:
-        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso, "seat": scenario_seat, "window": scenario_window}[a.scenario](a)
+        return {"virt": scenario_virt, "raw": scenario_raw, "iso": scenario_iso, "seat": scenario_seat, "window": scenario_window, "update": scenario_update}[a.scenario](a)
     finally:
         # No guest outlives its scenario, whatever happened.
         for vm in RUNNING:

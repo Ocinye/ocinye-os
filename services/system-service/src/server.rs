@@ -148,7 +148,7 @@ mod tests {
 
     struct Count(Arc<AtomicUsize>);
     impl Platform for Count {
-        fn perform(&self, _: &Request) -> Result<Payload, Reason> {
+        fn perform(&self, _: &Request, _: &crate::service::Context<'_>) -> Result<Payload, Reason> {
             self.0.fetch_add(1, Ordering::SeqCst);
             Ok(Payload::Done)
         }

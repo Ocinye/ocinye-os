@@ -5,6 +5,7 @@
 //! so the guard that matters — nothing is written before the typed
 //! confirmation — is tested with scripted input.
 
+use ocinye_image_contracts::window::{NetworkInterface, SystemSettings};
 use std::io::{BufRead, Write};
 
 use ocinye_image_contracts::bootmode::InstallAuthority;
@@ -27,6 +28,8 @@ pub trait Machine {
     fn arch_supported(&self) -> bool;
     fn memory(&self) -> u64;
     fn disks(&self) -> Vec<ProbedDisk>;
+    /// The machine's network interfaces (for the installed system's network).
+    fn interfaces(&self) -> Vec<NetworkInterface>;
     /// Look for an operator key on pluggable volumes, never on the target.
     fn operator_key(&self, target: &ConfirmedTarget<'_>) -> Option<PublicKeyLine>;
     /// Everything that writes: only called after confirmation.
@@ -36,6 +39,7 @@ pub trait Machine {
         &self,
         target: &ConfirmedTarget<'_>,
         key: Option<&PublicKeyLine>,
+        settings: &SystemSettings,
         say: &mut dyn FnMut(&str),
     ) -> Result<(), OieError>;
     fn reboot(&self);
@@ -335,7 +339,12 @@ pub fn run(ui: &mut Ui<'_>, m: &dyn Machine, authority: &InstallAuthority<'_>) -
     let note = ui.t("c13.inst.note");
     ui.say(&note);
     let mut lines = vec![];
-    let r = m.install(&target, key.as_ref(), &mut |s| lines.push(s.to_owned()));
+    // The text installer asks no settings: the boot language's keyboard,
+    // DHCP, the image's name — the window offers the choices.
+    let settings = SystemSettings::defaults(["pt", "en", "fr"][ui.lang.min(2)]);
+    let r = m.install(&target, key.as_ref(), &settings, &mut |s| {
+        lines.push(s.to_owned())
+    });
     for l in lines {
         ui.say(&l);
     }
@@ -394,6 +403,9 @@ mod tests {
         fn disks(&self) -> Vec<ProbedDisk> {
             self.disks.clone()
         }
+        fn interfaces(&self) -> Vec<NetworkInterface> {
+            vec![]
+        }
         fn operator_key(&self, _: &ConfirmedTarget<'_>) -> Option<PublicKeyLine> {
             None
         }
@@ -401,8 +413,13 @@ mod tests {
             &self,
             target: &ConfirmedTarget<'_>,
             _: Option<&PublicKeyLine>,
+            settings: &SystemSettings,
             say: &mut dyn FnMut(&str),
         ) -> Result<(), OieError> {
+            assert_eq!(
+                settings.network,
+                ocinye_image_contracts::window::NetworkSettings::Automatic
+            );
             self.installed.set(Some(target.disk().by_path.clone()));
             say("ok");
             Ok(())

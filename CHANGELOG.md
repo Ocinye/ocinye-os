@@ -7,6 +7,84 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Actualizações, primeiro arranque e instalação — 2026-10-12 (ramo `feat/ocinye-os-v1-updates`)
+
+- **Update Engine** ([ADR-0032](docs/adrs/0032-ocinye-update-engine.md),
+  [docs/update](docs/update/README.md)): `services/update-engine`,
+  `crates/ocinye-update-contracts`, `crates/ocinye-update-repository` e o
+  publicador `ocinye-release`. Releases assinados por TUF (`tough`), aplicados
+  sem reinstalar, com reversão automática, validação depois de um reinício,
+  diário resistente a cortes de energia, pacote offline e manutenção da base
+  Ubuntu. Toda a imagem instalável traz o motor, a camada nativa versionada e a
+  raiz pública do canal. `RELEASE_SIGNING = DEV_ONLY`. Novas dependências:
+  `tough`, `aws-lc-rs` (pelo `tough`), `reqwest` no repositório.
+- **Recuperação**: o menu de arranque do sistema instalado tem `Ocinye OS -
+  release anterior` (`ocinye.update=rollback`), que o motor honra uma vez por
+  arranque; a auditoria de um compromisso, de uma instalação falhada e de uma
+  reversão passa a dizer quem e para quê.
+- **Definições › Actualizações**: estado, descarga, instalação com a
+  palavra-passe local, histórico, reversão (avisa que a base volta ao checkpoint),
+  base Ubuntu, avisos que não se repetem. `network.configure` passa a pedir a
+  palavra-passe local em vez de uma prova do Core que o ecrã não oferece.
+- **Primeiro arranque**: idioma e região, rede, Instância, pessoas, rever e
+  criar; `activation.configure` (presença, só antes de haver Instância).
+- **Instalador gráfico**: passos de teclado, rede e opções (nome da máquina),
+  validados pelo motor e gravados no disco instalado; protocolo da janela 2.
+- **Suporte de instalação**: Experimentar, Verificar o hardware e Recuperação
+  mostram na janela um relatório só de leitura em que o desconhecido fica
+  desconhecido.
+- **Teclado e idioma numa máquina a sério** (encontrado no E2E `update` em
+  `arm64`): o compositor compilava sempre o mapa por omissão do xkbcommon (US)
+  e nunca lia `/etc/default/keyboard` — o teclado escolhido no instalador não
+  chegava ao ecrã —; o `keyboard.configure` pedia ao `localectl`, que no Ubuntu
+  recusa («not supported in Debian»); e a imagem não tinha `locales`, pelo que
+  `localectl set-locale` recusava `pt_PT`, `en_GB` e `fr_FR`. Agora o
+  compositor lê o ficheiro ao arrancar e de novo quando muda (sem reiniciar o
+  ecrã), o System Service escreve-o atomicamente só com um layout e uma
+  variante que a lista de regras do XKB tem, e a imagem gera as três línguas,
+  com uma inspecção offline que o exige.
+- **Instalar um release a sério** (encontrado no E2E `update`): um alvo TUF
+  traz bytes e não modo, pelo que o `install/ocinye` do pacote descarregado não
+  era executável e toda a mudança de Instância falhava
+  (`INSTANCE_UPGRADE_FAILED`); depois da verificação, o motor volta a tornar
+  executáveis os dois programas do pacote (ADR-0701) e mais nada. O motor passa
+  também a guardar o que o instalador disse (`instance-upgrade.log`,
+  `instance-rollback.log`, só root) e a drenar a saída de um programa para lá
+  do limite, em vez de fechar o tubo e o matar a meio.
+- **Um corte de energia a meio da instalação diz o que foi** (encontrado no
+  E2E `update`, com o corte feito dentro da máquina em `ACTIVATING`): o motor
+  voltava ao release anterior inteiro, como devia, mas registava
+  `HEALTH_GATE_FAILED`, sem o portão de saúde ter corrido, e chamava
+  `DOWNLOAD_INTERRUPTED` a uma instalação parada antes de qualquer efeito.
+  Ambos dizem agora `INSTALL_INTERRUPTED`, com texto em `pt`/`en`/`fr`; uma
+  reversão já em curso guarda a razão com que começou. A matriz de cortes de
+  energia exige-o.
+- **Guarda `release_strings.py`** (no `verify.sh` e na CI): nenhum texto das
+  superfícies gráficas chega ao ecrã com um campo por preencher.
+- **E2E das imagens**: cenário `update`, numa máquina instalada a partir da ISO,
+  com `scripts/update-e2e-repos.sh`.
+
+### Capacidades do sistema — 2026-10-12 (ramo `feat/ocinye-os-v1-system-caps`)
+
+- **System Service**: Wi-Fi (iwd por D-Bus, palavra-passe provisionada no
+  formato do iwd e reposta se a rede a recusar), Bluetooth (BlueZ por D-Bus,
+  sem agente: só emparelha o que não pede código), som (ALSA com `amixer`),
+  ecrãs (conectores DRM), endereçamento com fios (netplan, reposto se o
+  `apply` falhar) e privacidade (captação desligada; regra do udev para as
+  câmaras) deixam de responder `NOT_IMPLEMENTED`. `audio.set_input` e
+  `display.configure` continuam, com a razão no
+  [README](services/system-service/README.md). Nova dependência: `zbus`.
+  Testado contra duplos; **não** provado numa máquina.
+- **Contrato**: `DisplayOutput` ganha `enabled` e passa a ter `refresh_mhz` e
+  `scale_percent` opcionais; `PrivacyState` diz se há microfone e câmara.
+- **Imagem**: `iwd`, `bluez` e `alsa-utils`; o `systemd-networkd` dá o endereço
+  do Wi-Fi; os dois serviços activos nas imagens instaláveis e mascarados no
+  suporte de instalação, verificado pela inspecção offline.
+- **Interface do sistema**: Rede (Wi-Fi e endereçamento), Bluetooth, Som,
+  Ecrãs e Privacidade mostram o estado lido e agem, em `pt`, `en` e `fr`.
+- **Cliente sem ecrã**: `network dhcp|static`, `wifi …`, `bluetooth …`,
+  `privacy …`; a palavra-passe de uma rede só por `--passphrase-stdin`.
+
 ### Ocinye OS v1 em `amd64` — 2026-10-12 (ramo `fix/ocinye-os-v1-amd64-proof`)
 
 - **Ecrã em `amd64`**: o compositor arranca a interface com

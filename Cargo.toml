@@ -11,6 +11,8 @@ members = [
     "crates/ocinye-image-contracts",
     "crates/ocinye-system-contracts",
     "crates/ocinye-system-client",
+    "crates/ocinye-update-contracts",
+    "crates/ocinye-update-repository",
     "services/core-server",
     "services/worker",
     "services/node-agent",
@@ -22,6 +24,7 @@ members = [
     "services/image-builder",
     "services/system-service",
     "services/session-service",
+    "services/update-engine",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them
@@ -47,6 +50,8 @@ ocinye-installer-contracts = { path = "crates/ocinye-installer-contracts" }
 ocinye-image-contracts = { path = "crates/ocinye-image-contracts" }
 ocinye-system-contracts = { path = "crates/ocinye-system-contracts" }
 ocinye-system-client = { path = "crates/ocinye-system-client" }
+ocinye-update-contracts = { path = "crates/ocinye-update-contracts" }
+ocinye-update-repository = { path = "crates/ocinye-update-repository" }
 
 # --- runtime ----------------------------------------------------------------
 tokio = { version = "1.53", features = ["full"] }
@@ -168,6 +173,10 @@ ts-rs = { version = "12", features = ["no-serde-warnings"] }
 # Safe system calls. Used for one thing: the peer credentials of the System
 # Service's socket.
 rustix = { version = "1", features = ["net"] }
+# D-Bus for the System Service's Wi-Fi (iwd) and Bluetooth (BlueZ) adapters:
+# ADR-0031 puts D-Bus before a subprocess. Pure Rust, so the service stays a
+# static musl binary; the blocking API, because the service is synchronous.
+zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }
 # NFC normalisation of passwords before hashing (ADR-0104). Without it the same
 # passphrase typed on two input methods produces two different byte sequences.
 unicode-normalization = "0.1"
@@ -191,6 +200,13 @@ mail-parser = "0.11"
 ammonia = "4"
 rand = "0.10"
 base64 = "0.23"
+# The Update Engine (ADR-0032): TUF client and editor (AWS, MIT/Apache, used by
+# Bottlerocket), its timestamp type, its signing backend, and tar for the
+# release layers.
+tough = { version = "0.24", default-features = false }
+jiff = "0.2"
+aws-lc-rs = "1"
+tar = { version = "0.4", default-features = false }
 hex = "0.4"
 # Verificação de assinaturas minisign das imagens (D013, ADR-0026): o
 # verificador de referência do autor do minisign, sem dependências.

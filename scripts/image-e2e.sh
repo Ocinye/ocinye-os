@@ -3,7 +3,7 @@
 # construtor (scripts/image-build.sh vm-create): QCOW2 (dois clones), RAW e ISO
 # (instalação offline num disco em branco, com discos a proteger ao lado).
 #
-#   scripts/image-e2e.sh virt|raw|iso|seat|window|all NOME amd64|arm64
+#   scripts/image-e2e.sh virt|raw|iso|seat|window|update|all NOME amd64|arm64
 #
 # NOME é a pasta em ~/.cache/ocinye-image-builder/dist. Os resultados ficam em
 # ~/.cache/ocinye-image-builder/e2e/NOME/result-*.json, uma linha RESULT por
@@ -12,7 +12,7 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 VM=ocinye-image-builder
 CACHE="$HOME/.cache/ocinye-image-builder"
-cenario="${1:?virt|raw|iso|seat|window|all}"; nome="${2:?NOME}"; arch="${3:?amd64|arm64}"
+cenario="${1:?virt|raw|iso|seat|window|update|all}"; nome="${2:?NOME}"; arch="${3:?amd64|arm64}"
 dist="$CACHE/dist/$nome"
 [ -f "$dist/IMAGE_MANIFEST.json" ] || { echo "sem IMAGE_MANIFEST.json em $dist" >&2; exit 2; }
 stem="$(python3 -c "import json,sys;m=json.load(open(sys.argv[1]));i=m['image'];print(f\"ocinye-os-{i['release_id']}-r{i['revision']}{'-dev' if i['build_kind']=='development' else ''}-{m['architecture']}\")" "$dist/IMAGE_MANIFEST.json")"
@@ -33,6 +33,10 @@ if [ "$cenario" = seat ]; then corre seat --qcow2 "$dist/$stem.qcow2" || rc=1; f
 # A janela do instalador: uma instalação feita no ecrã da máquina. Também fora
 # de `all`.
 if [ "$cenario" = window ]; then corre window --iso "$dist/$stem.iso" || rc=1; fi
+# As actualizações de rotina (ADR-0032) de uma máquina instalada a partir da
+# ISO: o disco que `window` instalou, e os repositórios de
+# scripts/update-e2e-repos.sh. Depois de `window`, fora de `all`.
+if [ "$cenario" = update ]; then corre update --qcow2 "$work/window/target.qcow2" --update-repos "$CACHE/update-e2e" || rc=1; fi
 mkdir -p "$CACHE/e2e/$nome"
 # Copy the verdicts and serial logs out, and — for a failed install — the
 # OFFLINE diagnostics the harness gathered (curtin's saved log/config, the ESP
@@ -43,6 +47,7 @@ limactl shell "$VM" sudo -n sh -c "
   cp $work/*/result-*.json $work/*/*-serial.log '$CACHE/e2e/$nome/' 2>/dev/null
   [ -d $work/seat/screens ] && cp -r $work/seat/screens $work/seat/install.log '$CACHE/e2e/$nome/' 2>/dev/null
   [ -d $work/window/screens ] && mkdir -p '$CACHE/e2e/$nome/window' && cp -r $work/window/screens '$CACHE/e2e/$nome/window/' 2>/dev/null
+  [ -d $work/update/screens ] && mkdir -p '$CACHE/e2e/$nome/update' && for f in $work/update/screens $work/update/update-history.json $work/update/update-evidence-*.txt; do cp -r \$f '$CACHE/e2e/$nome/update/' 2>/dev/null; done
   for f in $work/*/failure $work/*/failure-*; do
     [ -d \"\$f\" ] || continue
     s=\$(basename \"\$(dirname \"\$f\")\")-\$(basename \"\$f\")

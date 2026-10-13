@@ -14,25 +14,39 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use ocinye_system_client::Client;
-use ocinye_system_contracts::request::{Outcome, Request};
+use ocinye_system_contracts::request::{Addressing, Outcome, Request, Secret};
 use ocinye_system_contracts::state::{Language, Percent};
 use ocinye_system_contracts::SOCKET_PATH;
+use ocinye_update_contracts::{Channel, ConfigChange, RepositoryEndpoint};
+use zeroize::Zeroize;
 
 const USAGE: &str = "usage: ocinye-system [--json] [--socket PATH] FAMILY ACTION [ARGS]
 
   system health | info | capabilities
-  network status
+  network status | dhcp IFACE | static IFACE ADDRESS/PREFIX GATEWAY [DNS...]
+  wifi scan | connect SSID | disconnect | forget SSID | radio on|off
+  bluetooth status | power on|off | scan | connect ADDR | disconnect ADDR | remove ADDR
+  privacy status | microphone on|off | camera on|off
   power status | restart | shutdown | suspend
   display brightness PERCENT
   time status | timezone ZONE | automatic on|off
   locale status | language pt|en|fr
   keyboard status | layout LAYOUT [VARIANT]
   storage status
-  update status
+  update status | check | download | install | cancel | history | rollback
+  update channel development|candidate|stable
+  update repository METADATA_URL TARGETS_URL | repository none
+  update auto-check on|off | auto-download on|off
+  update import BUNDLE.ocu
+  base status | check | apply
   remote-access status | ssh on|off
   recovery status
   activation status
-  diagnostics collect";
+  diagnostics collect
+
+  --passphrase-stdin  with `wifi connect`: read the network's passphrase from
+                      the first line of standard input (never an argument,
+                      which every process on the machine could read).";
 
 fn switch(word: Option<&str>) -> Option<bool> {
     match word {
@@ -51,6 +65,85 @@ fn parse(words: &[&str]) -> Option<Request> {
         ("system", "info") => exact(2, Request::SystemInfo {}),
         ("system", "capabilities") => exact(2, Request::SystemCapabilities {}),
         ("network", "status") => exact(2, Request::NetworkStatus {}),
+        ("network", "dhcp") => exact(
+            3,
+            Request::NetworkConfigure {
+                interface: arg(2)?.to_owned(),
+                addressing: Addressing::Dhcp,
+            },
+        ),
+        ("network", "static") if (5..=9).contains(&words.len()) => {
+            let (address, prefix) = arg(3)?.split_once('/')?;
+            Some(Request::NetworkConfigure {
+                interface: arg(2)?.to_owned(),
+                addressing: Addressing::Static {
+                    address: address.to_owned(),
+                    prefix: prefix.parse().ok()?,
+                    gateway: arg(4)?.to_owned(),
+                    dns: words[5..].iter().map(|d| (*d).to_owned()).collect(),
+                },
+            })
+        }
+        ("wifi", "scan") => exact(2, Request::WifiScan {}),
+        ("wifi", "connect") => exact(
+            3,
+            Request::WifiConnect {
+                ssid: arg(2)?.to_owned(),
+                passphrase: None,
+            },
+        ),
+        ("wifi", "disconnect") => exact(2, Request::WifiDisconnect {}),
+        ("wifi", "forget") => exact(
+            3,
+            Request::WifiForget {
+                ssid: arg(2)?.to_owned(),
+            },
+        ),
+        ("wifi", "radio") => exact(
+            3,
+            Request::WifiSetRadio {
+                enabled: switch(arg(2))?,
+            },
+        ),
+        ("bluetooth", "status") => exact(2, Request::BluetoothStatus {}),
+        ("bluetooth", "power") => exact(
+            3,
+            Request::BluetoothSetPower {
+                powered: switch(arg(2))?,
+            },
+        ),
+        ("bluetooth", "scan") => exact(2, Request::BluetoothScan {}),
+        ("bluetooth", "connect") => exact(
+            3,
+            Request::BluetoothConnect {
+                address: arg(2)?.to_owned(),
+            },
+        ),
+        ("bluetooth", "disconnect") => exact(
+            3,
+            Request::BluetoothDisconnect {
+                address: arg(2)?.to_owned(),
+            },
+        ),
+        ("bluetooth", "remove") => exact(
+            3,
+            Request::BluetoothRemove {
+                address: arg(2)?.to_owned(),
+            },
+        ),
+        ("privacy", "status") => exact(2, Request::PrivacyStatus {}),
+        ("privacy", "microphone") => exact(
+            3,
+            Request::PrivacySetMicrophone {
+                allowed: switch(arg(2))?,
+            },
+        ),
+        ("privacy", "camera") => exact(
+            3,
+            Request::PrivacySetCamera {
+                allowed: switch(arg(2))?,
+            },
+        ),
         ("power", "status") => exact(2, Request::PowerStatus {}),
         ("power", "restart") => exact(2, Request::PowerRestart {}),
         ("power", "shutdown") => exact(2, Request::PowerShutdown {}),
@@ -93,6 +186,71 @@ fn parse(words: &[&str]) -> Option<Request> {
         }
         ("storage", "status") => exact(2, Request::StorageStatus {}),
         ("update", "status") => exact(2, Request::UpdateStatus {}),
+        ("update", "check") => exact(2, Request::UpdateCheck {}),
+        ("update", "download") => exact(2, Request::UpdateDownload {}),
+        ("update", "install") => exact(2, Request::UpdateInstall {}),
+        ("update", "cancel") => exact(2, Request::UpdateCancel {}),
+        ("update", "history") => exact(2, Request::UpdateHistory {}),
+        ("update", "rollback") => exact(2, Request::UpdateRollback {}),
+        ("update", "channel") => {
+            let channel = Channel::parse(arg(2)?)?;
+            exact(
+                3,
+                Request::UpdateConfigure {
+                    change: ConfigChange {
+                        channel: Some(channel),
+                        ..ConfigChange::default()
+                    },
+                },
+            )
+        }
+        ("update", "repository") if words.len() == 3 && arg(2) == Some("none") => {
+            Some(Request::UpdateConfigure {
+                change: ConfigChange {
+                    clear_repository: true,
+                    ..ConfigChange::default()
+                },
+            })
+        }
+        ("update", "repository") => exact(
+            4,
+            Request::UpdateConfigure {
+                change: ConfigChange {
+                    repository: Some(RepositoryEndpoint {
+                        metadata_url: arg(2)?.to_owned(),
+                        targets_url: arg(3)?.to_owned(),
+                    }),
+                    ..ConfigChange::default()
+                },
+            },
+        ),
+        ("update", "auto-check") => exact(
+            3,
+            Request::UpdateConfigure {
+                change: ConfigChange {
+                    auto_check: Some(switch(arg(2))?),
+                    ..ConfigChange::default()
+                },
+            },
+        ),
+        ("update", "auto-download") => exact(
+            3,
+            Request::UpdateConfigure {
+                change: ConfigChange {
+                    auto_download: Some(switch(arg(2))?),
+                    ..ConfigChange::default()
+                },
+            },
+        ),
+        ("update", "import") => exact(
+            3,
+            Request::UpdateImport {
+                bundle: arg(2)?.to_owned(),
+            },
+        ),
+        ("base", "status") => exact(2, Request::BaseStatus {}),
+        ("base", "check") => exact(2, Request::BaseCheck {}),
+        ("base", "apply") => exact(2, Request::BaseApply {}),
         ("remote-access", "status") => exact(2, Request::RemoteAccessStatus {}),
         ("remote-access", "ssh") => exact(
             3,
@@ -109,12 +267,14 @@ fn parse(words: &[&str]) -> Option<Request> {
 
 fn main() -> ExitCode {
     let mut json = false;
+    let mut passphrase_stdin = false;
     let mut socket = PathBuf::from(SOCKET_PATH);
     let mut words: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--json" => json = true,
+            "--passphrase-stdin" => passphrase_stdin = true,
             "--socket" => match args.next() {
                 Some(p) => socket = PathBuf::from(p),
                 None => {
@@ -126,10 +286,23 @@ fn main() -> ExitCode {
         }
     }
     let refs: Vec<&str> = words.iter().map(String::as_str).collect();
-    let Some(request) = parse(&refs) else {
+    let Some(mut request) = parse(&refs) else {
         eprintln!("{USAGE}");
         return ExitCode::from(64);
     };
+    if passphrase_stdin {
+        let Request::WifiConnect { passphrase, .. } = &mut request else {
+            eprintln!("{USAGE}");
+            return ExitCode::from(64);
+        };
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line).is_err() {
+            return ExitCode::from(64);
+        }
+        let value = line.trim_end_matches(['\r', '\n']).to_owned();
+        line.zeroize();
+        *passphrase = Some(Secret::new(value));
+    }
     let outcome = match Client::connect(&socket).and_then(|mut c| c.call(request, None)) {
         Ok(o) => o,
         Err(e) => {
@@ -191,7 +364,67 @@ mod tests {
                 &["diagnostics", "collect"],
                 CapabilityId::DiagnosticsCollect,
             ),
+            (&["update", "check"], CapabilityId::UpdateCheck),
+            (&["update", "install"], CapabilityId::UpdateInstall),
+            (&["update", "rollback"], CapabilityId::UpdateRollback),
+            (
+                &["update", "channel", "stable"],
+                CapabilityId::UpdateConfigure,
+            ),
+            (
+                &["update", "repository", "none"],
+                CapabilityId::UpdateConfigure,
+            ),
+            (
+                &[
+                    "update",
+                    "repository",
+                    "https://updates.empresa.com/stable/metadata/",
+                    "https://updates.empresa.com/stable/targets/",
+                ],
+                CapabilityId::UpdateConfigure,
+            ),
+            (
+                &["update", "import", "release.ocu"],
+                CapabilityId::UpdateImport,
+            ),
+            (&["base", "apply"], CapabilityId::BaseApply),
+            (
+                &["network", "dhcp", "enp1s0"],
+                CapabilityId::NetworkConfigure,
+            ),
+            (
+                &[
+                    "network",
+                    "static",
+                    "enp1s0",
+                    "192.168.1.84/24",
+                    "192.168.1.1",
+                    "1.1.1.1",
+                ],
+                CapabilityId::NetworkConfigure,
+            ),
+            (&["wifi", "scan"], CapabilityId::WifiScan),
+            (
+                &["wifi", "connect", "Rede da Casa"],
+                CapabilityId::WifiConnect,
+            ),
+            (&["wifi", "forget", "Lab"], CapabilityId::WifiForget),
+            (&["wifi", "radio", "off"], CapabilityId::WifiSetRadio),
+            (
+                &["bluetooth", "power", "on"],
+                CapabilityId::BluetoothSetPower,
+            ),
+            (
+                &["bluetooth", "remove", "AA:BB:CC:DD:EE:FF"],
+                CapabilityId::BluetoothRemove,
+            ),
+            (
+                &["privacy", "camera", "off"],
+                CapabilityId::PrivacySetCamera,
+            ),
         ];
+        assert_eq!(parse(&["update", "channel", "beta"]), None);
         for (words, id) in cases {
             assert_eq!(parse(words).map(|r| r.capability()), Some(*id), "{words:?}");
         }
@@ -208,6 +441,11 @@ mod tests {
             &["display", "brightness", "40", "extra"],
             &["locale", "language", "es"],
             &["time", "automatic", "maybe"],
+            // A passphrase never travels as an argument.
+            &["wifi", "connect", "Lab", "correct horse"],
+            &["network", "static", "enp1s0", "192.168.1.84", "192.168.1.1"],
+            // Pairing asks for a confirmation on the screen: not offered here.
+            &["bluetooth", "pair", "AA:BB:CC:DD:EE:FF"],
             &["system"],
             &[],
         ] {

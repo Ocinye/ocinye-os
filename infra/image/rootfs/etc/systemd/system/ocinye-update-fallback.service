@@ -1,0 +1,21 @@
+[Unit]
+Description=Ocinye Update Engine of the previous release (fallback)
+Documentation=file:///usr/share/doc/ocinye/images.md
+# Started only when ocinye-update.service fails for good: the engine of the
+# release before the last update reads the same journal and reconciles it
+# (an update in flight is rolled back). Never enabled at boot.
+ConditionPathExists=/usr/lib/ocinye/previous/bin/ocinye-update-engine
+Conflicts=ocinye-update.service
+
+[Service]
+ExecStart=/usr/lib/ocinye/previous/bin/ocinye-update-engine serve
+StateDirectory=ocinye/update
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LockPersonality=yes

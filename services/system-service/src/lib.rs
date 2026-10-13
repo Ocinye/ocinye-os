@@ -11,12 +11,20 @@
 #![deny(missing_docs)]
 
 pub mod activation;
+pub mod audio;
 pub mod audit;
 pub mod authority;
+pub mod bluetooth;
+pub mod dbus;
+pub mod display;
+pub mod files;
 pub mod linux;
+pub mod netplan;
 pub mod server;
 pub mod service;
 pub mod tool;
+pub mod update_link;
+pub mod wifi;
 
 #[cfg(test)]
 mod tests;

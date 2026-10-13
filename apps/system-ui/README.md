@@ -55,18 +55,50 @@ decide nada sobre discos:
 Letra monoespaçada só em números de série, somas, caminhos de dispositivo e
 detalhe de diagnóstico. Um texto com `{…}` por preencher ou uma chave sem
 tradução é contado (`OI_UNRESOLVED`, `OI_MISSING`) e a bancada exige zero.
+Fora da bancada, `scripts/release_strings.py` (no `verify.sh` e na CI) lê os
+catálogos e quem os chama sem os correr: três línguas com os mesmos campos,
+nenhum `${…}`, cada chamada a preencher os campos da chave, e nenhum prompt de
+terminal numa superfície gráfica.
 
 Bancada sem máquina: `ui-tests/installer.html` com `#ok`, `#blocked`, `#fail`,
 `#elsewhere`, `#key`. Prova numa imagem: `scripts/image-e2e.sh window`.
 
-**Não existe** passo de teclado nem de rede: o motor não os tem. O Live e a
-verificação de hardware ficam nas consolas de texto.
+Antes dos discos, o assistente pergunta o **teclado** (uma lista fechada do
+contrato, `KEYBOARD_LAYOUTS`) e a **rede** (automática, ou estática numa das
+interfaces que o motor encontrou); depois dos discos, as **opções avançadas**
+(o nome da máquina). É o motor que valida cada escolha — um endereço fora da
+rede, uma porta de saída noutra sub-rede ou um nome inválido voltam com a
+razão, e o passo não avança. A revisão mostra as três antes da confirmação, e
+o motor grava-as no disco instalado (`/etc/default/keyboard`, um netplan
+`0600` só para a escolha estática, `/etc/hostname`).
+
+Nos arranques que não instalam — Experimentar, Verificar o hardware,
+Recuperação — o motor manda à janela o passo `MEDIA`: um relatório só de
+leitura (computador, processador, memória, firmware e Secure Boot, discos, rede,
+Wi-Fi, Bluetooth, ecrãs, som) e se uma instalação poderia seguir. O que o motor
+não consegue ler chega como `null` e a janela diz «Desconhecido», nunca
+«nenhum». As únicas acções são ler de novo, reiniciar e desligar; nenhuma
+escolhe, monta ou escreve um disco. Bancada: `#live`, `#hardware`, `#recovery`.
 
 ## Primeiro arranque
 
-Sem Instância, o ecrã de entrada dá lugar a **Configurar este computador**
-(`activation.start`), ao progresso, e à entrega — única — da credencial
-temporária do primeiro administrador (`activation.credential`).
+Sem Instância, o ecrã de entrada dá lugar a cinco passos:
+
+1. **Idioma e região** — a língua, o fuso horário (lista curta e fechada) e o
+   teclado (`keyboard.configure`, que a presença já pode);
+2. **Rede** — as ligações que o System Service vê, e, para uma com fios,
+   endereço automático ou fixo. Uma rede sem fios junta-se depois de entrar. Ao
+   sair deste passo, a língua, o fuso e a rede seguem juntos em
+   `activation.configure`, que o serviço só aceita enquanto a máquina não tem
+   Instância e se oferece para a criar;
+3. **Instância** — nome, nome na rede e Distribuições;
+4. **Pessoas** — quem configura e o primeiro administrador;
+5. **Rever e criar** — o resumo, e `activation.start`.
+
+Depois, o progresso e a entrega — única — da credencial temporária do primeiro
+administrador (`activation.credential`). Cada passo segue com Enter: a acção
+natural tem o foco, e o último campo de um formulário envia-o. Bancada:
+`harness.html#setup`.
 
 ## Primeiro acesso
 
@@ -84,7 +116,11 @@ Português, inglês e francês em `ui/strings.js`. O idioma é o do sistema
 
 `ui-tests/` serve a interface num browser com um duplo dos dois serviços
 (`fake.js`, cenários `#signed-out`, `#locked`, `#active`, `#offline`, `#mfa`,
-`#down`). Serve para ver e medir a interface; não prova nada sobre os serviços.
+`#down`). Em `#active` há Wi-Fi com quatro redes (a palavra-passe que o duplo
+aceita para «Biblioteca» é `palavra-passe-wifi`), dois dispositivos Bluetooth
+(os auscultadores recusam emparelhar, como um que pedisse código), duas placas
+de som e dois ecrãs. Serve para ver e medir a interface; não prova nada sobre
+os serviços.
 
 ```bash
 python3 apps/system-ui/ui-tests/serve.py 18766
@@ -98,8 +134,18 @@ faz-se com `infra/system-ui/bench/` numa VM com placa gráfica virtual.
 `IMPLEMENTED`, provado numa VM `arm64`: entrar (com recusa e nova tentativa), a
 barra com o Workspace por baixo, definições rápidas e Sistema com dados reais
 do System Service. **Não** provado em `amd64` nem em hardware físico. O leitor
-de ecrã está `NOT_YET_CERTIFIED`. Wi-Fi, Bluetooth e som aparecem como
-indisponíveis porque o System Service ainda responde `NOT_IMPLEMENTED`.
+de ecrã está `NOT_YET_CERTIFIED`.
+
+As páginas **Rede** (Wi-Fi: rádio, procurar, ligar com a palavra-passe num
+diálogo de confiança, desligar, esquecer; endereçamento com fios por DHCP ou
+fixo), **Bluetooth** (ligar, procurar, emparelhar, ligar, desligar, remover),
+**Som** (volume e silêncio da saída e da entrada, saída predefinida), **Ecrãs**
+(ligados, modo preferido, brilho) e **Privacidade** (microfone e câmara)
+mostram o estado que o System Service lê e agem por ele. Foram vistas só na
+bancada, contra o duplo; **não** foram provadas numa máquina. O endereçamento
+pede a palavra-passe local do operador no diálogo de confiança
+(`LOCAL_REAUTH`). **Dispositivos** lista cada classe de hardware do inventário:
+disponível, indisponível com a razão tipada, ou inexistente.
 
 ## Construir
 

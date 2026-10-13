@@ -194,6 +194,12 @@ h1, h2, p { margin: 0; }
 .sx-row__s { font-size: .8125rem; color: var(--ink-3); margin-top: .0625rem; }
 .sx-row__v { color: var(--ink-2); text-align: right; overflow-wrap: anywhere; }
 .sx-row--note { display: block; font-size: .8125rem; color: var(--ink-3); }
+/* Actualizações: o estado em cima, as acções por baixo, nunca espremidos. */
+.sx-row--hero { flex-direction: column; align-items: stretch; gap: .75rem; }
+.sx-row--hero .sx-row__t { font-size: 1.0625rem; font-weight: 600; }
+.sx-row--hero .sx-row__s { margin-top: .25rem; }
+.sx-acts { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
+.sx-row__v .sx-status, .sx-nowrap { white-space: nowrap; }
 .sx-op { display: inline-flex; align-items: center; gap: .25rem; height: 1.25rem; padding: 0 .5rem; border-radius: .625rem; background: var(--muted); color: var(--ink-2); font-size: .6875rem; font-weight: 600; margin-left: .5rem; vertical-align: middle; }
 .sx-op .sx-icon { width: .6875rem; height: .6875rem; }
 .sx-toggle { display: inline-flex; align-items: center; gap: .5rem; border: none; background: transparent; padding: 0; font-size: .8125rem; color: var(--ink-2); }
@@ -228,6 +234,17 @@ h1, h2, p { margin: 0; }
 .sx-card--setup { width: 40rem; gap: .75rem; padding: 1.5rem 2rem; }
 .sx-card--setup h1 { font-size: 1.5rem; }
 .sx-card--setup .sx-input { height: 2.5rem; border-radius: 1.25rem; }
+.sx-fbnav { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .25rem; }
+.sx-fbnav > :only-child { margin-left: auto; }
+.sx-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--muted); border: 1px solid var(--line); }
+.sx-seg__opt { height: 2rem; padding: 0 1rem; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font: 500 .8125rem var(--sans); cursor: pointer; }
+.sx-seg__opt[aria-checked="true"] { background: var(--navy-900); color: var(--on-navy); }
+.sx-seg__opt:disabled { opacity: .6; cursor: default; }
+.sx-ifaces { list-style: none; margin: 0; padding: .25rem 1rem; border: 1px solid var(--line); border-radius: 1rem; }
+.sx-ifaces li { display: flex; justify-content: space-between; gap: 1rem; padding: .5rem 0; font-size: .8125rem; color: var(--ink-2); }
+.sx-ifaces li + li { border-top: 1px solid var(--line); }
+.sx-ifaces li > span:first-child { display: inline-flex; align-items: center; gap: .5rem; color: var(--ink); }
+.sx-card--setup select.sx-input { appearance: auto; padding: 0 .75rem; }
 .sx-form2 { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 .sx-checks { border: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; }
 .sx-checks legend { padding: 0; }
@@ -240,3 +257,9 @@ h1, h2, p { margin: 0; }
 .sx-meter--busy progress:indeterminate { background: linear-gradient(90deg, var(--muted) 0%, var(--blue-600) 50%, var(--muted) 100%); }
 .sx-codes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: .375rem 1rem; font-size: .9375rem; }
 .sx-codes li { padding: .25rem .625rem; border-radius: .5rem; background: var(--bg); border: 1px solid var(--line-2); color: var(--navy-900); font-weight: 600; }
+
+/* ── Wi-Fi, Bluetooth, endereçamento: o mínimo que as linhas com mais de uma
+   acção e o formulário de endereços precisam, com as formas que já existem */
+.sx-acts { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.sx-addr { display: flex; flex-direction: column; gap: .625rem; padding: .5rem 0 .25rem; border-top: 1px solid var(--muted); }
+.sx-addr .sx-input { height: 2.5rem; border-radius: 1.25rem; }

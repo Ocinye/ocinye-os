@@ -670,11 +670,62 @@ pub fn inspect(m: &Mounted, profile: &str, arch: &str, release_id: &str) -> Insp
             !r.join("usr/lib/udisks2").exists() && !r.join("usr/sbin/automount").exists(),
             None,
         );
+        // The medium installs; it does not join a Wi-Fi network or pair a
+        // device. Masked, so not even D-Bus activation starts them.
+        let masked = |unit: &str| {
+            fs::read_link(r.join("etc/systemd/system").join(unit))
+                .is_ok_and(|t| t == Path::new("/dev/null"))
+        };
+        c(
+            "no_radio_daemons",
+            masked("iwd.service") && masked("bluetooth.service"),
+            None,
+        );
     } else {
         c(
             "block_guard_absent_from_installed_system",
             guard_present.is_empty(),
             (!guard_present.is_empty()).then(|| guard_present.join(",")),
+        );
+        // The installed system's recovery entry (ADR-0032): the script that
+        // writes it, executable, and the boot menu generated with it.
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let script = r.join("etc/grub.d/42_ocinye_previous");
+            let executable =
+                fs::metadata(&script).is_ok_and(|m| m.permissions().mode() & 0o111 != 0);
+            let in_menu = fs::read_to_string(r.join("boot/grub/grub.cfg"))
+                .is_ok_and(|g| g.contains("ocinye.update=rollback"));
+            c(
+                "recovery_boot_entry",
+                executable && in_menu,
+                (!(executable && in_menu)).then(|| format!("script={executable} menu={in_menu}")),
+            );
+        }
+        // The product's three languages are generated: `locale.configure`
+        // and the first start's language step set them with localectl, which
+        // refuses a locale that is not.
+        {
+            let archive = fs::read(r.join("usr/lib/locale/locale-archive")).unwrap_or_default();
+            let has = |name: &[u8]| archive.windows(name.len()).any(|w| w == name);
+            let missing: Vec<&str> = ["pt_PT.utf8", "en_GB.utf8", "fr_FR.utf8"]
+                .into_iter()
+                .filter(|n| !has(n.as_bytes()))
+                .collect();
+            c(
+                "product_locales",
+                missing.is_empty(),
+                (!missing.is_empty()).then(|| missing.join(",")),
+            );
+        }
+        // What the System Service asks for Wi-Fi and Bluetooth (ADR-0031).
+        c(
+            "radio_daemons_enabled",
+            wants("iwd.service")
+                && r.join("etc/systemd/system/bluetooth.target.wants/bluetooth.service")
+                    .symlink_metadata()
+                    .is_ok(),
+            None,
         );
     }
     match profile {

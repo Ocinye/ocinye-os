@@ -26,8 +26,8 @@
 .oi-step__n .sx-icon { width: 10px; height: 10px; }
 .oi-step[data-at="done"] { color: #0F1A24; }
 .oi-step[data-at="done"] .oi-step__n { background: #0B2D4A; border-color: #0B2D4A; color: #FFFFFF; }
-.oi-step[aria-current="step"] { background: linear-gradient(180deg, #123C60, #0B2D4A); color: #FFFFFF; }
-.oi-step[aria-current="step"] .oi-step__n { background: #FFFFFF; border-color: #FFFFFF; color: #0B2D4A; }
+.oi-step[aria-current] { background: linear-gradient(180deg, #123C60, #0B2D4A); color: #FFFFFF; }
+.oi-step[aria-current] .oi-step__n { background: #FFFFFF; border-color: #FFFFFF; color: #0B2D4A; }
 .oi-aside__foot { margin-top: 12px; padding: 12px 10px 0; border-top: 1px solid #E4E9F0; font: 400 11px/1.5 var(--mono); color: #8A98A6; }
 
 /* ── corpo */
@@ -84,6 +84,8 @@
 .oi-link { border: 0; background: transparent; padding: 0; color: #20537F; font: 500 13px var(--sans); display: inline-flex; align-items: center; gap: 6px; }
 
 /* ── linhas de facto (compatibilidade, revisão) */
+.oi-sub { margin: 28px 0 0; font: 500 10.5px var(--mono); color: #7C8B9A; letter-spacing: .16em; text-transform: uppercase; }
+.oi-sub + .oi-rows { margin-top: 10px; }
 .oi-rows { margin-top: 24px; max-width: 640px; border: 1px solid #EAEFF4; border-radius: 20px; padding: 6px 20px; box-shadow: 0 1px 2px rgba(11,45,74,.04); }
 .oi-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 46px; border-top: 1px solid #EEF2F6; font: 500 13.5px var(--sans); }
 .oi-row:first-child { border-top: 0; }
@@ -134,6 +136,12 @@
 .oi-field b { font: 600 13px var(--mono); color: #0F1A24; letter-spacing: .08em; }
 .oi-input { height: 44px; padding: 0 16px; border: 1px solid #E4E9F0; border-radius: 22px; background: #F6F8FA; box-shadow: inset 0 1px 2px rgba(11,45,74,.04); font: 500 15px var(--mono); letter-spacing: .12em; color: #0F1A24; text-transform: uppercase; }
 .oi-input[aria-invalid="true"] { border-color: #B3261E; }
+/* Endereços e nomes: o mesmo campo, sem maiúsculas nem espaçamento de código. */
+.oi-input--plain { text-transform: none; letter-spacing: .02em; font: 500 14px var(--mono); }
+select.oi-input--plain { appearance: none; }
+.oi-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; max-width: 640px; }
+.oi-body > .oi-field { max-width: 640px; }
+.oi-opts--grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .oi-field__hint { min-height: 18px; font: 400 12px var(--sans); color: #7C8B9A; }
 .oi-field__hint[data-tone="ok"] { color: #2E6B4C; }
 .oi-field__hint[data-tone="err"] { color: #8C2019; }

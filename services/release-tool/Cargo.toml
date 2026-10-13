@@ -11,8 +11,17 @@ publish.workspace = true
 name = "ocinye-release-manifest"
 path = "src/main.rs"
 
+[[bin]]
+name = "ocinye-release"
+path = "src/bin/release.rs"
+
 [dependencies]
 ocinye-contracts = { workspace = true }
+# The update publisher (ADR-0032): keys, root, staging, publication.
+ocinye-update-contracts = { workspace = true }
+ocinye-update-repository = { workspace = true }
+tokio = { workspace = true }
+jiff = { workspace = true }
 ocinye-installer-contracts = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }

@@ -4,6 +4,7 @@
 //! curtin is given a by-path (never `/dev/sdX`), a template this module
 //! renders, and no network: the base install is offline by construction.
 
+use ocinye_image_contracts::window::{NetworkInterface, NetworkSettings, SystemSettings};
 use std::fs;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
@@ -245,6 +246,103 @@ pub fn find_operator_key(roots: &[PathBuf]) -> Option<(PathBuf, PublicKeyLine)> 
 
 /// Step 6: the operator key on `ocinye` (owner taken from the target's own
 /// passwd), the journal, and nothing else.
+/// The machine's network interfaces, for the installed system's network:
+/// physical ones only (a `device` link), never `lo`, bridges or virtual ones.
+#[must_use]
+pub fn interfaces(sys_class_net: &Path) -> Vec<NetworkInterface> {
+    let Ok(entries) = fs::read_dir(sys_class_net) else {
+        return vec![];
+    };
+    let mut out: Vec<NetworkInterface> = entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let dir = e.path();
+            if name == "lo" || !dir.join("device").exists() {
+                return None;
+            }
+            let read = |f: &str| {
+                fs::read_to_string(dir.join(f))
+                    .ok()
+                    .map(|s| s.trim().to_owned())
+            };
+            Some(NetworkInterface {
+                wired: !dir.join("wireless").exists() && !dir.join("phy80211").exists(),
+                carrier: read("carrier").as_deref() == Some("1"),
+                mac: read("address").unwrap_or_default(),
+                name,
+            })
+        })
+        // A name netplan and a file can carry as written: letters and digits,
+        // as the kernel's predictable names are.
+        .filter(|i| i.name.len() <= 15 && i.name.bytes().all(|b| b.is_ascii_alphanumeric()))
+        .collect();
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
+/// Write the chosen settings into the installed system: the keyboard
+/// (`/etc/default/keyboard`), a fixed address when one was chosen (the
+/// image's DHCP netplan replaced, 0600), and the machine's name. Called only
+/// after the confirmation, inside the target the engine itself mounted.
+pub fn configure_system(target: &Path, settings: &SystemSettings) -> Result<(), OieError> {
+    use std::os::unix::fs::PermissionsExt;
+    let fail = |what: &str| OieError::DiskWriteFailed {
+        device: what.into(),
+    };
+    let keyboard = format!(
+        "# Chosen in the Ocinye OS installer.\nXKBMODEL=\"pc105\"\nXKBLAYOUT=\"{}\"\nXKBVARIANT=\"\"\nXKBOPTIONS=\"\"\nBACKSPACE=\"guess\"\n",
+        settings.keyboard
+    );
+    fs::create_dir_all(target.join("etc/default")).map_err(|_| fail("keyboard"))?;
+    fs::write(target.join("etc/default/keyboard"), keyboard).map_err(|_| fail("keyboard"))?;
+    if let NetworkSettings::Static {
+        interface,
+        address,
+        prefix,
+        gateway,
+        dns,
+    } = &settings.network
+    {
+        let servers = dns
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let yaml = format!(
+            "# Chosen in the Ocinye OS installer: a fixed address on {interface}.\nnetwork:\n  version: 2\n  ethernets:\n    {interface}:\n      match:\n        name: \"{interface}\"\n      dhcp4: false\n      dhcp6: false\n      addresses: [\"{address}/{prefix}\"]\n      routes:\n        - to: default\n          via: {gateway}\n      nameservers:\n        addresses: [{servers}]\n      optional: true\n"
+        );
+        let path = target.join("etc/netplan/50-ocinye-default.yaml");
+        fs::create_dir_all(target.join("etc/netplan")).map_err(|_| fail("netplan"))?;
+        fs::write(&path, yaml).map_err(|_| fail("netplan"))?;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .map_err(|_| fail("netplan"))?;
+    }
+    if let Some(h) = &settings.hostname {
+        fs::write(target.join("etc/hostname"), format!("{h}\n")).map_err(|_| fail("hostname"))?;
+        let hosts = fs::read_to_string(target.join("etc/hosts")).unwrap_or_default();
+        let mut lines: Vec<String> = hosts
+            .lines()
+            .filter(|l| !l.starts_with("127.0.1.1"))
+            .map(str::to_owned)
+            .collect();
+        lines.insert(1.min(lines.len()), format!("127.0.1.1 {h}"));
+        fs::write(target.join("etc/hosts"), lines.join("\n") + "\n")
+            .map_err(|_| fail("hostname"))?;
+        // cloud-init would set the name again from its datasource at boot.
+        let cfg = target.join("etc/cloud/cloud.cfg.d");
+        if target.join("etc/cloud").is_dir() {
+            fs::create_dir_all(&cfg).map_err(|_| fail("hostname"))?;
+            fs::write(
+                cfg.join("90-ocinye-hostname.cfg"),
+                "# Chosen in the Ocinye OS installer.\npreserve_hostname: true\n",
+            )
+            .map_err(|_| fail("hostname"))?;
+        }
+    }
+    Ok(())
+}
+
 pub fn prepare_first_boot(
     target: &Path,
     key: Option<&PublicKeyLine>,
@@ -298,6 +396,107 @@ mod tests {
             read_only: false,
         }])
         .remove(0)
+    }
+
+    #[test]
+    fn as_definicoes_escritas_no_sistema_instalado() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = tmp("configure");
+        fs::create_dir_all(t.join("etc/netplan")).unwrap();
+        fs::write(
+            t.join("etc/netplan/50-ocinye-default.yaml"),
+            "dhcp everywhere",
+        )
+        .unwrap();
+        fs::write(t.join("etc/hosts"), "127.0.0.1 localhost\n127.0.1.1 old\n").unwrap();
+        let settings = SystemSettings {
+            keyboard: "fr".into(),
+            network: NetworkSettings::Static {
+                interface: "enp1s0".into(),
+                address: "192.168.1.20".parse().unwrap(),
+                prefix: 24,
+                gateway: "192.168.1.1".parse().unwrap(),
+                dns: vec!["192.168.1.1".parse().unwrap(), "1.1.1.1".parse().unwrap()],
+            },
+            hostname: Some("posto-1".into()),
+        };
+        configure_system(&t, &settings).unwrap();
+        let kb = fs::read_to_string(t.join("etc/default/keyboard")).unwrap();
+        assert!(kb.contains("XKBLAYOUT=\"fr\""), "{kb}");
+        let np = t.join("etc/netplan/50-ocinye-default.yaml");
+        let yaml = fs::read_to_string(&np).unwrap();
+        assert!(
+            yaml.contains("addresses: [\"192.168.1.20/24\"]") && yaml.contains("via: 192.168.1.1")
+        );
+        assert!(
+            yaml.contains("addresses: [192.168.1.1, 1.1.1.1]") && !yaml.contains("dhcp everywhere")
+        );
+        assert_eq!(
+            fs::metadata(&np).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::read_to_string(t.join("etc/hostname")).unwrap(),
+            "posto-1\n"
+        );
+        let hosts = fs::read_to_string(t.join("etc/hosts")).unwrap();
+        assert!(
+            hosts.contains("127.0.1.1 posto-1") && !hosts.contains(" old"),
+            "{hosts}"
+        );
+        assert!(
+            !t.join("etc/cloud").exists(),
+            "no cloud-init, nothing written for it"
+        );
+        fs::create_dir_all(t.join("etc/cloud")).unwrap();
+        configure_system(&t, &settings).unwrap();
+        assert!(
+            fs::read_to_string(t.join("etc/cloud/cloud.cfg.d/90-ocinye-hostname.cfg"))
+                .unwrap()
+                .contains("preserve_hostname: true")
+        );
+        // DHCP keeps the image's file as it is.
+        let t2 = tmp("configure-dhcp");
+        fs::create_dir_all(t2.join("etc/netplan")).unwrap();
+        fs::write(
+            t2.join("etc/netplan/50-ocinye-default.yaml"),
+            "dhcp everywhere",
+        )
+        .unwrap();
+        configure_system(&t2, &SystemSettings::defaults("pt")).unwrap();
+        assert_eq!(
+            fs::read_to_string(t2.join("etc/netplan/50-ocinye-default.yaml")).unwrap(),
+            "dhcp everywhere"
+        );
+        assert!(!t2.join("etc/hostname").exists());
+    }
+
+    #[test]
+    fn so_interfaces_fisicas_com_nomes_simples() {
+        let t = tmp("net");
+        for (name, physical, wireless, carrier) in [
+            ("lo", false, false, "1"),
+            ("enp1s0", true, false, "1"),
+            ("wlp2s0", true, true, "0"),
+            ("docker0", false, false, "1"),
+            ("en`x", true, false, "1"),
+        ] {
+            let d = t.join(name);
+            fs::create_dir_all(&d).unwrap();
+            if physical {
+                fs::create_dir_all(d.join("device")).unwrap();
+            }
+            if wireless {
+                fs::create_dir_all(d.join("wireless")).unwrap();
+            }
+            fs::write(d.join("carrier"), carrier).unwrap();
+            fs::write(d.join("address"), "52:54:00:00:00:01").unwrap();
+        }
+        let found = interfaces(&t);
+        let names: Vec<&str> = found.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, ["enp1s0", "wlp2s0"]);
+        assert!(found[0].wired && found[0].carrier);
+        assert!(!found[1].wired && !found[1].carrier);
     }
 
     #[test]

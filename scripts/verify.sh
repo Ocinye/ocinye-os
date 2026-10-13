@@ -98,6 +98,12 @@ step "Ligações da documentação"
 # que a documentação não é de confiança, e a partir daí ninguém a lê.
 python3 ./scripts/documentation_links.py
 
+step "Textos de release"
+# Um campo `{nome}` que nenhuma chamada preenche, um `${…}` num catálogo, ou um
+# prompt de terminal numa janela chegam ao ecrã de quem instala. A bancada só os
+# conta nos ecrãs que visita; este guarda lê os catálogos e quem os chama.
+python3 ./scripts/release_strings.py
+
 step "Ficheiros incluídos na compilação"
 # Um `include_bytes!` sobre um ficheiro ignorado pelo git compila aqui e em mais
 # lado nenhum. Um clone novo tem de se bastar.

@@ -68,6 +68,11 @@ pub enum Reason {
     NotImplemented,
     /// The capability is deliberately not offered through this client.
     NotOfferedHere,
+    /// The Update Engine refused or failed, with its own typed reason.
+    UpdateRefused {
+        /// The engine's reason.
+        update: ocinye_update_contracts::UpdateReason,
+    },
 }
 
 /// Why present hardware cannot be used.
@@ -122,6 +127,7 @@ impl Reason {
             Self::OperationInProgress => "OPERATION_IN_PROGRESS",
             Self::NotImplemented => "NOT_IMPLEMENTED",
             Self::NotOfferedHere => "NOT_OFFERED_HERE",
+            Self::UpdateRefused { .. } => "UPDATE_REFUSED",
         }
     }
 }

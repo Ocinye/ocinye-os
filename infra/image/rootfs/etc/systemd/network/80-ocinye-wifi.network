@@ -1,0 +1,14 @@
+# Ocinye OS image: the address of a Wi-Fi link comes from the network.
+# iwd associates and authenticates (EnableNetworkConfiguration=false in
+# /etc/iwd/main.conf); systemd-networkd does the addressing, as it does for
+# the wired links netplan describes. A fixed address on Wi-Fi is not offered
+# in v1.
+[Match]
+Type=wlan
+
+[Link]
+# A machine without Wi-Fi configured must not wait for it at boot.
+RequiredForOnline=no
+
+[Network]
+DHCP=yes

@@ -108,7 +108,7 @@ for servico in core-server workspace worker conversion-runner converter; do
     IMAGENS+=(--image "$servico=$(docker image inspect -f '{{.Id}}' "ocinye/ocinye-$servico:$SHA")")
 done
 EPOCA="$(git show -s --format=%ct "$SHA_LONGO")"
-cargo run -q --release --locked -p ocinye-release-tool -- \
+cargo run -q --release --locked -p ocinye-release-tool --bin ocinye-release-manifest -- \
     --bundle "$PACOTE" --tree "$TRABALHO" --commit "$SHA_LONGO" \
     --created-at "$(date -u -r "$EPOCA" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$EPOCA" +%Y-%m-%dT%H:%M:%SZ)" \
     --source-date-epoch "$EPOCA" --arch "$ARQ" \

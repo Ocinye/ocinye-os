@@ -4,6 +4,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// The update state and signing are the Update Engine's own types (ADR-0032).
+pub use ocinye_update_contracts::{ReleaseSigning, UpdateState};
+
 use crate::capability::{CapabilityId, HardwareDependency};
 use crate::reason::Unavailable;
 
@@ -21,6 +24,13 @@ impl Percent {
         } else {
             None
         }
+    }
+
+    /// A percentage, values above 100 taken as 100. For readings that are
+    /// already bounded by their source (a mixer, a signal scale).
+    #[must_use]
+    pub const fn saturating(value: u8) -> Self {
+        Self(if value > 100 { 100 } else { value })
     }
 
     /// The number.
@@ -317,29 +327,35 @@ pub struct AudioState {
     pub inputs: Vec<AudioDevice>,
 }
 
-/// One display.
+/// One display, as the kernel's DRM connectors report it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct DisplayOutput {
     /// Connector name (`eDP-1`).
     pub name: String,
-    /// Whether it is the built-in panel.
+    /// Whether it is the built-in panel (eDP, LVDS, DSI).
     pub internal: bool,
-    /// Current width in pixels.
+    /// Whether the connector is driving the display now.
+    pub enabled: bool,
+    /// Width of the display's preferred mode, in pixels; 0 when it reports
+    /// no mode.
     pub width: u32,
-    /// Current height in pixels.
+    /// Height of the display's preferred mode, in pixels; 0 when it reports
+    /// no mode.
     pub height: u32,
-    /// Refresh rate in millihertz.
-    pub refresh_mhz: u32,
-    /// Scale, in percent (100, 125, …).
-    pub scale_percent: u16,
+    /// Refresh rate in millihertz, when known. The kernel's connector list
+    /// does not carry it; the compositor, which sets modes, would.
+    pub refresh_mhz: Option<u32>,
+    /// Scale in percent (100, 125, …), when known. Scale is the
+    /// compositor's, not the kernel's.
+    pub scale_percent: Option<u16>,
 }
 
 /// The answer to the display capabilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct DisplayState {
-    /// Connected displays. Empty when the session reports none.
+    /// Connected displays. Empty when none is connected.
     pub outputs: Vec<DisplayOutput>,
     /// Backlight level, when a controllable panel exists.
     pub brightness: Option<Percent>,
@@ -447,13 +463,18 @@ pub struct AccessibilityState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PrivacyState {
+    /// Whether the machine has a sound input.
+    pub microphone_present: bool,
+    /// Whether the machine has a camera.
+    pub camera_present: bool,
     /// Whether the microphone may be used at all.
     pub microphone_allowed: bool,
     /// Whether the camera may be used at all.
     pub camera_allowed: bool,
-    /// Whether a microphone stream is open now.
+    /// Whether a microphone stream is capturing now.
     pub microphone_in_use: bool,
-    /// Whether a camera is open now.
+    /// Whether a camera is open now. Not cheaply knowable from the
+    /// kernel's files: always `false` on this build.
     pub camera_in_use: bool,
 }
 
@@ -498,47 +519,6 @@ pub struct StorageState {
     pub volumes: Vec<Volume>,
 }
 
-/// Where an update stands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum UpdatePhase {
-    /// Nothing pending.
-    UpToDate,
-    /// A verified release is staged.
-    Prepared,
-    /// Being applied.
-    Applying,
-    /// Applied; a restart finishes it.
-    RestartRequired,
-    /// The last attempt was refused or rolled back.
-    Refused,
-}
-
-/// The answer to the update capabilities.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct UpdateState {
-    /// The release in use.
-    pub current_release: Option<String>,
-    /// The release staged or applied, when there is one.
-    pub pending_release: Option<String>,
-    /// Phase.
-    pub phase: UpdatePhase,
-    /// How releases are signed on this build: `DEV_ONLY` until a production
-    /// signing key exists.
-    pub signing: ReleaseSigning,
-}
-
-/// Release signing on this build.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ReleaseSigning {
-    /// Development key only.
-    DevOnly,
-    /// A production signing key is configured.
-    Production,
-}
-
 /// The answer to the remote-access capabilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -557,6 +537,12 @@ pub struct RecoveryState {
     pub rollback_available: bool,
     /// The release that would be returned to.
     pub previous_release: Option<String>,
+    /// The running release.
+    pub current_release: Option<String>,
+    /// A release staged or in flight.
+    pub pending_release: Option<String>,
+    /// How the last update ended.
+    pub last_update: Option<ocinye_update_contracts::UpdateOutcome>,
 }
 
 /// The answer to `diagnostics.collect`: a bounded, redacted report.

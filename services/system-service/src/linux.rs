@@ -5,28 +5,38 @@
 //! never a shell. Every answer is state read back from the system.
 //!
 //! Paths are rooted at [`Roots`] so the readers can be tested against a tree
-//! built in a temporary directory. Mutations that go through a tool are not
-//! exercised by unit tests: they are proved on a running image.
+//! built in a temporary directory. Tools run through a [`Runner`] and D-Bus
+//! goes through a [`Bus`], so what an adapter would ask the system is
+//! recorded by the tests; whether the system then does it is proved on a
+//! running image.
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use ocinye_system_contracts::capability::{CapabilityId, HardwareDependency};
 use ocinye_system_contracts::reason::{AdapterFailure, Reason, Unavailable};
-use ocinye_system_contracts::request::{Payload, Request};
+use ocinye_system_contracts::request::{AudioTarget, Payload, Request};
 use ocinye_system_contracts::state::{
     AccessibilityState, Availability, Battery, CapabilityInventory, Connectivity,
     DiagnosticsReport, Disk, DisplayState, HardwareAvailability, Health, HealthItem, InterfaceKind,
     KeyboardState, Language, LocaleState, NetworkInterface, NetworkState, Percent, PowerSource,
-    PowerState, PrivacyState, RecoveryState, ReleaseSigning, RemoteAccessState, SecureBoot,
-    StorageState, SystemHealth, SystemInfo, TimeState, UpdatePhase, UpdateState, WifiRadioState,
+    PowerState, PrivacyState, RecoveryState, RemoteAccessState, SecureBoot, StorageState,
+    SystemHealth, SystemInfo, TimeState, WifiRadioState,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::activation::{Activation, Installer, ReleaseInstaller};
-use crate::service::Platform;
-use crate::tool::{self, Tool};
+use crate::audio::Audio;
+use crate::bluetooth::Bluetooth;
+use crate::dbus::{Bus, SystemBus};
+use crate::service::{Context, Platform};
+use crate::tool::{self, Runner, Tool};
+use crate::update_link::UpdateLink;
+use crate::wifi::Wifi;
+use crate::{display, files, netplan};
+use ocinye_update_contracts::wire::{EngineReply, Operation};
 
 /// Where the system's files are. `/` on a machine; a temporary tree in tests.
 #[derive(Debug, Clone)]
@@ -41,6 +51,13 @@ pub struct Roots {
     pub ocinye_lib: PathBuf,
     /// `/var/lib/ocinye/system`: what this service itself remembers.
     pub state: PathBuf,
+    /// The Update Engine's socket.
+    pub update_socket: PathBuf,
+    /// `/var/lib/iwd`: where iwd reads the networks it knows.
+    pub iwd: PathBuf,
+    /// The XKB rules list (`/usr/share/X11/xkb/rules/base.lst`): the layouts
+    /// and variants that exist.
+    pub xkb_rules: PathBuf,
 }
 
 impl Roots {
@@ -53,6 +70,55 @@ impl Roots {
             etc: "/etc".into(),
             ocinye_lib: "/usr/lib/ocinye".into(),
             state: "/var/lib/ocinye/system".into(),
+            update_socket: ocinye_update_contracts::SOCKET.into(),
+            iwd: "/var/lib/iwd".into(),
+            xkb_rules: "/usr/share/X11/xkb/rules/base.lst".into(),
+        }
+    }
+}
+
+/// How long the adapters wait for the system. One value on a machine; tests
+/// wait for nothing.
+#[derive(Debug, Clone)]
+pub struct Timing {
+    /// Between two reads of a service's state while waiting.
+    pub poll: Duration,
+    /// For a Wi-Fi scan to finish.
+    pub scan_wait: Duration,
+    /// For iwd to pick up a network file, or a device to appear.
+    pub provision_wait: Duration,
+    /// For a Wi-Fi network to accept a connection.
+    pub connect: Duration,
+    /// How long Bluetooth discovery runs.
+    pub discovery: Duration,
+    /// For a Bluetooth device to pair or connect.
+    pub pair: Duration,
+}
+
+impl Timing {
+    /// On a machine.
+    #[must_use]
+    pub const fn system() -> Self {
+        Self {
+            poll: Duration::from_millis(250),
+            scan_wait: Duration::from_secs(10),
+            provision_wait: Duration::from_secs(3),
+            connect: Duration::from_secs(40),
+            discovery: Duration::from_secs(8),
+            pair: Duration::from_secs(40),
+        }
+    }
+
+    /// In tests: nothing is waited for.
+    #[must_use]
+    pub const fn instant() -> Self {
+        Self {
+            poll: Duration::ZERO,
+            scan_wait: Duration::ZERO,
+            provision_wait: Duration::ZERO,
+            connect: Duration::ZERO,
+            discovery: Duration::ZERO,
+            pair: Duration::ZERO,
         }
     }
 }
@@ -64,6 +130,24 @@ pub const IMPLEMENTED: &[CapabilityId] = &[
     CapabilityId::SystemInfo,
     CapabilityId::SystemCapabilities,
     CapabilityId::NetworkStatus,
+    CapabilityId::NetworkConfigure,
+    CapabilityId::WifiScan,
+    CapabilityId::WifiConnect,
+    CapabilityId::WifiDisconnect,
+    CapabilityId::WifiForget,
+    CapabilityId::WifiSetRadio,
+    CapabilityId::BluetoothStatus,
+    CapabilityId::BluetoothSetPower,
+    CapabilityId::BluetoothScan,
+    CapabilityId::BluetoothPair,
+    CapabilityId::BluetoothConnect,
+    CapabilityId::BluetoothDisconnect,
+    CapabilityId::BluetoothRemove,
+    CapabilityId::AudioStatus,
+    CapabilityId::AudioSetVolume,
+    CapabilityId::AudioSetMute,
+    CapabilityId::AudioSetOutput,
+    CapabilityId::DisplayStatus,
     CapabilityId::DisplaySetBrightness,
     CapabilityId::PowerStatus,
     CapabilityId::PowerShutdown,
@@ -78,8 +162,21 @@ pub const IMPLEMENTED: &[CapabilityId] = &[
     CapabilityId::AccessibilityStatus,
     CapabilityId::AccessibilityConfigure,
     CapabilityId::PrivacyStatus,
+    CapabilityId::PrivacySetMicrophone,
+    CapabilityId::PrivacySetCamera,
     CapabilityId::StorageStatus,
     CapabilityId::UpdateStatus,
+    CapabilityId::UpdateCheck,
+    CapabilityId::UpdateDownload,
+    CapabilityId::UpdateInstall,
+    CapabilityId::UpdateCancel,
+    CapabilityId::UpdateHistory,
+    CapabilityId::UpdateRollback,
+    CapabilityId::UpdateConfigure,
+    CapabilityId::UpdateImport,
+    CapabilityId::BaseStatus,
+    CapabilityId::BaseCheck,
+    CapabilityId::BaseApply,
     CapabilityId::DiagnosticsCollect,
     CapabilityId::RemoteAccessStatus,
     CapabilityId::RemoteAccessConfigure,
@@ -87,6 +184,7 @@ pub const IMPLEMENTED: &[CapabilityId] = &[
     CapabilityId::ActivationStatus,
     CapabilityId::ActivationStart,
     CapabilityId::ActivationCredential,
+    CapabilityId::ActivationConfigure,
 ];
 
 /// What the service remembers between restarts: preferences that have no
@@ -113,11 +211,27 @@ impl Default for Remembered {
     }
 }
 
+/// The udev rule that closes every camera while the camera is not allowed.
+pub const CAMERA_RULE: &str = "# Ocinye OS: written by the System Service (privacy.set_camera).
+# While this file exists no account but root can open a camera.
+SUBSYSTEM==\"video4linux\", MODE=\"0000\"
+";
+
 /// The Linux platform.
 pub struct Linux {
     roots: Roots,
     remembered: Mutex<()>,
     activation: Activation,
+    update: UpdateLink,
+    runner: Arc<dyn Runner>,
+    bus: Arc<dyn Bus>,
+    timing: Timing,
+    /// One Wi-Fi, Bluetooth or addressing change at a time: a second one
+    /// while the first runs is `OPERATION_IN_PROGRESS`, not a race.
+    wifi_busy: Mutex<()>,
+    bluetooth_busy: Mutex<()>,
+    netplan_busy: Mutex<()>,
+    asound_conf: PathBuf,
 }
 
 fn read(path: &Path) -> Option<String> {
@@ -182,16 +296,76 @@ impl Linux {
     /// The same, with the installation carried out by `installer`.
     #[must_use]
     pub fn with_installer(roots: Roots, installer: std::sync::Arc<dyn Installer>) -> Self {
+        Self::with_adapters(
+            roots,
+            installer,
+            Arc::new(tool::System),
+            Arc::new(SystemBus),
+            Timing::system(),
+        )
+    }
+
+    /// The same, with the tools, the bus and the waits given: what tests use
+    /// to see what the adapters would ask.
+    #[must_use]
+    pub fn with_adapters(
+        roots: Roots,
+        installer: std::sync::Arc<dyn Installer>,
+        runner: Arc<dyn Runner>,
+        bus: Arc<dyn Bus>,
+        timing: Timing,
+    ) -> Self {
         let activation = Activation::new(
             roots.ocinye_lib.join("release"),
             roots.etc.join("ocinye/release.env"),
             roots.state.join("activation"),
             installer,
         );
+        let update = UpdateLink::new(roots.update_socket.clone());
+        let asound_conf = roots.etc.join("asound.conf");
         Self {
             roots,
             remembered: Mutex::new(()),
             activation,
+            update,
+            asound_conf,
+            runner,
+            bus,
+            timing,
+            wifi_busy: Mutex::new(()),
+            bluetooth_busy: Mutex::new(()),
+            netplan_busy: Mutex::new(()),
+        }
+    }
+
+    /// What must hold again after a restart: a microphone that is not
+    /// allowed has capture off on every card present now.
+    pub fn restore(&self) {
+        if !self.remembered().microphone_allowed {
+            let _ = self.audio().set_capture_everywhere(false);
+        }
+    }
+
+    fn audio(&self) -> Audio<'_> {
+        Audio {
+            runner: self.runner.as_ref(),
+            proc: &self.roots.proc,
+            conf: self.asound_conf.as_path(),
+        }
+    }
+
+    fn wifi(&self) -> Wifi<'_> {
+        Wifi {
+            bus: self.bus.as_ref(),
+            store: &self.roots.iwd,
+            timing: &self.timing,
+        }
+    }
+
+    fn bluetooth(&self) -> Bluetooth<'_> {
+        Bluetooth {
+            bus: self.bus.as_ref(),
+            timing: &self.timing,
         }
     }
 
@@ -218,7 +392,9 @@ impl Linux {
         let net = self.roots.sys.join("class/net");
         // The kernel does not publish addresses under /sys: `ip` is asked,
         // as JSON. Without an answer an interface is listed with none.
-        let mut addressed = tool::run(Tool::Ip, &["-json", "address", "show"])
+        let mut addressed = self
+            .runner
+            .run(Tool::Ip, &["-json", "address", "show"])
             .map(|out| addresses(&out))
             .unwrap_or_default();
         entries(&net)
@@ -347,11 +523,7 @@ impl Linux {
         let has_wifi = ifaces.iter().any(|i| i.kind == InterfaceKind::Wifi);
         let sound = self.roots.proc.join("asound/cards");
         let has_sound = read(&sound).is_some_and(|s| !s.is_empty() && !s.contains("no soundcards"));
-        let has_display = entries(&self.roots.sys.join("class/drm")).iter().any(|n| {
-            n.contains('-')
-                && read(&self.roots.sys.join("class/drm").join(n).join("status")).as_deref()
-                    == Some("connected")
-        });
+        let has_display = !display::outputs(&self.roots.sys.join("class/drm")).is_empty();
         let has_camera = !entries(&self.roots.sys.join("class/video4linux")).is_empty();
         vec![
             HardwareAvailability {
@@ -502,16 +674,12 @@ impl Linux {
             .iter()
             .any(|i| i.kind == InterfaceKind::Wifi)
             .then(|| {
-                let dir = self.roots.sys.join("class/rfkill");
-                let blocked = entries(&dir).into_iter().any(|n| {
-                    let d = dir.join(n);
-                    read(&d.join("type")).as_deref() == Some("wlan")
-                        && (read(&d.join("soft")).as_deref() == Some("1")
-                            || read(&d.join("hard")).as_deref() == Some("1"))
-                });
+                let (soft, hard) = self.rfkill("wlan");
+                // iwd's word when it answers; the radio switch alone when not.
+                let iwd = self.wifi().state();
                 WifiRadioState {
-                    enabled: !blocked,
-                    connected: None,
+                    enabled: !soft && !hard && iwd.as_ref().is_none_or(|r| r.powered),
+                    connected: iwd.and_then(|r| r.connected),
                 }
             });
         NetworkState {
@@ -553,22 +721,39 @@ impl Linux {
         }
     }
 
-    fn update(&self) -> UpdateState {
-        let releases = entries(&self.roots.ocinye_lib.join("release"));
-        UpdateState {
-            current_release: releases.last().cloned(),
-            pending_release: None,
-            phase: UpdatePhase::UpToDate,
-            signing: ReleaseSigning::DevOnly,
-        }
-    }
-
+    /// What recovery shows, from the Update Engine's own record. Without
+    /// the engine (an image older than it, or the engine down), nothing is
+    /// claimed.
     fn recovery(&self) -> RecoveryState {
-        let releases = entries(&self.roots.ocinye_lib.join("release"));
-        let previous = (releases.len() > 1).then(|| releases[releases.len() - 2].clone());
-        RecoveryState {
-            rollback_available: previous.is_some(),
-            previous_release: previous,
+        let state = match self
+            .update
+            .ask(Operation::Status, "recovery-operator", "recovery")
+        {
+            Ok(EngineReply::State { state }) => Some(state),
+            _ => None,
+        };
+        let version = |r: &Option<ocinye_update_contracts::ReleaseInfo>| {
+            r.as_ref().map(|i| i.version.to_string())
+        };
+        match state {
+            Some(s) => RecoveryState {
+                rollback_available: s.previous.is_some() && s.phase.at_rest(),
+                previous_release: version(&s.previous),
+                current_release: version(&s.current),
+                pending_release: s
+                    .available
+                    .as_ref()
+                    .filter(|_| !s.phase.at_rest())
+                    .map(|a| a.version.to_string()),
+                last_update: s.last_outcome,
+            },
+            None => RecoveryState {
+                rollback_available: false,
+                previous_release: None,
+                current_release: None,
+                pending_release: None,
+                last_update: None,
+            },
         }
     }
 
@@ -601,18 +786,271 @@ impl Linux {
 
     fn privacy(&self) -> PrivacyState {
         let r = self.remembered();
+        let audio = self.audio();
         PrivacyState {
+            microphone_present: audio.has_input(),
+            camera_present: !entries(&self.roots.sys.join("class/video4linux")).is_empty(),
             microphone_allowed: r.microphone_allowed,
             camera_allowed: r.camera_allowed,
-            microphone_in_use: false,
+            microphone_in_use: audio.capturing(),
+            // Which process holds /dev/videoN open is not in any file the
+            // kernel offers cheaply: never claimed.
             camera_in_use: false,
         }
+    }
+
+    fn display(&self) -> DisplayState {
+        DisplayState {
+            outputs: display::outputs(&self.roots.sys.join("class/drm")),
+            brightness: self.brightness(),
+        }
+    }
+
+    /// A radio switch of `kind` (`wlan`, `bluetooth`): (soft, hard), either
+    /// on any switch of that kind.
+    fn rfkill(&self, kind: &str) -> (bool, bool) {
+        let dir = self.roots.sys.join("class/rfkill");
+        entries(&dir)
+            .into_iter()
+            .map(|n| dir.join(n))
+            .filter(|d| read(&d.join("type")).as_deref() == Some(kind))
+            .fold((false, false), |(soft, hard), d| {
+                (
+                    soft || read(&d.join("soft")).as_deref() == Some("1"),
+                    hard || read(&d.join("hard")).as_deref() == Some("1"),
+                )
+            })
+    }
+
+    /// Whether a radio of `kind` exists, and is not blocked by a switch
+    /// (the software one only when `soft_counts`).
+    fn radio_ready(&self, present: bool, kind: &str, soft_counts: bool) -> Result<(), Reason> {
+        if !present {
+            return Err(Reason::HardwareAbsent);
+        }
+        let (soft, hard) = self.rfkill(kind);
+        if hard {
+            return Err(Reason::HardwareUnavailable {
+                cause: Unavailable::HardBlocked,
+            });
+        }
+        if soft && soft_counts {
+            return Err(Reason::HardwareUnavailable {
+                cause: Unavailable::SoftBlocked,
+            });
+        }
+        Ok(())
+    }
+
+    fn has_wifi(&self) -> bool {
+        self.interfaces()
+            .iter()
+            .any(|i| i.kind == InterfaceKind::Wifi)
+    }
+
+    fn has_bluetooth(&self) -> bool {
+        !entries(&self.roots.sys.join("class/bluetooth")).is_empty()
+    }
+
+    /// Release a software radio switch, so the service behind it sees the
+    /// device again.
+    fn unblock(&self, kind: &'static str) -> Result<(), Reason> {
+        if self.rfkill(kind).0 {
+            self.runner
+                .run(Tool::Rfkill, &["unblock", kind])
+                .map_err(failed)?;
+        }
+        Ok(())
+    }
+
+    fn busy<'a>(lock: &'a Mutex<()>) -> Result<std::sync::MutexGuard<'a, ()>, Reason> {
+        lock.try_lock().map_err(|_| Reason::OperationInProgress)
+    }
+
+    fn wifi_request(&self, request: &Request) -> Result<Payload, Reason> {
+        let _one = Self::busy(&self.wifi_busy)?;
+        let present = self.has_wifi();
+        match request {
+            Request::WifiSetRadio { enabled } => {
+                self.radio_ready(present, "wlan", false)?;
+                if *enabled {
+                    self.unblock("wlan")?;
+                    let _ = self.wifi().wait_for_device();
+                }
+                self.wifi().set_powered(*enabled)?;
+            }
+            Request::WifiScan {} => {
+                self.radio_ready(present, "wlan", true)?;
+                return self.wifi().scan().map(Payload::WifiScan);
+            }
+            Request::WifiConnect { ssid, passphrase } => {
+                self.radio_ready(present, "wlan", true)?;
+                self.wifi()
+                    .connect(ssid, passphrase.as_ref().map(|p| p.expose()))?;
+            }
+            Request::WifiDisconnect {} => {
+                self.radio_ready(present, "wlan", true)?;
+                self.wifi().disconnect()?;
+            }
+            Request::WifiForget { ssid } => {
+                self.radio_ready(present, "wlan", false)?;
+                self.wifi().forget(ssid)?;
+            }
+            _ => return Err(Reason::NotImplemented),
+        }
+        Ok(Payload::Network(self.network()))
+    }
+
+    fn bluetooth_request(&self, request: &Request) -> Result<Payload, Reason> {
+        let present = self.has_bluetooth();
+        if let Request::BluetoothStatus {} = request {
+            self.radio_ready(present, "bluetooth", false)?;
+            return self.bluetooth().status().map(Payload::Bluetooth);
+        }
+        let _one = Self::busy(&self.bluetooth_busy)?;
+        let bt = self.bluetooth();
+        let state = match request {
+            Request::BluetoothSetPower { powered } => {
+                self.radio_ready(present, "bluetooth", false)?;
+                if *powered {
+                    self.unblock("bluetooth")?;
+                    // BlueZ shows the adapter again once the switch is off.
+                    let started = std::time::Instant::now();
+                    while bt.status() == Err(Reason::HardwareAbsent)
+                        && started.elapsed() < self.timing.provision_wait
+                    {
+                        std::thread::sleep(self.timing.poll);
+                    }
+                }
+                bt.set_power(*powered)?;
+                bt.status()?
+            }
+            Request::BluetoothScan {} => {
+                self.radio_ready(present, "bluetooth", true)?;
+                bt.scan()?
+            }
+            Request::BluetoothPair { address } => {
+                self.radio_ready(present, "bluetooth", true)?;
+                bt.pair(address)?
+            }
+            Request::BluetoothConnect { address } => {
+                self.radio_ready(present, "bluetooth", true)?;
+                bt.link(address, true)?
+            }
+            Request::BluetoothDisconnect { address } => {
+                self.radio_ready(present, "bluetooth", true)?;
+                bt.link(address, false)?
+            }
+            Request::BluetoothRemove { address } => {
+                self.radio_ready(present, "bluetooth", false)?;
+                bt.remove(address)?
+            }
+            _ => return Err(Reason::NotImplemented),
+        };
+        Ok(Payload::Bluetooth(state))
+    }
+
+    fn audio_request(&self, request: &Request) -> Result<Payload, Reason> {
+        let audio = self.audio();
+        match request {
+            Request::AudioStatus {} => {}
+            Request::AudioSetVolume { target, percent } => audio.set_volume(*target, *percent)?,
+            Request::AudioSetMute { target, muted } => {
+                // The privacy switch outranks the sound page: an input the
+                // member blocked is not reopened from here.
+                if *target == AudioTarget::Input && !*muted && !self.remembered().microphone_allowed
+                {
+                    return Err(Reason::HardwareUnavailable {
+                        cause: Unavailable::SoftBlocked,
+                    });
+                }
+                audio.set_mute(*target, *muted)?;
+            }
+            Request::AudioSetOutput { id } => audio.set_output(*id)?,
+            _ => return Err(Reason::NotImplemented),
+        }
+        audio.status().map(Payload::Audio)
+    }
+
+    fn set_microphone(&self, allowed: bool) -> Result<Payload, Reason> {
+        let applied = self.audio().set_capture_everywhere(allowed);
+        // Blocking is remembered even when a card refused: the intent is
+        // what is enforced again at the next start. Allowing is remembered
+        // only once it happened.
+        if !allowed || applied.is_ok() {
+            let mut r = self.remembered();
+            r.microphone_allowed = allowed;
+            self.remember(&r)?;
+        }
+        applied?;
+        Ok(Payload::Privacy(self.privacy()))
+    }
+
+    fn set_camera(&self, allowed: bool) -> Result<Payload, Reason> {
+        let rule = self.roots.etc.join("udev/rules.d/70-ocinye-camera.rules");
+        if allowed {
+            files::remove(&rule)?;
+        } else {
+            files::write_atomic(&rule, CAMERA_RULE.as_bytes(), 0o644)?;
+            let mut r = self.remembered();
+            r.camera_allowed = false;
+            self.remember(&r)?;
+        }
+        // udevd re-reads its rules, then every camera node gets its mode
+        // again from them. A camera already open keeps its open stream.
+        self.runner
+            .run(Tool::Udevadm, &["control", "--reload"])
+            .map_err(failed)?;
+        self.runner
+            .run(
+                Tool::Udevadm,
+                &[
+                    "trigger",
+                    "--subsystem-match=video4linux",
+                    "--action=change",
+                ],
+            )
+            .map_err(failed)?;
+        if allowed {
+            let mut r = self.remembered();
+            r.camera_allowed = true;
+            self.remember(&r)?;
+        }
+        Ok(Payload::Privacy(self.privacy()))
+    }
+
+    fn configure_network(
+        &self,
+        interface: &str,
+        addressing: &ocinye_system_contracts::request::Addressing,
+    ) -> Result<Payload, Reason> {
+        let _one = Self::busy(&self.netplan_busy)?;
+        let found = self
+            .interfaces()
+            .into_iter()
+            .find(|i| i.name == interface)
+            .ok_or(Reason::NotFound)?;
+        // Wi-Fi addressing is systemd-networkd's DHCP, by the image's own
+        // file; a fixed address on Wi-Fi is not implemented in v1.
+        if found.kind == InterfaceKind::Wifi {
+            return Err(Reason::NotImplemented);
+        }
+        netplan::configure(
+            self.runner.as_ref(),
+            &self.roots.etc.join("netplan"),
+            interface,
+            addressing,
+        )?;
+        Ok(Payload::Network(self.network()))
     }
 
     // ------------------------------------------------- readers through a tool
 
     fn time(&self) -> Result<TimeState, Reason> {
-        let out = tool::run(Tool::Timedatectl, &["show"]).map_err(failed)?;
+        let out = self
+            .runner
+            .run(Tool::Timedatectl, &["show"])
+            .map_err(failed)?;
         Ok(TimeState {
             timezone: property(&out, "Timezone").unwrap_or("UTC").to_owned(),
             automatic: property(&out, "NTP") == Some("yes"),
@@ -658,7 +1096,11 @@ impl Linux {
     }
 
     fn remote_access(&self) -> RemoteAccessState {
-        let is = |verb: &str| tool::run(Tool::Systemctl, &[verb, "--quiet", "ssh.service"]).is_ok();
+        let is = |verb: &str| {
+            self.runner
+                .run(Tool::Systemctl, &[verb, "--quiet", "ssh.service"])
+                .is_ok()
+        };
         RemoteAccessState {
             ssh_enabled: is("is-enabled"),
             ssh_active: is("is-active"),
@@ -697,30 +1139,32 @@ impl Linux {
     }
 
     fn diagnostics(&self) -> DiagnosticsReport {
-        let failed_units = tool::run(
-            Tool::Systemctl,
-            &[
-                "list-units",
-                "--failed",
-                "--plain",
-                "--no-legend",
-                "--no-pager",
-            ],
-        )
-        .map(|out| {
-            out.lines()
-                .filter_map(|l| l.split_whitespace().next())
-                // Unit names only, bounded: never log text.
-                .filter(|u| {
-                    u.len() <= 128
-                        && u.bytes()
-                            .all(|b| b.is_ascii_alphanumeric() || b"-_.@:\\".contains(&b))
-                })
-                .take(64)
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default();
+        let failed_units = self
+            .runner
+            .run(
+                Tool::Systemctl,
+                &[
+                    "list-units",
+                    "--failed",
+                    "--plain",
+                    "--no-legend",
+                    "--no-pager",
+                ],
+            )
+            .map(|out| {
+                out.lines()
+                    .filter_map(|l| l.split_whitespace().next())
+                    // Unit names only, bounded: never log text.
+                    .filter(|u| {
+                        u.len() <= 128
+                            && u.bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b"-_.@:\\".contains(&b))
+                    })
+                    .take(64)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
         DiagnosticsReport {
             info: self.info(),
             health: self.health(),
@@ -739,27 +1183,59 @@ impl Linux {
         let raw = (u64::from(percent.get()) * max / 100).max(1).min(max);
         fs::write(dir.join("brightness"), raw.to_string())
             .map_err(|_| failed(AdapterFailure::Refused))?;
-        Ok(Payload::Display(DisplayState {
-            outputs: Vec::new(),
-            brightness: self.brightness(),
-        }))
+        Ok(Payload::Display(self.display()))
     }
 
-    fn power_action(verb: &'static str) -> Result<Payload, Reason> {
-        tool::run(Tool::Systemctl, &[verb]).map_err(failed)?;
+    fn power_action(&self, verb: &'static str) -> Result<Payload, Reason> {
+        self.runner.run(Tool::Systemctl, &[verb]).map_err(failed)?;
         Ok(Payload::Done)
     }
 }
 
 impl Platform for Linux {
-    fn perform(&self, request: &Request) -> Result<Payload, Reason> {
+    fn perform(&self, request: &Request, context: &Context<'_>) -> Result<Payload, Reason> {
         if !IMPLEMENTED.contains(&request.capability()) {
             return Err(Reason::NotImplemented);
+        }
+        if UpdateLink::operation(request).is_some() {
+            return self.update.perform(request, context.actor, context.via);
         }
         match request {
             Request::ActivationStatus {} => Ok(Payload::Activation(self.activation.state())),
             Request::ActivationStart { .. } => {
                 self.activation.start(request).map(Payload::Activation)
+            }
+            Request::ActivationConfigure {
+                language,
+                timezone,
+                network,
+            } => {
+                // Only before an Instance exists: afterwards these are the
+                // operator's, through their own capabilities.
+                if !matches!(
+                    self.activation.state().phase,
+                    ocinye_system_contracts::state::ActivationPhase::Ready
+                        | ocinye_system_contracts::state::ActivationPhase::Failed
+                ) {
+                    return Err(Reason::NotOfferedHere);
+                }
+                if let Some(n) = network {
+                    self.configure_network(&n.interface, &n.addressing)?;
+                }
+                self.perform(
+                    &Request::TimeConfigure {
+                        timezone: Some(timezone.clone()),
+                        automatic: Some(true),
+                    },
+                    context,
+                )?;
+                self.perform(
+                    &Request::LocaleConfigure {
+                        language: *language,
+                    },
+                    context,
+                )?;
+                Ok(Payload::Activation(self.activation.state()))
             }
             Request::ActivationCredential {} => {
                 self.activation.credential().map(Payload::InitialCredential)
@@ -768,15 +1244,36 @@ impl Platform for Linux {
             Request::SystemInfo {} => Ok(Payload::Info(self.info())),
             Request::SystemCapabilities {} => Ok(Payload::Inventory(self.inventory())),
             Request::NetworkStatus {} => Ok(Payload::Network(self.network())),
+            Request::NetworkConfigure {
+                interface,
+                addressing,
+            } => self.configure_network(interface, addressing),
+            Request::WifiScan {}
+            | Request::WifiConnect { .. }
+            | Request::WifiDisconnect {}
+            | Request::WifiForget { .. }
+            | Request::WifiSetRadio { .. } => self.wifi_request(request),
+            Request::BluetoothStatus {}
+            | Request::BluetoothSetPower { .. }
+            | Request::BluetoothScan {}
+            | Request::BluetoothPair { .. }
+            | Request::BluetoothConnect { .. }
+            | Request::BluetoothDisconnect { .. }
+            | Request::BluetoothRemove { .. } => self.bluetooth_request(request),
+            Request::AudioStatus {}
+            | Request::AudioSetVolume { .. }
+            | Request::AudioSetMute { .. }
+            | Request::AudioSetOutput { .. } => self.audio_request(request),
+            Request::DisplayStatus {} => Ok(Payload::Display(self.display())),
             Request::DisplaySetBrightness { percent } => self.set_brightness(*percent),
             Request::PowerStatus {} => Ok(Payload::Power(self.power())),
-            Request::PowerShutdown {} => Self::power_action("poweroff"),
-            Request::PowerRestart {} => Self::power_action("reboot"),
+            Request::PowerShutdown {} => self.power_action("poweroff"),
+            Request::PowerRestart {} => self.power_action("reboot"),
             Request::PowerSuspend {} => {
                 if !self.power().can_suspend {
                     return Err(Reason::HardwareAbsent);
                 }
-                Self::power_action("suspend")
+                self.power_action("suspend")
             }
             Request::LocaleStatus {} => Ok(Payload::Locale(self.locale())),
             Request::LocaleConfigure { language } => {
@@ -785,7 +1282,9 @@ impl Platform for Linux {
                     Language::En => "LANG=en_GB.UTF-8",
                     Language::Fr => "LANG=fr_FR.UTF-8",
                 };
-                tool::run(Tool::Localectl, &["set-locale", locale]).map_err(failed)?;
+                self.runner
+                    .run(Tool::Localectl, &["set-locale", locale])
+                    .map_err(failed)?;
                 Ok(Payload::Locale(self.locale()))
             }
             Request::TimeStatus {} => self.time().map(Payload::Time),
@@ -795,38 +1294,55 @@ impl Platform for Linux {
             } => {
                 if let Some(tz) = timezone {
                     let tz = tool::value(tz).ok_or(Reason::ValueOutOfRange)?;
-                    tool::run(Tool::Timedatectl, &["set-timezone", tz]).map_err(|e| match e {
-                        // The tool refuses a zone it does not know.
-                        AdapterFailure::Refused => Reason::NotFound,
-                        other => failed(other),
-                    })?;
+                    self.runner
+                        .run(Tool::Timedatectl, &["set-timezone", tz])
+                        .map_err(|e| match e {
+                            // The tool refuses a zone it does not know.
+                            AdapterFailure::Refused => Reason::NotFound,
+                            other => failed(other),
+                        })?;
                 }
                 if let Some(auto) = automatic {
-                    tool::run(
-                        Tool::Timedatectl,
-                        &["set-ntp", if *auto { "true" } else { "false" }],
-                    )
-                    .map_err(failed)?;
+                    self.runner
+                        .run(
+                            Tool::Timedatectl,
+                            &["set-ntp", if *auto { "true" } else { "false" }],
+                        )
+                        .map_err(failed)?;
                 }
                 self.time().map(Payload::Time)
             }
             Request::KeyboardStatus {} => Ok(Payload::Keyboard(self.keyboard())),
             Request::KeyboardConfigure { layout, variant } => {
+                // Ubuntu's localed refuses to set keymaps ("not supported in
+                // Debian"): the layout is the file the installer writes, and
+                // the compositor and the consoles read. Only a layout, and a
+                // variant of it, that the XKB rules list names.
                 let layout = tool::value(layout).ok_or(Reason::ValueOutOfRange)?;
                 let variant = match variant {
                     Some(v) => tool::value(v).ok_or(Reason::ValueOutOfRange)?,
                     None => "",
                 };
-                // model, then variant: `localectl set-x11-keymap LAYOUT MODEL VARIANT`.
-                let args: &[&str] = if variant.is_empty() {
-                    &["set-x11-keymap", layout]
-                } else {
-                    &["set-x11-keymap", layout, "pc105", variant]
-                };
-                tool::run(Tool::Localectl, args).map_err(|e| match e {
-                    AdapterFailure::Refused => Reason::NotFound,
-                    other => failed(other),
+                let rules = read(&self.roots.xkb_rules).ok_or(Reason::AdapterFailed {
+                    cause: AdapterFailure::Unreachable,
                 })?;
+                if !xkb_known(&rules, layout, variant) {
+                    return Err(Reason::NotFound);
+                }
+                let path = self.roots.etc.join("default/keyboard");
+                let before = read(&path).unwrap_or_default();
+                let keep = |k: &str, or: &str| {
+                    property(&before, k)
+                        .map(|v| v.trim_matches('"').to_owned())
+                        .filter(|v| tool::value(v).is_some() || v.is_empty())
+                        .unwrap_or_else(|| or.to_owned())
+                };
+                let text = format!(
+                    "# Set by the Ocinye System Service (keyboard.configure).\nXKBMODEL=\"{}\"\nXKBLAYOUT=\"{layout}\"\nXKBVARIANT=\"{variant}\"\nXKBOPTIONS=\"{}\"\nBACKSPACE=\"guess\"\n",
+                    keep("XKBMODEL", "pc105"),
+                    keep("XKBOPTIONS", ""),
+                );
+                files::write_atomic(&path, text.as_bytes(), 0o644)?;
                 Ok(Payload::Keyboard(self.keyboard()))
             }
             Request::AccessibilityStatus {} => Ok(Payload::Accessibility(self.accessibility())),
@@ -843,15 +1359,18 @@ impl Platform for Linux {
                 Ok(Payload::Accessibility(self.accessibility()))
             }
             Request::PrivacyStatus {} => Ok(Payload::Privacy(self.privacy())),
+            Request::PrivacySetMicrophone { allowed } => self.set_microphone(*allowed),
+            Request::PrivacySetCamera { allowed } => self.set_camera(*allowed),
             Request::StorageStatus {} => Ok(Payload::Storage(self.storage())),
-            Request::UpdateStatus {} => Ok(Payload::Update(self.update())),
             Request::DiagnosticsCollect {} => {
                 Ok(Payload::Diagnostics(Box::new(self.diagnostics())))
             }
             Request::RemoteAccessStatus {} => Ok(Payload::RemoteAccess(self.remote_access())),
             Request::RemoteAccessConfigure { ssh_enabled } => {
                 let verb = if *ssh_enabled { "enable" } else { "disable" };
-                tool::run(Tool::Systemctl, &[verb, "--now", "ssh.service"]).map_err(failed)?;
+                self.runner
+                    .run(Tool::Systemctl, &[verb, "--now", "ssh.service"])
+                    .map_err(failed)?;
                 Ok(Payload::RemoteAccess(self.remote_access()))
             }
             Request::RecoveryStatus {} => Ok(Payload::Recovery(self.recovery())),
@@ -860,9 +1379,53 @@ impl Platform for Linux {
     }
 }
 
+/// Whether the XKB rules list names a layout, and the variant of it when
+/// one is given (`! layout` lines: `  us  English (US)`; `! variant` lines:
+/// `  nodeadkeys  de: German (no dead keys)`).
+fn xkb_known(rules: &str, layout: &str, variant: &str) -> bool {
+    let mut section = "";
+    let mut layout_found = false;
+    let mut variant_found = variant.is_empty();
+    for line in rules.lines() {
+        if let Some(name) = line.strip_prefix("! ") {
+            section = name.trim();
+            continue;
+        }
+        let mut words = line.split_whitespace();
+        let Some(name) = words.next() else { continue };
+        match section {
+            "layout" if name == layout => layout_found = true,
+            "variant" if name == variant && words.next() == Some(&format!("{layout}:")) => {
+                variant_found = true;
+            }
+            _ => {}
+        }
+    }
+    layout_found && variant_found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    trait PerformTest {
+        fn perform_test(&self, request: &Request) -> Result<Payload, Reason>;
+    }
+    impl PerformTest for Linux {
+        fn perform_test(&self, request: &Request) -> Result<Payload, Reason> {
+            self.perform(
+                request,
+                &Context {
+                    actor: "presence",
+                    via: "cli",
+                },
+            )
+        }
+    }
+    use crate::dbus::fake::{obj, p, s, FakeBus};
+    use crate::dbus::{Objects, Value};
+    use crate::tool::fake::Script;
+    use ocinye_system_contracts::request::{Addressing, Secret};
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static N: AtomicU32 = AtomicU32::new(0);
@@ -887,14 +1450,31 @@ mod tests {
             fs::write(p, content).unwrap();
             self
         }
-        fn linux(&self) -> Linux {
-            Linux::new(Roots {
+        fn roots(&self) -> Roots {
+            Roots {
                 sys: self.0.join("sys"),
                 proc: self.0.join("proc"),
                 etc: self.0.join("etc"),
                 ocinye_lib: self.0.join("usr/lib/ocinye"),
                 state: self.0.join("var/lib/ocinye/system"),
-            })
+                update_socket: self.0.join("run/ocinye/update.sock"),
+                iwd: self.0.join("var/lib/iwd"),
+                xkb_rules: self.0.join("usr/share/X11/xkb/rules/base.lst"),
+            }
+        }
+        /// The platform over this tree, with no tool and no bus that
+        /// answers: nothing reaches the machine running the tests.
+        fn linux(&self) -> Linux {
+            self.with(Arc::new(Script::default()), Arc::new(FakeBus::default()))
+        }
+        fn with(&self, runner: Arc<Script>, bus: Arc<FakeBus>) -> Linux {
+            Linux::with_adapters(
+                self.roots(),
+                Arc::new(ReleaseInstaller),
+                runner,
+                bus,
+                Timing::instant(),
+            )
         }
     }
 
@@ -923,7 +1503,7 @@ mod tests {
         assert_eq!(l.brightness(), None);
         assert_eq!(l.network().connectivity, Connectivity::Disconnected);
         assert_eq!(
-            l.perform(&Request::DisplaySetBrightness {
+            l.perform_test(&Request::DisplaySetBrightness {
                 percent: Percent::new(40).unwrap()
             }),
             Err(Reason::HardwareAbsent)
@@ -1015,7 +1595,7 @@ mod tests {
             .put("sys/class/backlight/b/brightness", "255");
         let l = t.linux();
         let Payload::Display(d) = l
-            .perform(&Request::DisplaySetBrightness {
+            .perform_test(&Request::DisplaySetBrightness {
                 percent: Percent::new(40).unwrap(),
             })
             .unwrap()
@@ -1027,7 +1607,7 @@ mod tests {
             read(&t.0.join("sys/class/backlight/b/brightness")).unwrap(),
             "102"
         );
-        l.perform(&Request::DisplaySetBrightness {
+        l.perform_test(&Request::DisplaySetBrightness {
             percent: Percent::new(0).unwrap(),
         })
         .unwrap();
@@ -1042,7 +1622,7 @@ mod tests {
         let t = Tree::new();
         let l = t.linux();
         assert_eq!(l.accessibility().text_scale_percent, 100);
-        l.perform(&Request::AccessibilityConfigure {
+        l.perform_test(&Request::AccessibilityConfigure {
             text_scale_percent: 130,
             high_contrast: true,
             reduce_motion: false,
@@ -1087,24 +1667,45 @@ mod tests {
         );
         assert_eq!(i.base_system, "Ubuntu 24.04.5 LTS");
         assert_eq!((i.uefi, i.secure_boot), (false, SecureBoot::Unknown));
-        assert_eq!(l.update().current_release.as_deref(), Some("f3fc6ba0863b"));
-        assert!(!l.recovery().rollback_available);
+        // Without the Update Engine nothing is claimed about releases.
+        let r = l.recovery();
+        assert!(!r.rollback_available);
+        assert_eq!(r.current_release, None);
         assert!(Tree::new().linux().info().development_build);
     }
 
     #[test]
     fn o_que_nao_esta_implementado_di_lo_e_o_inventario_tambem() {
         let l = Tree::new().linux();
+        for r in [
+            Request::AudioSetInput { id: 0 },
+            Request::DisplayConfigure {
+                output: "eDP-1".into(),
+                width: 1920,
+                height: 1080,
+                scale_percent: 100,
+            },
+        ] {
+            assert_eq!(l.perform_test(&r), Err(Reason::NotImplemented), "{r:?}");
+            assert!(!l.inventory().implemented.contains(&r.capability()));
+        }
+        // The update capabilities are carried out by the Update Engine; with
+        // the engine absent the answer is that it cannot be reached, never a
+        // made-up state.
         assert_eq!(
-            l.perform(&Request::WifiScan {}),
-            Err(Reason::NotImplemented)
+            l.perform_test(&Request::UpdateStatus {}),
+            Err(Reason::AdapterFailed {
+                cause: AdapterFailure::Unreachable
+            })
         );
         assert_eq!(
-            l.perform(&Request::UpdateApply {}),
-            Err(Reason::NotImplemented)
+            l.perform_test(&Request::UpdateInstall {}),
+            Err(Reason::AdapterFailed {
+                cause: AdapterFailure::Unreachable
+            })
         );
         let inv = l.inventory();
-        assert!(!inv.implemented.contains(&CapabilityId::WifiScan));
+        assert!(inv.implemented.contains(&CapabilityId::WifiScan));
         assert!(inv.implemented.contains(&CapabilityId::PowerRestart));
     }
 
@@ -1125,5 +1726,411 @@ mod tests {
         // Anything that is not the expected JSON is no addresses, not a panic.
         assert!(addresses("ip: command failed").is_empty());
         assert!(addresses("{}").is_empty());
+    }
+
+    const DEV: &str = "/net/connman/iwd/0/4";
+    const LAB: &str = "/net/connman/iwd/0/4/4c6162_psk";
+
+    fn iwd(powered: bool, connected: bool) -> Objects {
+        let mut o = Objects::new();
+        obj(
+            &mut o,
+            DEV,
+            "net.connman.iwd.Device",
+            &[("Powered", Value::Bool(powered))],
+        );
+        let mut st = vec![
+            (
+                "State",
+                s(if connected {
+                    "connected"
+                } else {
+                    "disconnected"
+                }),
+            ),
+            ("Scanning", Value::Bool(false)),
+        ];
+        if connected {
+            st.push(("ConnectedNetwork", p(LAB)));
+        }
+        obj(&mut o, DEV, "net.connman.iwd.Station", &st);
+        obj(
+            &mut o,
+            LAB,
+            "net.connman.iwd.Network",
+            &[
+                ("Name", s("Lab")),
+                ("Type", s("psk")),
+                ("Connected", Value::Bool(connected)),
+                ("KnownNetwork", p("/k")),
+            ],
+        );
+        o
+    }
+
+    fn laptop(t: &Tree, soft: &str, hard: &str) {
+        t.put("sys/class/net/wlp2s0/device/vendor", "0x8086")
+            .put("sys/class/net/wlp2s0/wireless/x", "")
+            .put("sys/class/net/enp3s0/device/vendor", "0x8086")
+            .put("sys/class/net/enp3s0/type", "1")
+            .put("sys/class/rfkill/rfkill0/type", "wlan")
+            .put("sys/class/rfkill/rfkill0/soft", soft)
+            .put("sys/class/rfkill/rfkill0/hard", hard);
+    }
+
+    #[test]
+    fn o_wifi_passa_pelos_interruptores_antes_de_chegar_ao_iwd() {
+        let t = Tree::new();
+        laptop(&t, "1", "0");
+        let runner = Arc::new(Script::default());
+        let bus = Arc::new(FakeBus::with(crate::wifi::IWD, iwd(false, false)));
+        let l = t.with(runner.clone(), bus.clone());
+        assert_eq!(
+            l.perform_test(&Request::WifiScan {}),
+            Err(Reason::HardwareUnavailable {
+                cause: Unavailable::SoftBlocked
+            })
+        );
+        assert!(bus.methods().is_empty());
+        // Turning the radio on releases the switch, then powers the device.
+        let out = l.perform_test(&Request::WifiSetRadio { enabled: true });
+        assert!(runner.ran(&["unblock", "wlan"]));
+        assert_eq!(bus.methods(), ["Set Powered"]);
+        assert!(matches!(out, Ok(Payload::Network(_))));
+        // A hardware switch: nothing is attempted.
+        t.put("sys/class/rfkill/rfkill0/hard", "1");
+        assert_eq!(
+            l.perform_test(&Request::WifiSetRadio { enabled: true }),
+            Err(Reason::HardwareUnavailable {
+                cause: Unavailable::HardBlocked
+            })
+        );
+        assert_eq!(bus.methods().len(), 1);
+        // No radio at all.
+        assert_eq!(
+            Tree::new().linux().perform_test(&Request::WifiScan {}),
+            Err(Reason::HardwareAbsent)
+        );
+    }
+
+    #[test]
+    fn o_estado_da_rede_diz_a_rede_wifi_em_uso() {
+        let t = Tree::new();
+        laptop(&t, "0", "0");
+        let bus = Arc::new(FakeBus::with(crate::wifi::IWD, iwd(true, true)));
+        let l = t.with(Arc::new(Script::default()), bus);
+        assert_eq!(
+            l.network().wifi,
+            Some(WifiRadioState {
+                enabled: true,
+                connected: Some("Lab".into())
+            })
+        );
+        // Without iwd the switch alone answers, and nothing is invented.
+        assert_eq!(
+            t.linux().network().wifi,
+            Some(WifiRadioState {
+                enabled: true,
+                connected: None
+            })
+        );
+        let bus = Arc::new(FakeBus::with(crate::wifi::IWD, iwd(true, true)));
+        let l = t.with(Arc::new(Script::default()), bus.clone());
+        let Ok(Payload::Network(n)) = l.perform_test(&Request::WifiConnect {
+            ssid: "Lab".into(),
+            passphrase: Some(Secret::new("correct horse".into())),
+        }) else {
+            panic!()
+        };
+        assert_eq!(n.wifi.unwrap().connected.as_deref(), Some("Lab"));
+        let psk = fs::read_to_string(t.0.join("var/lib/iwd/Lab.psk")).unwrap();
+        assert!(psk.contains("Passphrase=correct horse"));
+    }
+
+    #[test]
+    fn configurar_a_rede_so_numa_interface_com_fios_que_existe() {
+        let t = Tree::new();
+        laptop(&t, "0", "0");
+        let runner = Arc::new(Script::default());
+        let l = t.with(runner.clone(), Arc::new(FakeBus::default()));
+        let dhcp = |i: &str| Request::NetworkConfigure {
+            interface: i.into(),
+            addressing: Addressing::Dhcp,
+        };
+        assert_eq!(l.perform_test(&dhcp("enp9s9")), Err(Reason::NotFound));
+        assert_eq!(l.perform_test(&dhcp("wlp2s0")), Err(Reason::NotImplemented));
+        assert!(runner.changes().iter().all(|(t, _)| *t != Tool::Netplan));
+        assert!(matches!(
+            l.perform_test(&dhcp("enp3s0")),
+            Ok(Payload::Network(_))
+        ));
+        assert!(t.0.join("etc/netplan/90-ocinye-enp3s0.yaml").exists());
+        assert!(runner.ran(&["apply"]));
+    }
+
+    #[test]
+    fn o_primeiro_arranque_so_escolhe_lingua_hora_e_rede_antes_de_haver_instancia() {
+        use ocinye_system_contracts::request::FirstNetwork;
+        use ocinye_system_contracts::state::Language;
+        let t = Tree::new();
+        laptop(&t, "0", "0");
+        let runner = Arc::new(Script::default());
+        let l = t.with(runner.clone(), Arc::new(FakeBus::default()));
+        let req = Request::ActivationConfigure {
+            language: Language::En,
+            timezone: "Europe/Lisbon".into(),
+            network: Some(FirstNetwork {
+                interface: "enp3s0".into(),
+                addressing: Addressing::Dhcp,
+            }),
+        };
+        // No release to create an Instance from: not offered, nothing touched.
+        assert_eq!(l.perform_test(&req), Err(Reason::NotOfferedHere));
+        assert!(runner.changes().is_empty());
+        assert!(!t.0.join("etc/netplan/90-ocinye-enp3s0.yaml").exists());
+        // Offered: the language, the zone and the wired addressing are set.
+        runner.answer(
+            Tool::Timedatectl,
+            &["show"],
+            "Timezone=Europe/Lisbon\nNTP=yes\n",
+        );
+        t.put(
+            "usr/lib/ocinye/release/f3fc6ba0863b/install/ocinye",
+            "#!/bin/sh\n",
+        );
+        let r = l.perform_test(&req);
+        assert!(matches!(r, Ok(Payload::Activation(_))), "{r:?}");
+        assert!(runner.ran(&["set-timezone", "Europe/Lisbon"]));
+        assert!(runner.ran(&["set-locale", "LANG=en_GB.UTF-8"]));
+        assert!(t.0.join("etc/netplan/90-ocinye-enp3s0.yaml").exists());
+        // Once the Instance exists these are the operator's, through their
+        // own capabilities.
+        t.put("etc/ocinye/release.env", "OCINYE_RELEASE=f3fc6ba0863b\n");
+        let before = runner.changes().len();
+        assert_eq!(l.perform_test(&req), Err(Reason::NotOfferedHere));
+        assert_eq!(runner.changes().len(), before);
+    }
+
+    #[test]
+    fn o_teclado_e_o_ficheiro_que_o_compositor_le_e_so_com_nomes_que_o_xkb_tem() {
+        let t = Tree::new();
+        let l = t.linux();
+        let set = |layout: &str, variant: Option<&str>| Request::KeyboardConfigure {
+            layout: layout.into(),
+            variant: variant.map(Into::into),
+        };
+        // Without the rules list, nothing is decided.
+        assert_eq!(
+            l.perform_test(&set("us", None)),
+            Err(Reason::AdapterFailed {
+                cause: AdapterFailure::Unreachable
+            })
+        );
+        t.put(
+            "usr/share/X11/xkb/rules/base.lst",
+            "! model\n  pc105           Generic 105-key PC\n\n! layout\n  us              English (US)\n  fr              French\n  pt              Portuguese\n\n! variant\n  intl            us: English (US, intl., with dead keys)\n  nodeadkeys      pt: Portuguese (no dead keys)\n",
+        );
+        t.put(
+            "etc/default/keyboard",
+            "XKBMODEL=\"pc105\"\nXKBLAYOUT=\"fr\"\nXKBVARIANT=\"\"\nXKBOPTIONS=\"grp:alt_shift_toggle\"\n",
+        );
+        let file = || std::fs::read_to_string(t.0.join("etc/default/keyboard")).unwrap();
+        let before = file();
+        assert_eq!(l.perform_test(&set("xx", None)), Err(Reason::NotFound));
+        assert_eq!(
+            l.perform_test(&set("fr", Some("intl"))),
+            Err(Reason::NotFound)
+        );
+        assert_eq!(file(), before, "a refusal leaves the file as it was");
+        let Ok(Payload::Keyboard(k)) = l.perform_test(&set("pt", Some("nodeadkeys"))) else {
+            panic!("pt nodeadkeys is a layout and a variant of it");
+        };
+        assert_eq!(
+            (k.layout.as_str(), k.variant.as_deref()),
+            ("pt", Some("nodeadkeys"))
+        );
+        let now = file();
+        assert!(now.contains("XKBLAYOUT=\"pt\"") && now.contains("XKBVARIANT=\"nodeadkeys\""));
+        assert!(
+            now.contains("XKBMODEL=\"pc105\"")
+                && now.contains("XKBOPTIONS=\"grp:alt_shift_toggle\""),
+            "{now}"
+        );
+    }
+
+    fn sound(t: &Tree) -> Arc<Script> {
+        t.put("proc/asound/cards", crate::audio::tests::CARDS)
+            .put("proc/asound/card0/pcm0c/sub0/status", "closed\n");
+        let runner = Arc::new(Script::default());
+        runner.answer(
+            Tool::Amixer,
+            &["-c", "0", "-M", "get", "Master"],
+            crate::audio::tests::MASTER,
+        );
+        runner.answer(
+            Tool::Amixer,
+            &["-c", "0", "-M", "get", "Capture"],
+            crate::audio::tests::CAPTURE,
+        );
+        runner
+    }
+
+    #[test]
+    fn o_microfone_bloqueado_fecha_a_captura_e_o_som_nao_o_reabre() {
+        let t = Tree::new();
+        let runner = sound(&t);
+        let l = t.with(runner.clone(), Arc::new(FakeBus::default()));
+        let Ok(Payload::Privacy(p)) =
+            l.perform_test(&Request::PrivacySetMicrophone { allowed: false })
+        else {
+            panic!()
+        };
+        assert!(p.microphone_present && !p.microphone_allowed && !p.microphone_in_use);
+        assert!(runner.ran(&["-c", "0", "sset", "Capture", "nocap"]));
+        assert_eq!(
+            l.perform_test(&Request::AudioSetMute {
+                target: AudioTarget::Input,
+                muted: false
+            }),
+            Err(Reason::HardwareUnavailable {
+                cause: Unavailable::SoftBlocked
+            })
+        );
+        assert!(!runner.ran(&["-c", "0", "sset", "Capture", "cap"]));
+        // After a restart the block is applied again.
+        let before = runner.changes().len();
+        t.with(runner.clone(), Arc::new(FakeBus::default()))
+            .restore();
+        assert_eq!(runner.changes().len(), before + 1);
+        // A card that refuses: blocking is still remembered, and said.
+        runner.fail(
+            Tool::Amixer,
+            &["-c", "0", "sset", "Capture", "cap"],
+            AdapterFailure::Refused,
+        );
+        assert_eq!(
+            l.perform_test(&Request::PrivacySetMicrophone { allowed: true }),
+            Err(Reason::AdapterFailed {
+                cause: AdapterFailure::Refused
+            })
+        );
+        assert!(!l.privacy().microphone_allowed);
+        runner.heal(Tool::Amixer, &["-c", "0", "sset", "Capture", "cap"]);
+        l.perform_test(&Request::PrivacySetMicrophone { allowed: true })
+            .unwrap();
+        assert!(l.privacy().microphone_allowed);
+        // A capture stream running is the microphone in use.
+        t.put("proc/asound/card0/pcm0c/sub0/status", "state: RUNNING\n");
+        assert!(l.privacy().microphone_in_use);
+    }
+
+    #[test]
+    fn o_som_le_e_muda_o_cartao_por_omissao() {
+        let t = Tree::new();
+        let runner = sound(&t);
+        let l = t.with(runner.clone(), Arc::new(FakeBus::default()));
+        let Ok(Payload::Audio(a)) = l.perform_test(&Request::AudioSetVolume {
+            target: AudioTarget::Output,
+            percent: Percent::new(35).unwrap(),
+        }) else {
+            panic!()
+        };
+        assert!(runner.ran(&["-c", "0", "-M", "sset", "Master", "35%"]));
+        assert_eq!(a.outputs.len(), 1);
+        assert_eq!(
+            Tree::new().linux().perform_test(&Request::AudioStatus {}),
+            Err(Reason::HardwareAbsent)
+        );
+    }
+
+    #[test]
+    fn a_camara_bloqueada_e_uma_regra_do_udev_que_se_retira() {
+        let t = Tree::new();
+        t.put("sys/class/video4linux/video0/name", "Integrated Camera");
+        let runner = Arc::new(Script::default());
+        let l = t.with(runner.clone(), Arc::new(FakeBus::default()));
+        let rule = t.0.join("etc/udev/rules.d/70-ocinye-camera.rules");
+        let Ok(Payload::Privacy(p)) = l.perform_test(&Request::PrivacySetCamera { allowed: false })
+        else {
+            panic!()
+        };
+        assert!(p.camera_present && !p.camera_allowed && !p.camera_in_use);
+        assert!(fs::read_to_string(&rule)
+            .unwrap()
+            .contains("SUBSYSTEM==\"video4linux\", MODE=\"0000\""));
+        assert!(runner.ran(&["control", "--reload"]));
+        assert!(runner.ran(&[
+            "trigger",
+            "--subsystem-match=video4linux",
+            "--action=change"
+        ]));
+        l.perform_test(&Request::PrivacySetCamera { allowed: true })
+            .unwrap();
+        assert!(!rule.exists());
+        assert!(l.privacy().camera_allowed);
+    }
+
+    #[test]
+    fn os_ecras_vem_do_drm_com_o_brilho() {
+        let t = Tree::new();
+        t.put("sys/class/drm/card0-eDP-1/status", "connected")
+            .put("sys/class/drm/card0-eDP-1/enabled", "enabled")
+            .put("sys/class/drm/card0-eDP-1/modes", "1920x1200\n")
+            .put("sys/class/backlight/b/max_brightness", "100")
+            .put("sys/class/backlight/b/brightness", "40");
+        let l = t.linux();
+        let Ok(Payload::Display(d)) = l.perform_test(&Request::DisplayStatus {}) else {
+            panic!()
+        };
+        assert_eq!(d.brightness.unwrap().get(), 40);
+        assert_eq!(
+            (
+                d.outputs[0].name.as_str(),
+                d.outputs[0].internal,
+                d.outputs[0].width
+            ),
+            ("eDP-1", true, 1920)
+        );
+        assert_eq!(
+            availability(&l, HardwareDependency::Display),
+            Availability::Present
+        );
+    }
+
+    #[test]
+    fn bluetooth_sem_controlador_e_ausente_e_com_interruptor_e_bloqueado() {
+        let l = Tree::new().linux();
+        assert_eq!(
+            l.perform_test(&Request::BluetoothStatus {}),
+            Err(Reason::HardwareAbsent)
+        );
+        let t = Tree::new();
+        t.put("sys/class/bluetooth/hci0/type", "")
+            .put("sys/class/rfkill/rfkill1/type", "bluetooth")
+            .put("sys/class/rfkill/rfkill1/soft", "1")
+            .put("sys/class/rfkill/rfkill1/hard", "0");
+        let mut o = Objects::new();
+        obj(
+            &mut o,
+            "/org/bluez/hci0",
+            "org.bluez.Adapter1",
+            &[("Powered", Value::Bool(false))],
+        );
+        let runner = Arc::new(Script::default());
+        let bus = Arc::new(FakeBus::with(crate::bluetooth::BLUEZ, o));
+        let l = t.with(runner.clone(), bus.clone());
+        assert_eq!(
+            l.perform_test(&Request::BluetoothScan {}),
+            Err(Reason::HardwareUnavailable {
+                cause: Unavailable::SoftBlocked
+            })
+        );
+        let Ok(Payload::Bluetooth(b)) =
+            l.perform_test(&Request::BluetoothSetPower { powered: true })
+        else {
+            panic!()
+        };
+        assert!(b.powered);
+        assert!(runner.ran(&["unblock", "bluetooth"]));
     }
 }

@@ -1,0 +1,39 @@
+#!/bin/sh
+# Ocinye OS: the recovery entry of an installed system's boot menu (ADR-0032).
+#
+# It boots the same kernel with `ocinye.update=rollback`. The Update Engine
+# acts on that once per boot: it returns to the release kept as previous,
+# through the same journaled rollback Settings offers, and records the boot
+# menu as the actor. With no previous release it refuses and changes nothing.
+# The entry grants nothing else: no shell, no other parameter.
+set -e
+
+prefix="/usr"
+exec_prefix="/usr"
+datarootdir="/usr/share"
+. "${pkgdatadir:-/usr/share/grub}/grub-mkconfig_lib"
+
+# The newest installed kernel and its initrd, chosen as 10_linux does: the
+# /boot/vmlinuz and /boot/initrd.img links are not always there.
+kernels=""
+for k in /boot/vmlinuz-*; do
+  [ -f "$k" ] && kernels="$kernels $k"
+done
+[ -n "$kernels" ] || exit 0
+latest="$(printf "%s\n" $kernels | version_sort -r | head -n 1)"
+version="${latest#/boot/vmlinuz-}"
+[ -f "/boot/initrd.img-$version" ] || exit 0
+
+if [ -n "${GRUB_DEVICE_UUID}" ] && [ "x${GRUB_DISABLE_LINUX_UUID}" != "xtrue" ]; then
+  root="UUID=${GRUB_DEVICE_UUID}"
+else
+  root="${GRUB_DEVICE}"
+fi
+kernel="$(make_system_path_relative_to_its_root "$latest")"
+initrd="$(make_system_path_relative_to_its_root "/boot/initrd.img-$version")"
+
+echo "menuentry 'Ocinye OS - release anterior' --class ocinye --class gnu-linux --class os --id ocinye-previous-release {"
+prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | sed -e 's/^/\t/'
+printf '\tlinux\t%s root=%s ro %s %s ocinye.update=rollback\n' "${kernel}" "${root}" "${GRUB_CMDLINE_LINUX}" "${GRUB_CMDLINE_LINUX_DEFAULT}"
+printf '\tinitrd\t%s\n' "${initrd}"
+echo "}"

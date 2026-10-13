@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! ocinye-image-builder build --bundle DIR --arch amd64|arm64 --out DIR --work DIR
-//!     --cache DIR --image-dir infra/image --bin-dir DIR --builder-commit SHA
+//!     --cache DIR --image-dir infra/image --bin-dir DIR --update-dir DIR --builder-commit SHA
 //!     --signing-dir DIR [--formats qcow2,raw,iso] [--memory MIB] [--cpus N] [--zstd-level N]
 //! ocinye-image-builder verify --out DIR --signing-dir DIR
 //! ocinye-image-builder stable-gate                 prints the gate record and refuses
@@ -48,6 +48,9 @@ struct Args {
     cache: PathBuf,
     image_dir: PathBuf,
     bin_dir: PathBuf,
+    /// The image's release as an update (ADR-0032): `native.tar`, the trusted
+    /// `root.json` (public keys only) and `update.env` (version, channel).
+    update_dir: PathBuf,
     builder_commit: String,
     signing_dir: PathBuf,
     formats: Vec<ImageFormat>,
@@ -56,6 +59,36 @@ struct Args {
     zstd_level: u32,
     revision: u32,
     reuse_common: bool,
+}
+
+/// `UPDATE_VERSION` and `UPDATE_CHANNEL` from `update.env`, checked: the
+/// version is this bundle's release with a revision, the channel one of the
+/// three. They reach `build.env` and from there the provisioning shell, so
+/// nothing else may pass.
+fn update_identity(
+    dir: &std::path::Path,
+    release_id: &str,
+) -> Result<(String, String), ImageBuildError> {
+    let text = fs::read_to_string(dir.join("update.env")).map_err(|_| asm("update.env"))?;
+    let field = |k: &str| {
+        text.lines()
+            .find_map(|l| l.strip_prefix(k).and_then(|r| r.strip_prefix('=')))
+            .map(str::to_owned)
+    };
+    let version = field("UPDATE_VERSION").ok_or_else(|| asm("update.env"))?;
+    let channel = field("UPDATE_CHANNEL").ok_or_else(|| asm("update.env"))?;
+    let (id, rev) = version
+        .split_once("-r")
+        .ok_or_else(|| asm("update version"))?;
+    let rev_ok =
+        !rev.is_empty() && !rev.starts_with('0') && rev.bytes().all(|b| b.is_ascii_digit());
+    if id != release_id
+        || !rev_ok
+        || !matches!(channel.as_str(), "development" | "candidate" | "stable")
+    {
+        return Err(asm("update version"));
+    }
+    Ok((version, channel))
 }
 
 fn usage() -> ! {
@@ -89,6 +122,7 @@ fn parse(args: &[String]) -> Args {
         cache: need("--cache").into(),
         image_dir: need("--image-dir").into(),
         bin_dir: need("--bin-dir").into(),
+        update_dir: need("--update-dir").into(),
         builder_commit: need("--builder-commit"),
         signing_dir: need("--signing-dir").into(),
         formats,
@@ -240,14 +274,25 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
             .map(|t| format!("{}\n", t.reference))
             .collect();
         vm::stage_file(&stage, "third-party.txt", third.as_bytes(), 0o644)?;
+        let (update_version, update_channel) = update_identity(&a.update_dir, &bundle.manifest.release.id)?;
         let env = format!(
-            "ARCH={}\nAPT_SNAPSHOT={}\nRELEASE_ID={}\nDOCKER_KEY_FPR={}\nBUILD_USER={}\n",
+            "ARCH={}\nAPT_SNAPSHOT={}\nRELEASE_ID={}\nDOCKER_KEY_FPR={}\nBUILD_USER={}\nUPDATE_VERSION={}\nUPDATE_CHANNEL={}\n",
             a.arch.as_str(),
             base_cfg.apt_snapshot,
             bundle.manifest.release.id,
             bundle.manifest.prerequisites.docker_repo_key_fingerprint,
-            vm::BUILD_USER
+            vm::BUILD_USER,
+            update_version,
+            update_channel
         );
+        for (from, to) in [("native.tar", "update/native.tar"), ("root.json", "update/root.json")] {
+            vm::stage_file(
+                &stage,
+                to,
+                &fs::read(a.update_dir.join(from)).map_err(|_| asm("update"))?,
+                0o644,
+            )?;
+        }
         vm::stage_file(&stage, "build.env", env.as_bytes(), 0o644)?;
         vm::stage_file(
             &stage,
@@ -263,6 +308,7 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
             "ocinye-system",
             "ocinye-compositor",
             "ocinye-system-ui",
+            "ocinye-update-engine",
         ] {
             vm::stage_file(
                 &stage,
@@ -317,7 +363,13 @@ fn build(a: &Args) -> Result<(), ImageBuildError> {
         "bin/ocinye-system",
         "bin/ocinye-compositor",
         "bin/ocinye-system-ui",
+        "bin/ocinye-update-engine",
+        "update/native.tar",
+        "update/root.json",
     ] {
+        if let Some(parent) = small.join(f).parent() {
+            fs::create_dir_all(parent).map_err(|_| asm("stage"))?;
+        }
         fs::copy(stage.join(f), small.join(f)).map_err(|_| asm("stage"))?;
     }
     let bvm = vm::BuildVm::prepare(a.arch, &a.work.join("vm"), 2222, a.memory, a.cpus)?;

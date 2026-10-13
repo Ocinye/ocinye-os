@@ -27,6 +27,7 @@ mod session;
 mod strings;
 mod window;
 
+use ocinye_image_contracts::window::{NetworkInterface, SystemSettings};
 use std::fs;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -213,6 +214,101 @@ impl session::SessionMachine for Real {
     }
     fn poweroff(&self) {
         let _ = Command::new("systemctl").arg("poweroff").status();
+    }
+}
+
+/// The disks that hold this system's medium, by kernel name, from what is
+/// mounted: no device is opened.
+fn medium_disks() -> Vec<String> {
+    let mut out = vec![];
+    for m in [install::MEDIA, "/run/live/medium", "/rofs"] {
+        let Some(src) = findmnt_source(m) else {
+            continue;
+        };
+        let Some(name) = src.strip_prefix("/dev/") else {
+            continue;
+        };
+        let class = Path::new("/sys/class/block").join(name);
+        let disk = if class.join("partition").exists() {
+            fs::canonicalize(&class).ok().and_then(|p| {
+                p.parent().map(|d| {
+                    d.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned()
+                })
+            })
+        } else {
+            Some(name.to_owned())
+        };
+        if let Some(d) = disk {
+            if !out.contains(&d) {
+                out.push(d);
+            }
+        }
+    }
+    out
+}
+
+impl window::MediaMachine for Real {
+    fn report(&self) -> ocinye_image_contracts::window::HardwareReport {
+        use ocinye_image_contracts::window::{HardwareReport, MediaDisk, MediaInterface};
+        let sys = Path::new("/sys");
+        let facts = session::SessionMachine::hardware(self);
+        let medium = medium_disks();
+        let disks = disks_metadata_only()
+            .into_iter()
+            .map(|d| MediaDisk {
+                boot_media: medium.contains(&d.name),
+                bytes: d.size.unwrap_or(0),
+                model: d.model.unwrap_or_default().trim().to_owned(),
+                connection: d.tran.unwrap_or_default(),
+                device: d.name,
+            })
+            .collect();
+        let brief = Command::new("ip")
+            .args(["-brief", "address"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let mut addrs = probe::addresses(&brief);
+        let network = install::interfaces(&sys.join("class/net"))
+            .into_iter()
+            .map(|i| MediaInterface {
+                addresses: addrs.remove(&i.name).unwrap_or_default(),
+                name: i.name,
+                wired: i.wired,
+                carrier: i.carrier,
+            })
+            .collect();
+        HardwareReport {
+            arch: facts.arch,
+            machine: probe::machine(sys),
+            cpu_model: probe::cpu_model(&fs::read_to_string("/proc/cpuinfo").unwrap_or_default()),
+            cpus: facts.cpus,
+            memory_bytes: facts.memory_bytes,
+            uefi: facts.uefi,
+            secure_boot: probe::secure_boot(sys),
+            firmware: probe::firmware(sys),
+            disks,
+            network,
+            wifi_radios: probe::wifi_radios(sys),
+            bluetooth_controllers: probe::bluetooth_controllers(sys),
+            displays: probe::displays(sys),
+            audio: probe::audio(fs::read_to_string("/proc/asound/cards").ok().as_deref()),
+        }
+    }
+    fn restricted(&self) -> bool {
+        session::SessionMachine::policy(self).restricted()
+    }
+    fn architecture_supported(&self) -> bool {
+        flow::Machine::arch_supported(self)
+    }
+    fn restart(&self) {
+        session::SessionMachine::restart(self);
+    }
+    fn poweroff(&self) {
+        session::SessionMachine::poweroff(self);
     }
 }
 
@@ -453,10 +549,14 @@ impl flow::Machine for Real {
         let v = policy::verify(&policy::read_system(self.fault_injected));
         policy::first_reason(&v).map_or(Ok(()), Err)
     }
+    fn interfaces(&self) -> Vec<NetworkInterface> {
+        install::interfaces(Path::new("/sys/class/net"))
+    }
     fn install(
         &self,
         target: &ConfirmedTarget<'_>,
         key: Option<&PublicKeyLine>,
+        settings: &SystemSettings,
         say: &mut dyn FnMut(&str),
     ) -> Result<(), OieError> {
         let disk = target.disk();
@@ -535,7 +635,10 @@ impl flow::Machine for Real {
                 device: "journal".into(),
             }
         })?;
-        let r = install::prepare_first_boot(target, key, &text).map(|_| ());
+        // The settings chosen in the window (or the text installer's
+        // defaults) go into the installed system with its first-start record.
+        let r = install::configure_system(target, settings)
+            .and_then(|()| install::prepare_first_boot(target, key, &text).map(|_| ()));
         say(&format!(
             "  [{}] first_boot",
             if r.is_ok() { "OK" } else { "DISK_WRITE_FAILED" }
@@ -613,11 +716,10 @@ fn converse(input: &mut dyn std::io::BufRead, out: &mut dyn std::io::Write, seri
 
 /// This boot's installation, for the native window: the typed exchange of
 /// [`window`], with the same machine and the same authority as a terminal's.
-/// In a boot that is not an installation the window is told so and nothing
-/// else: the non-destructive sessions keep to the terminals.
+/// In a boot that is not an installation the window draws the read-only
+/// session of that mode ([`window::media`]).
 fn attend_window(input: &mut dyn std::io::BufRead, out: &mut dyn std::io::Write) -> i32 {
     use ocinye_image_contracts::manifest::BuildKind;
-    use ocinye_image_contracts::window::{WindowEvent, WindowStep, WINDOW_PROTOCOL};
     let _ = fs::create_dir_all("/run/ocinye-oie");
     let cmdline = fs::read_to_string("/proc/cmdline").unwrap_or_default();
     let boot = ResolvedMode::from_cmdline(&cmdline);
@@ -626,32 +728,34 @@ fn attend_window(input: &mut dyn std::io::BufRead, out: &mut dyn std::io::Write)
         console: std::cell::RefCell::new(None),
         fault_injected: boot.verifier_fault_injected(),
     };
-    let Some(authority) = InstallAuthority::from_mode(&boot) else {
-        for event in [
-            WindowEvent::Hello {
-                protocol: WINDOW_PROTOCOL,
-            },
-            WindowEvent::Step {
-                state: WindowStep::NotInstalling,
-            },
-        ] {
-            let _ = writeln!(out, "{}", serde_json::to_string(&event).unwrap_or_default());
-        }
-        // Until the window goes away.
-        let mut line = String::new();
-        while matches!(input.read_line(&mut line), Ok(n) if n > 0) {
-            line.clear();
-        }
-        return 0;
-    };
     let (release_id, development) = machine.facts.as_ref().map_or((String::new(), true), |f| {
         (
             f.image.release_id.clone(),
             f.image.build_kind == BuildKind::Development,
         )
     });
-    let mut link = window::Link { input, out };
     let language = ["pt", "en", "fr"][initial_lang(&cmdline).min(2)];
+    let Some(authority) = InstallAuthority::from_mode(&boot) else {
+        let mut link = window::Link { input, out };
+        // Live, Hardware Check, Recovery (and the fail-safe Live of a
+        // missing or unknown mode): the read-only session, drawn.
+        return match window::media(
+            &mut link,
+            &machine,
+            boot.mode(),
+            &release_id,
+            development,
+            language,
+        ) {
+            window::MediaOutcome::Abandoned => 3,
+            window::MediaOutcome::Restarting | window::MediaOutcome::PoweringOff => {
+                // Leave the screen as it is until the machine goes.
+                std::thread::sleep(std::time::Duration::from_secs(600));
+                0
+            }
+        };
+    };
+    let mut link = window::Link { input, out };
     match window::run(
         &mut link,
         &machine,

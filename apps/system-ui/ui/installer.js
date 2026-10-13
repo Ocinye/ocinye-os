@@ -17,6 +17,7 @@
     page: 'welcome',       // antes de o motor conduzir: welcome | language
     chosen: null,          // by_path do cartão marcado; só vai ao motor em «Continuar»
     dialog: false,         // o diálogo de confirmação está aberto
+    mediaAsk: null,        // restart | poweroff | install — a pergunta aberta numa sessão sem instalação
     typed: '',
     checks: [],            // textos enviados a verificar, pela ordem em que foram
     checked: null,         // { typed, valid } — a última resposta do motor
@@ -27,6 +28,10 @@
     busy: false,
     focusNext: null,       // o controlo que deve receber o foco no próximo desenho
     langChosen: false,
+    // Definições do sistema instalado: o formulário local até o motor as aceitar.
+    net: null,             // { mode, interface, address, prefix, gateway, dns }
+    host: null,            // o nome escrito, por enviar
+    pending: null,         // 'network' | 'advanced': continuar quando o motor aceitar
   };
   const UNRESOLVED = [];
   const MISSING = [];
@@ -51,7 +56,7 @@
   const size = (n) => (n >= 1e12 ? (n / 1e12).toFixed(1) + ' TB' : (n / 1e9).toFixed(1) + ' GB');
   const mem = (n) => (n / 1073741824).toFixed(1) + ' GiB';
   const ic = (id) => `<svg class="sx-icon" aria-hidden="true" focusable="false"><use href="icons.svg#${id}"></use></svg>`;
-  const btn = (kind, label, act, o = {}) => `<button class="oi-btn${kind ? ' oi-btn--' + kind : ''}${o.xl ? ' oi-btn--xl' : ''}" type="${o.submit ? 'submit' : 'button'}" id="b-${act || 'submit'}"${act ? ` data-act="${act}"` : ''}${o.disabled || S.busy ? ' disabled' : ''}${o.af ? ' data-af' : ''}>${o.before ? ic(o.before) : ''}${label}${o.after ? ic(o.after) : ''}</button>`;
+  const btn = (kind, label, act, o = {}) => `<button class="oi-btn${kind ? ' oi-btn--' + kind : ''}${o.xl ? ' oi-btn--xl' : ''}" type="${o.submit ? 'submit' : 'button'}" id="b-${act || 'submit'}${o.arg ? '-' + o.arg : ''}"${act ? ` data-act="${act}"` : ''}${o.arg ? ` data-arg="${o.arg}"` : ''}${o.disabled || S.busy ? ' disabled' : ''}${o.af ? ' data-af' : ''}>${o.before ? ic(o.before) : ''}${label}${o.after ? ic(o.after) : ''}</button>`;
   const badge = (tone, text, icon) => `<span class="oi-badge" data-tone="${tone}">${icon ? ic(icon) : ''}${text}</span>`;
   const row = (label, value) => `<div class="oi-row"><span class="oi-row__l">${label}</span><span class="oi-row__v">${value}</span></div>`;
   const note = (tone, icon, text) => `<div class="oi-note"${tone ? ` data-tone="${tone}"` : ''}>${ic(icon)}<span>${text}</span></div>`;
@@ -66,12 +71,22 @@
       S.engine = event.state;
       S.busy = false;
       if (event.state.step !== was) {
+        if (was) S.focusNext = null;
         S.dialog = false; S.typed = ''; S.checks = []; S.checked = null; S.refusedConfirm = false;
         if (event.state.step === 'WELCOME') { S.page = 'welcome'; S.chosen = null; S.stages = []; S.details = []; S.showDetails = false; }
       }
       // O motor volta a listar os discos em cada passagem: uma escolha que já
       // não existe, ou que deixou de poder ser feita, cai.
       if (event.state.step === 'STORAGE' && !event.state.disks.some((d) => d.by_path === S.chosen && selectable(d))) S.chosen = null;
+      // Uma definição enviada e aceite: o passo segue sozinho; recusada, fica
+      // e diz porquê.
+      if (S.pending && event.state.step === ({ network: 'NETWORK', advanced: 'ADVANCED' })[S.pending]) {
+        const was = S.pending; S.pending = null;
+        if (!event.state.refused) { S.busy = true; send({ action: 'continue' }); }
+        else if (was === 'network') S.focusNext = 'n-address';
+      }
+      if (event.state.step === 'NETWORK' && !S.net) S.net = netForm(event.state.settings, event.state.interfaces);
+      if (event.state.step === 'ADVANCED' && S.host === null) S.host = event.state.hostname || '';
     } else if (event.event === 'confirmation_checked') {
       // Responde, pela ordem, ao que foi perguntado. Uma recusa sem pergunta
       // pendente é a de uma confirmação que o motor não aceitou.
@@ -89,16 +104,34 @@
   const step = () => (S.engine ? S.engine.step : null);
 
   // ── o trilho
-  const RAIL = ['welcome', 'language', 'computer', 'disk', 'review', 'install', 'done'];
+  const RAIL = ['welcome', 'language', 'computer', 'keyboard', 'network', 'disk', 'options', 'review', 'install', 'done'];
   function at() {
     const e = step();
     if (!e || e === 'WELCOME') return S.page === 'language' ? 1 : 0;
-    return { DRIVEN_ELSEWHERE: 1, NOT_INSTALLING: 0, COMPATIBILITY: 2, STORAGE: 3, REVIEW: 4, KEY_OFFER: 5, INSTALLING: 5, INSTALLED: 6, FAILED: 5 }[e];
+    return { DRIVEN_ELSEWHERE: 1, COMPATIBILITY: 2, KEYBOARD: 3, NETWORK: 4, STORAGE: 5, ADVANCED: 6, REVIEW: 7, KEY_OFFER: 8, INSTALLING: 8, INSTALLED: 9, FAILED: 8 }[e];
   }
+  // O formulário da rede a partir do que o motor diz.
+  function netForm(s, ifaces) {
+    const wired = ifaces.filter((i) => i.wired);
+    if (s.mode === 'STATIC') return { mode: 'STATIC', interface: s.interface, address: s.address, prefix: String(s.prefix), gateway: s.gateway, dns: s.dns.join(', ') };
+    return { mode: 'AUTOMATIC', interface: (wired[0] || ifaces[0] || {}).name || '', address: '', prefix: '24', gateway: '', dns: '' };
+  }
+  const netSettings = () => (S.net.mode === 'AUTOMATIC' ? { mode: 'AUTOMATIC' } : { mode: 'STATIC', interface: S.net.interface, address: S.net.address.trim(), prefix: Number(S.net.prefix), gateway: S.net.gateway.trim(), dns: S.net.dns.split(/[\s,]+/).filter(Boolean) });
+  const layoutName = (code) => { const l = S.layouts && S.layouts.find((x) => x.code === code); return l ? esc(l.name) : esc(code); };
   const kicker = () => `<div class="oi-k">${t('step.of', { n: at() + 1, m: RAIL.length })}</div>`;
   function rail() {
     const cur = at();
     return RAIL.map((id, i) => `<li class="oi-step"${i === cur ? ' aria-current="step"' : ''} data-at="${i < cur ? 'done' : i === cur ? 'cur' : 'todo'}"><span class="oi-step__n">${i < cur ? ic('check') : i + 1}</span>${t('s.' + id)}</li>`).join('');
+  }
+
+  // O que o menu de arranque oferece, com este arranque marcado. Não se muda
+  // daqui: o modo é o que o menu escolheu.
+  function mediaRail() {
+    const ICON = { live: 'monitor', install: 'disk', 'hardware-check': 'pulse', recovery: 'shield' };
+    return ['live', 'install', 'hardware-check', 'recovery'].map((m) => {
+      const cur = S.engine.mode === m;
+      return `<li class="oi-step"${cur ? ' aria-current="true"' : ''} data-at="${cur ? 'cur' : 'todo'}"><span class="oi-step__n">${ic(ICON[m])}</span>${t('m.s.' + m)}</li>`;
+    }).join('');
   }
 
   // ── os ecrãs
@@ -120,8 +153,46 @@
     DRIVEN_ELSEWHERE() {
       return { center: true, body: `${kicker()}<h1 class="oi-h" id="oi-h" tabindex="-1" data-af>${t('o.h')}</h1><p class="oi-d">${t('o.d')}</p>${btn('', t('o.retry'), 'begin', { xl: true })}` };
     },
-    NOT_INSTALLING() {
-      return { center: true, body: `<h1 class="oi-h" id="oi-h" tabindex="-1" data-af>${t('n.h')}</h1><p class="oi-d">${t('n.d')}</p>` };
+    MEDIA() {
+      const e = S.engine;
+      const r = e.report;
+      const c = e.compatibility;
+      const unk = () => badge('mute', t('m.unknown'));
+      const count = (n) => (n == null ? unk() : n === 0 ? t('m.none') : n === 1 ? t('m.found1') : t('m.found', { n }));
+      const list = (xs) => (xs == null ? unk() : xs.length ? xs.map((x) => `<span class="oi-mono">${esc(x)}</span>`).join(', ') : t('m.none'));
+      const ready = c.uefi && c.architecture_supported && r.memory_bytes >= c.memory_required && c.large_enough_disks > 0;
+      const good = (ok, yes, no) => (ok ? badge('ok', yes, 'check') : badge('err', no, 'warn'));
+      const disk = (d) => row(`${d.model ? esc(d.model) : t('m.unnamed')} <span class="oi-mono">${esc(d.device)}</span>`,
+        `${size(d.bytes)}${d.connection ? ` · <span class="oi-mono">${esc(d.connection)}</span>` : ''}${d.boot_media ? ' ' + badge('mute', t('m.medium'), 'usb') : ''}`);
+      const nic = (i) => row(`<span class="oi-mono">${esc(i.name)}</span> · ${t(i.wired ? 'net.wired' : 'net.wireless')}`,
+        `${i.carrier ? badge('ok', t('net.link'), 'check') : badge('mute', t('net.nolink'))} ${i.addresses.length ? `<span class="oi-mono">${i.addresses.map(esc).join(' ')}</span>` : t('m.noaddr')}`);
+      const sec = (title, rows) => `<h2 class="oi-sub">${title}</h2><div class="oi-rows">${rows}</div>`;
+      const extra = e.mode === 'live' ? note('', 'info', t('m.live.note')) : e.mode === 'recovery' ? note('', 'info', t('m.rec.note')) : '';
+      const ask = S.mediaAsk ? `<div class="oi-veil"><div class="oi-dialog" role="alertdialog" aria-modal="true" aria-labelledby="oi-x" aria-describedby="oi-xd">
+          <div class="oi-dialog__k">${ic(S.mediaAsk === 'poweroff' ? 'power' : 'restart')}${t('m.top.' + e.mode)}</div>
+          <h2 id="oi-x">${t('m.ask.' + S.mediaAsk + '.h')}</h2><p id="oi-xd">${t('m.ask.' + S.mediaAsk + '.d')}</p>
+          <div class="oi-dialog__acts">${btn('', t('m.cancel'), 'media-cancel', { af: true })}${btn('navy', t(S.mediaAsk === 'poweroff' ? 'm.poweroff' : 'm.restart'), S.mediaAsk === 'poweroff' ? 'media-off' : 'media-restart')}</div>
+        </div></div>` : '';
+      return { body: `<div class="oi-k">${t('m.k')}</div><h1 class="oi-h" id="oi-h">${t('m.h.' + e.mode)}</h1><p class="oi-d">${t('m.d.' + e.mode)}</p>
+        ${e.restricted ? note('warn', 'warn', t('m.restricted')) : note('', 'shield', t('m.protected'))}
+        ${sec(t('m.compat'), `${row(t('m.compat'), ready ? badge('ok', t('m.ready'), 'check') : badge('err', t('m.notready'), 'warn'))}
+          ${row(t('c.firmware'), good(c.uefi, t('c.uefi'), t('c.bios')))}
+          ${row(t('c.arch'), `<span class="oi-mono">${esc(r.arch)}</span> ${good(c.architecture_supported, t('c.supported'), t('c.unsupported'))}`)}
+          ${row(t('c.memory'), `${esc(t('c.memoryv', { have: mem(r.memory_bytes), need: mem(c.memory_required) }))} ${r.memory_bytes >= c.memory_required ? '' : badge('err', t('c.unsupported'), 'warn')}`)}
+          ${row(t('m.disks'), c.large_enough_disks > 0 ? t('m.disksv', { n: c.large_enough_disks, min: size(c.minimum_disk_bytes) }) : badge('err', t('m.nodisk', { min: size(c.minimum_disk_bytes) }), 'warn'))}`)}
+        ${sec(t('m.sec.computer'), `${row(t('m.machine'), r.machine ? esc(r.machine) : unk())}
+          ${row(t('m.cpu'), `${r.cpu_model ? esc(r.cpu_model) + ' · ' : ''}${t('m.cpus', { n: r.cpus })}`)}
+          ${row(t('m.firmware'), r.firmware ? esc(r.firmware) : unk())}
+          ${row(t('m.sb'), r.secure_boot == null ? unk() : t(r.secure_boot ? 'm.sb.on' : 'm.sb.off'))}`)}
+        ${sec(t('m.sec.storage'), r.disks.length ? r.disks.map(disk).join('') : row(t('m.sec.storage'), t('m.none')))}
+        ${sec(t('m.sec.network'), r.network.length ? r.network.map(nic).join('') : row(t('net.ifaces'), t('net.none')))}
+        ${sec(t('m.sec.devices'), `${row(t('m.wifi'), count(r.wifi_radios))}${row(t('m.bt'), count(r.bluetooth_controllers))}${row(t('m.display'), list(r.displays))}${row(t('m.audio'), list(r.audio))}`)}
+        ${extra}
+        <p class="oi-d"><button class="oi-link" type="button" data-act="rescan">${ic('restart')}${t('m.rescan')}</button></p>`,
+        foot: `${btn('', t('m.poweroff'), 'media-ask', { before: 'power', arg: 'poweroff' })}<span class="oi-foot__gap"></span>${e.mode === 'live'
+          ? btn('gold', t('m.install'), 'media-ask', { after: 'arrow-r', arg: 'install', af: true })
+          : btn('gold', t('m.restart'), 'media-ask', { before: 'restart', arg: 'restart', af: true })}`,
+        over: ask };
     },
     COMPATIBILITY() {
       const e = S.engine;
@@ -138,6 +209,41 @@
         foot: blocked
           ? `<span class="oi-foot__gap"></span>${btn('gold', t('b.restart'), 'restart', { before: 'restart', af: true })}`
           : `<span class="oi-foot__gap"></span>${btn('gold', t('b.next'), 'continue', { after: 'arrow-r', af: true })}` };
+    },
+    KEYBOARD() {
+      const e = S.engine;
+      S.layouts = e.layouts;
+      const opt = (l) => `<button class="oi-opt" type="button" role="radio" id="kb-${esc(l.code)}" aria-checked="${e.chosen === l.code}" data-act="keyboard" data-arg="${esc(l.code)}"${e.chosen === l.code ? ' data-af' : ''}><span class="oi-opt__ic">${ic('keyboard')}</span><span><span class="oi-opt__t">${esc(l.name)}</span> <span class="oi-opt__code">— ${esc(l.code)}</span></span></button>`;
+      return { body: `${kicker()}<h1 class="oi-h" id="oi-h">${t('kb.h')}</h1><p class="oi-d">${t('kb.d')}</p>
+        <div class="oi-opts oi-opts--grid" role="radiogroup" aria-labelledby="oi-h">${e.layouts.map(opt).join('')}</div>`,
+        foot: `${btn('quiet', t('b.cancel'), 'restart')}<span class="oi-foot__gap"></span>${btn('gold', t('b.next'), 'continue', { after: 'arrow-r' })}` };
+    },
+    NETWORK() {
+      const e = S.engine;
+      const f = S.net || netForm(e.settings, e.interfaces);
+      const iface = (i) => row(`<span class="oi-mono">${esc(i.name)}</span> · ${t(i.wired ? 'net.wired' : 'net.wireless')}`, i.carrier ? badge('ok', t('net.link'), 'check') : badge('mute', t('net.nolink')));
+      const mode = (m, icon) => `<button class="oi-opt" type="button" role="radio" id="nm-${m}" aria-checked="${f.mode === m}" data-act="net-mode" data-arg="${m}"${f.mode === m ? ' data-af' : ''}><span class="oi-opt__ic">${ic(icon)}</span><span><span class="oi-opt__t">${t('net.' + m)}</span><span class="oi-opt__s">${t('net.' + m + '.s')}</span></span></button>`;
+      const field = (id, label, value, o = {}) => `<label class="oi-field" for="n-${id}"><span>${label}</span><input class="oi-input oi-input--plain" id="n-${id}" data-net="${id}" type="text" value="${esc(value)}" autocomplete="off" spellcheck="false" inputmode="${o.mode || 'decimal'}"${o.help ? ` aria-describedby="n-${id}-h"` : ''}>${o.help ? `<span class="oi-field__hint" id="n-${id}-h">${o.help}</span>` : ''}</label>`;
+      const wired = e.interfaces.filter((i) => i.wired);
+      const staticForm = f.mode !== 'STATIC' ? '' : `<div class="oi-grid2">
+          <label class="oi-field" for="n-interface"><span>${t('net.iface')}</span><select class="oi-input oi-input--plain" id="n-interface" data-net="interface">${(wired.length ? wired : e.interfaces).map((i) => `<option value="${esc(i.name)}"${i.name === f.interface ? ' selected' : ''}>${esc(i.name)}</option>`).join('')}</select></label>
+          ${field('address', t('net.addr'), f.address)}${field('prefix', t('net.prefix'), f.prefix, { mode: 'numeric' })}${field('gateway', t('net.gw'), f.gateway)}
+          ${field('dns', t('net.dns'), f.dns, { help: t('net.dns.h') })}</div>`;
+      return { body: `${kicker()}<h1 class="oi-h" id="oi-h">${t('net.h')}</h1><p class="oi-d">${t('net.d')}</p>
+        <div class="oi-rows">${e.interfaces.length ? e.interfaces.map(iface).join('') : row(t('net.ifaces'), badge('mute', t('net.none')))}</div>
+        ${e.refused ? note('warn', 'warn', t('set.' + e.refused)) : ''}
+        <div class="oi-opts" role="radiogroup" aria-label="${t('net.h')}">${mode('AUTOMATIC', 'eth')}${e.interfaces.length ? mode('STATIC', 'gear') : ''}</div>${staticForm}`,
+        foot: `${btn('', t('b.back'), 'back', { before: 'arrow-l' })}${btn('quiet', t('b.cancel'), 'restart')}<span class="oi-foot__gap"></span>${btn('gold', t('b.next'), 'net-next', { after: 'arrow-r' })}` };
+    },
+    ADVANCED() {
+      const e = S.engine;
+      const host = S.host === null ? e.hostname || '' : S.host;
+      return { body: `${kicker()}<h1 class="oi-h" id="oi-h">${t('adv.h')}</h1><p class="oi-d">${t('adv.d')}</p>
+        ${e.refused ? note('warn', 'warn', t('set.' + e.refused)) : ''}
+        <label class="oi-field" for="a-host"><span>${t('adv.host')}</span><input class="oi-input oi-input--plain" id="a-host" data-host type="text" value="${esc(host)}" autocomplete="off" spellcheck="false" maxlength="63" aria-describedby="a-host-h" data-af><span class="oi-field__hint" id="a-host-h">${t('adv.host.h')}</span></label>
+        <div class="oi-rows">${row(t('adv.layout'), t('r.layoutv'))}</div>
+        ${note('', 'shield', t('adv.layout.note'))}`,
+        foot: `${btn('', t('b.back'), 'back', { before: 'arrow-l' })}${btn('quiet', t('b.cancel'), 'restart')}<span class="oi-foot__gap"></span>${btn('gold', t('b.next'), 'adv-next', { after: 'arrow-r' })}` };
     },
     STORAGE() {
       const e = S.engine;
@@ -174,6 +280,9 @@
           ${row(t('r.size'), size(d.bytes))}
           ${row(t('r.now'), d.partitions === 0 ? t('d.empty') : t(d.partitions === 1 ? 'd.parts1' : 'd.parts', { n: d.partitions, fs: d.filesystems.length ? d.filesystems.join(', ') : T['d.nofs'][LI()] }))}
           ${row(t('r.layout'), t('r.layoutv'))}
+          ${row(t('r.keyboard'), layoutName(S.engine.settings.keyboard))}
+          ${row(t('r.network'), S.engine.settings.network.mode === 'STATIC' ? `<span class="oi-mono">${esc(S.engine.settings.network.interface)} · ${esc(S.engine.settings.network.address)}/${esc(S.engine.settings.network.prefix)}</span>` : t('net.AUTOMATIC'))}
+          ${row(t('r.host'), S.engine.settings.hostname ? `<span class="oi-mono">${esc(S.engine.settings.hostname)}</span>` : t('r.host.image'))}
           ${S.release ? row(t('r.release'), `<span class="oi-mono">${esc(S.release)}</span>`) : ''}
         </div>
         ${note('', 'shield', `<strong>${t('r.remote')}.</strong> ${t('r.remotev')}`)}`,
@@ -250,30 +359,40 @@
     const e = step();
     const key = !e || e === 'WELCOME' ? S.page : e;
     const page = (PAGES[key] || PAGES.welcome)();
+    const media = e === 'MEDIA';
     const clock = new Intl.DateTimeFormat(LOCALE(), { hour: '2-digit', minute: '2-digit' }).format(new Date());
     const html = `<div class="oi">
-      <div class="oi-top"><span class="oi-top__k">Ocinye OS · ${t('top.k')}</span><span class="oi-top__clock">${clock}</span></div>
+      <div class="oi-top"><span class="oi-top__k">Ocinye OS · ${media ? t('m.top.' + S.engine.mode) : t('top.k')}</span><span class="oi-top__clock">${clock}</span></div>
       <div class="oi-stage"><div class="oi-card">
-        <aside class="oi-aside"><div class="oi-brand"><span class="oi-brand__logo"><img src="ocinye-logo.png" alt=""></span><div><div class="oi-brand__n">OCINYE OS</div><div class="oi-brand__v">${S.release ? t('brand.v', { release: S.release }) : t('top.k')}</div></div></div>
-          <ol class="oi-steps" aria-label="${t('top.k')}">${rail()}</ol>
+        <aside class="oi-aside"><div class="oi-brand"><span class="oi-brand__logo"><img src="ocinye-logo.png" alt=""></span><div><div class="oi-brand__n">OCINYE OS</div><div class="oi-brand__v">${S.release ? t(media ? 'brand.m' : 'brand.v', { release: S.release }) : t('top.k')}</div></div></div>
+          ${media ? `<ol class="oi-steps" aria-label="${t('m.menu')}">${mediaRail()}</ol>` : `<ol class="oi-steps" aria-label="${t('top.k')}">${rail()}</ol>`}
           <div class="oi-aside__foot">${S.development ? t('brand.dev') + '<br>' : ''}pt · en · fr</div></aside>
         <section class="oi-main"><div class="oi-body${page.center ? ' oi-body--center' : ''}">${page.body}</div>${page.foot ? `<div class="oi-foot">${page.foot}</div>` : ''}</section>
         ${page.over || ''}
       </div></div></div>`;
     document.documentElement.lang = LOCALE();
-    if (html === lastHtml) return;
+    if (html === lastHtml) {
+      // Nada mudou no ecrã, mas pode ter sido pedido o foco noutro controlo.
+      const wanted = S.focusNext && document.getElementById(S.focusNext);
+      if (wanted && !wanted.disabled) { wanted.focus(); S.focusNext = null; }
+      return;
+    }
     lastHtml = html;
     const root = document.getElementById('root');
     const active = document.activeElement;
     const keep = active && active.id ? { id: active.id, a: active.selectionStart, b: active.selectionEnd } : null;
     const scroll = root.querySelector('.oi-body') ? root.querySelector('.oi-body').scrollTop : 0;
     root.innerHTML = html;
-    const focusKey = key + '|' + (S.dialog ? 'x' : '');
+    const focusKey = key + '|' + (S.dialog ? 'x' : '') + (S.mediaAsk || '');
     const moved = focusKey !== lastFocus;
     lastFocus = focusKey;
     const scope = root.querySelector('.oi-dialog') || root.querySelector('.oi-main');
     let target = null;
-    if (S.focusNext && document.getElementById(S.focusNext) && !document.getElementById(S.focusNext).disabled) target = document.getElementById(S.focusNext);
+    // O controlo pedido recebe o foco quando existir e estiver activo — à
+    // espera da resposta do motor está desactivado, e o pedido aguarda.
+    const wanted = S.focusNext && document.getElementById(S.focusNext);
+    if (wanted && !wanted.disabled) { target = wanted; S.focusNext = null; }
+    else if (S.focusNext && S.busy) { target = null; }
     else if (moved) target = scope.querySelector('[data-af]') || scope.querySelector('button:not([disabled])') || root.querySelector('#oi-h');
     else {
       if (root.querySelector('.oi-body')) root.querySelector('.oi-body').scrollTop = scroll;
@@ -282,7 +401,7 @@
       // o tinha deixou de existir): o foco vai para a acção natural do passo.
       if (!target || target.disabled) target = scope.querySelector('[data-af]:not([disabled])');
     }
-    S.focusNext = null;
+    if (!S.busy) S.focusNext = null;
     if (target) {
       target.focus();
       if (!moved && keep && keep.a != null && target.setSelectionRange) { try { target.setSelectionRange(keep.a, keep.b); } catch (err) { /* sem selecção */ } }
@@ -309,6 +428,15 @@
     'key-no': () => { S.busy = true; send({ action: 'answer_key', authorise: false }); },
     details: () => { S.showDetails = !S.showDetails; },
     restart: () => { S.busy = true; send({ action: 'restart' }); },
+    'media-ask': (arg) => { S.mediaAsk = arg; },
+    'media-cancel': () => { S.mediaAsk = null; },
+    'media-restart': () => { S.mediaAsk = null; S.busy = true; send({ action: 'restart' }); },
+    'media-off': () => { S.mediaAsk = null; S.busy = true; send({ action: 'power_off' }); },
+    // Escolher é marcar e passar o foco para «Continuar», como nos discos.
+    keyboard: (arg) => { S.busy = true; S.focusNext = 'b-continue'; send({ action: 'choose_keyboard', layout: arg }); },
+    'net-mode': (arg) => { S.net = Object.assign({}, S.net || netForm(S.engine.settings, S.engine.interfaces), { mode: arg }); S.focusNext = arg === 'STATIC' ? 'n-address' : 'b-net-next'; },
+    'net-next': () => { S.busy = true; S.pending = 'network'; send({ action: 'set_network', settings: netSettings() }); },
+    'adv-next': () => { const h = (S.host || '').trim().toLowerCase(); S.busy = true; S.pending = 'advanced'; send({ action: 'set_hostname', hostname: h || null }); },
   };
 
   document.addEventListener('click', (e) => {
@@ -318,6 +446,10 @@
     if (f) { f(el.dataset.arg); render(); }
   });
   document.addEventListener('input', (e) => {
+    const n = e.target.closest('[data-net]');
+    if (n) { S.net = Object.assign({}, S.net || netForm(S.engine.settings, S.engine.interfaces), { [n.dataset.net]: n.value }); return; }
+    const h = e.target.closest('[data-host]');
+    if (h) { S.host = h.value; return; }
     const el = e.target.closest('[data-f="typed"]');
     if (!el) return;
     S.typed = el.value;
@@ -336,7 +468,13 @@
     send({ action: 'confirm', typed: S.typed });
     render();
   });
+  document.addEventListener('change', (e) => {
+    const n = e.target.closest('select[data-net]');
+    if (n) { S.net = Object.assign({}, S.net, { [n.dataset.net]: n.value }); render(); }
+  });
   document.addEventListener('keydown', (e) => {
+    // Enter no nome do computador é «Continuar».
+    if (e.key === 'Enter' && e.target.closest('[data-host]')) { e.preventDefault(); ACTIONS['adv-next'](); render(); return; }
     if (e.key === 'Escape' && S.dialog) { S.dialog = false; S.typed = ''; S.checked = null; render(); }
   });
   document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -347,7 +485,7 @@
     if (got) {
       S.link = got.state;
       for (const event of got.events || []) {
-        if (event.event === 'step' && event.state.step === 'WELCOME') {
+        if (event.event === 'step' && (event.state.step === 'WELCOME' || event.state.step === 'MEDIA')) {
           S.release = event.state.release_id; S.development = event.state.development;
           if (!S.langChosen && T['l.' + event.state.language]) S.lang = event.state.language;
         }

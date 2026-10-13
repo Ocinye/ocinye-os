@@ -7,12 +7,306 @@
 //! of [`crate::oie`] the text installer goes through. This module is only the
 //! shape of the exchange: one JSON object per line, each way.
 
+use std::net::Ipv4Addr;
+
 use serde::{Deserialize, Serialize};
 
+use crate::bootmode::MediaMode;
 use crate::oie::{InstallationTargetDisk, OieError};
 
-/// Version of this exchange.
-pub const WINDOW_PROTOCOL: u16 = 1;
+/// Version of this exchange. 2: keyboard, network and advanced settings.
+pub const WINDOW_PROTOCOL: u16 = 2;
+
+/// The keyboard layouts the installer offers: an XKB layout code and its
+/// name in its own language. A closed list: the window cannot name another.
+pub const KEYBOARD_LAYOUTS: &[(&str, &str)] = &[
+    ("pt", "Português (Portugal)"),
+    ("br", "Português (Brasil)"),
+    ("us", "English (US)"),
+    ("gb", "English (UK)"),
+    ("fr", "Français"),
+    ("es", "Español"),
+    ("de", "Deutsch"),
+    ("it", "Italiano"),
+    ("ch", "Suisse / Schweiz"),
+    ("be", "Belgique"),
+];
+
+/// The layout that goes with a boot-menu language when nobody chooses.
+#[must_use]
+pub fn default_layout(language: &str) -> &'static str {
+    match language {
+        "en" => "us",
+        "fr" => "fr",
+        _ => "pt",
+    }
+}
+
+/// A keyboard layout, as offered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KeyboardLayout {
+    /// XKB code.
+    pub code: String,
+    /// Its name.
+    pub name: String,
+}
+
+/// A network interface of this machine, as the engine found it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NetworkInterface {
+    /// Kernel name (`enp1s0`).
+    pub name: String,
+    /// Ethernet rather than wireless.
+    pub wired: bool,
+    /// A cable or link is present.
+    pub carrier: bool,
+    /// Hardware address.
+    pub mac: String,
+}
+
+/// How the installed system configures its network.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "SCREAMING_SNAKE_CASE", deny_unknown_fields)]
+pub enum NetworkSettings {
+    /// DHCP on every wired interface (the image's default).
+    Automatic,
+    /// A fixed IPv4 address on one interface; the others stay unconfigured.
+    Static {
+        /// The interface, one the engine listed.
+        interface: String,
+        /// Address.
+        address: Ipv4Addr,
+        /// Prefix length, 1–32.
+        prefix: u8,
+        /// Default gateway.
+        gateway: Ipv4Addr,
+        /// Name servers, at most four.
+        dns: Vec<Ipv4Addr>,
+    },
+}
+
+/// What the installation sets on the installed system besides the disk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SystemSettings {
+    /// A code of [`KEYBOARD_LAYOUTS`].
+    pub keyboard: String,
+    /// Network.
+    pub network: NetworkSettings,
+    /// The machine's name; `None` keeps the image's.
+    pub hostname: Option<String>,
+}
+
+/// Why settings were refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SettingsRefusal {
+    /// Not a layout of the list.
+    UnknownLayout,
+    /// The interface is not one this machine has.
+    UnknownInterface,
+    /// Address, prefix, gateway or name servers are not usable.
+    InvalidAddress,
+    /// The name is not a valid host name.
+    InvalidHostname,
+}
+
+impl SystemSettings {
+    /// The settings a text installation uses: the language's layout, DHCP,
+    /// the image's name.
+    #[must_use]
+    pub fn defaults(language: &str) -> Self {
+        Self {
+            keyboard: default_layout(language).to_owned(),
+            network: NetworkSettings::Automatic,
+            hostname: None,
+        }
+    }
+
+    /// Every rule, against the interfaces this machine has.
+    pub fn validate(&self, interfaces: &[NetworkInterface]) -> Result<(), SettingsRefusal> {
+        if !KEYBOARD_LAYOUTS.iter().any(|(c, _)| *c == self.keyboard) {
+            return Err(SettingsRefusal::UnknownLayout);
+        }
+        if let NetworkSettings::Static {
+            interface,
+            address,
+            prefix,
+            gateway,
+            dns,
+        } = &self.network
+        {
+            if !interfaces.iter().any(|i| &i.name == interface) {
+                return Err(SettingsRefusal::UnknownInterface);
+            }
+            let usable = |a: &Ipv4Addr| {
+                !(a.is_unspecified() || a.is_broadcast() || a.is_multicast() || a.is_loopback())
+            };
+            if !(1..=32).contains(prefix)
+                || !usable(address)
+                || !usable(gateway)
+                || dns.len() > 4
+                || !dns.iter().all(usable)
+                || address == gateway
+            {
+                return Err(SettingsRefusal::InvalidAddress);
+            }
+            // The gateway must be on the address's own network.
+            let mask = if *prefix == 32 {
+                u32::MAX
+            } else {
+                !(u32::MAX >> prefix)
+            };
+            if *prefix < 31 && (u32::from(*address) & mask) != (u32::from(*gateway) & mask) {
+                return Err(SettingsRefusal::InvalidAddress);
+            }
+        }
+        if let Some(h) = &self.hostname {
+            if !is_hostname(h) {
+                return Err(SettingsRefusal::InvalidHostname);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// RFC 1123 host name label: 1–63 of `a-z0-9-`, not starting or ending in `-`.
+#[must_use]
+pub fn is_hostname(h: &str) -> bool {
+    (1..=63).contains(&h.len())
+        && !h.starts_with('-')
+        && !h.ends_with('-')
+        && h.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// The fixed disk layout, shown in the advanced step: not chosen, said.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FixedLayout {
+    /// EFI system partition size.
+    pub efi_bytes: u64,
+    /// Root file system.
+    pub filesystem: String,
+    /// Swap.
+    pub swap: bool,
+}
+
+/// A disk as a non-destructive session lists it: what the kernel already
+/// says, without opening the device.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaDisk {
+    /// Kernel name, for reading only: no action names a disk by it.
+    pub device: String,
+    /// Size.
+    pub bytes: u64,
+    /// Model as reported (may be empty).
+    pub model: String,
+    /// Connection (`nvme`, `sata`, `usb`, …), empty when the kernel does not say.
+    pub connection: String,
+    /// It holds the medium this session started from.
+    pub boot_media: bool,
+}
+
+/// A network interface as a non-destructive session sees it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaInterface {
+    /// Kernel name.
+    pub name: String,
+    /// Wired (`false`: wireless).
+    pub wired: bool,
+    /// Whether a link is up.
+    pub carrier: bool,
+    /// Addresses with prefix, as the kernel holds them now.
+    pub addresses: Vec<String>,
+}
+
+/// What a non-destructive session read about this computer.
+///
+/// `None` always means *unknown*: the session could not read it. It never
+/// means *absent*, and the window must say «unknown», not «none».
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HardwareReport {
+    /// `x86_64`, `aarch64`.
+    pub arch: String,
+    /// Maker and model of the computer, from the firmware tables.
+    pub machine: Option<String>,
+    /// Processor model.
+    pub cpu_model: Option<String>,
+    /// Online processors.
+    pub cpus: u32,
+    /// Memory.
+    pub memory_bytes: u64,
+    /// Started through UEFI.
+    pub uefi: bool,
+    /// Secure Boot enforced by the firmware.
+    pub secure_boot: Option<bool>,
+    /// Firmware vendor and version.
+    pub firmware: Option<String>,
+    /// Disks.
+    pub disks: Vec<MediaDisk>,
+    /// Network interfaces.
+    pub network: Vec<MediaInterface>,
+    /// Wireless radios.
+    pub wifi_radios: Option<u32>,
+    /// Bluetooth controllers.
+    pub bluetooth_controllers: Option<u32>,
+    /// Connected display outputs.
+    pub displays: Option<Vec<String>>,
+    /// Sound cards.
+    pub audio: Option<Vec<String>>,
+}
+
+/// Whether this computer could take an installation, judged without
+/// touching a disk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaCompatibility {
+    /// UEFI firmware (required).
+    pub uefi: bool,
+    /// A supported architecture.
+    pub architecture_supported: bool,
+    /// Memory the installation needs.
+    pub memory_required: u64,
+    /// The least a target disk must hold.
+    pub minimum_disk_bytes: u64,
+    /// Disks large enough that are not the medium. Eligibility proper is
+    /// decided by the installer, which also reads what each disk holds.
+    pub large_enough_disks: u32,
+}
+
+impl MediaCompatibility {
+    /// Judge a report.
+    #[must_use]
+    pub fn of(report: &HardwareReport, architecture_supported: bool, memory_required: u64) -> Self {
+        let large = report
+            .disks
+            .iter()
+            .filter(|d| !d.boot_media && d.bytes >= crate::oie::MIN_DISK_BYTES)
+            .count();
+        Self {
+            uefi: report.uefi,
+            architecture_supported,
+            memory_required,
+            minimum_disk_bytes: crate::oie::MIN_DISK_BYTES,
+            large_enough_disks: u32::try_from(large).unwrap_or(u32::MAX),
+        }
+    }
+
+    /// Whether nothing found stands in the way.
+    #[must_use]
+    pub const fn ready(&self, memory_bytes: u64) -> bool {
+        self.uefi
+            && self.architecture_supported
+            && memory_bytes >= self.memory_required
+            && self.large_enough_disks > 0
+    }
+}
 
 /// What the window asks of the engine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,8 +314,24 @@ pub const WINDOW_PROTOCOL: u16 = 1;
 pub enum WindowAction {
     /// Take the installation for this console and go on from the welcome.
     Begin,
-    /// Go on from the compatibility summary.
+    /// Go on from the compatibility summary, or from a settings step
+    /// without changing it.
     Continue,
+    /// Choose the installed system's keyboard layout (one the engine listed).
+    ChooseKeyboard {
+        /// XKB code.
+        layout: String,
+    },
+    /// Set how the installed system configures its network.
+    SetNetwork {
+        /// The settings.
+        settings: NetworkSettings,
+    },
+    /// Set the machine's name, or keep the image's (`None`).
+    SetHostname {
+        /// The name.
+        hostname: Option<String>,
+    },
     /// Look for disks again (one may have been attached).
     Rescan,
     /// Choose a disk, by its stable path — the only way a disk is named.
@@ -29,7 +339,8 @@ pub enum WindowAction {
         /// The stable path, as the engine listed it.
         by_path: String,
     },
-    /// Go back from the review to the list of disks. Nothing was written.
+    /// Go back one step (keyboard, network, storage, advanced, review).
+    /// Nothing was written.
     Back,
     /// Ask whether a typed confirmation is the right one. Grants nothing.
     CheckConfirmation {
@@ -47,8 +358,12 @@ pub enum WindowAction {
         /// Whether to authorise it.
         authorise: bool,
     },
-    /// Restart the machine (after an installation, or after a failure).
+    /// Restart the machine (after an installation, after a failure, or from
+    /// a non-destructive session). A normal firmware restart: nothing steers
+    /// the next boot.
     Restart,
+    /// Power the machine off (non-destructive sessions).
+    PowerOff,
 }
 
 /// Where the installation stands, as the engine tells the window.
@@ -66,8 +381,24 @@ pub enum WindowStep {
     },
     /// Another console of this machine is driving the installation.
     DrivenElsewhere,
-    /// This boot is not an installation: the window has nothing to do.
-    NotInstalling,
+    /// A non-destructive session of the medium: Live, Hardware Check or
+    /// Recovery. Read-only: no action here writes or mounts a disk.
+    Media {
+        /// Which session.
+        mode: MediaMode,
+        /// The release on the medium.
+        release_id: String,
+        /// Whether it is a development build.
+        development: bool,
+        /// The language chosen in the boot menu.
+        language: String,
+        /// The storage policy could not be proven: nothing was probed.
+        restricted: bool,
+        /// What the session read.
+        report: Box<HardwareReport>,
+        /// Whether an installation could proceed.
+        compatibility: MediaCompatibility,
+    },
     /// What the engine found about this computer.
     Compatibility {
         /// UEFI firmware (required).
@@ -83,6 +414,22 @@ pub enum WindowStep {
         /// Why the installation cannot go on, when it cannot.
         blocked: Option<OieError>,
     },
+    /// The installed system's keyboard.
+    Keyboard {
+        /// What is offered.
+        layouts: Vec<KeyboardLayout>,
+        /// What is chosen now.
+        chosen: String,
+    },
+    /// The installed system's network.
+    Network {
+        /// This machine's interfaces.
+        interfaces: Vec<NetworkInterface>,
+        /// What is chosen now.
+        settings: Box<NetworkSettings>,
+        /// Why the last change was refused, when one was.
+        refused: Option<SettingsRefusal>,
+    },
     /// The disks, as the engine classifies them. None is chosen.
     Storage {
         /// Every disk found, eligible or not.
@@ -92,11 +439,23 @@ pub enum WindowStep {
         /// Why the last choice was refused, when one was.
         refused: Option<OieError>,
     },
+    /// Optional settings after the disk: the machine's name, and the disk
+    /// layout, which is fixed and said.
+    Advanced {
+        /// The name chosen, if any.
+        hostname: Option<String>,
+        /// The layout the disk will get.
+        layout: FixedLayout,
+        /// Why the last name was refused, when one was.
+        refused: Option<SettingsRefusal>,
+    },
     /// A disk is chosen and nothing is written: the last look before the
     /// typed confirmation.
     Review {
         /// The chosen disk.
-        disk: InstallationTargetDisk,
+        disk: Box<InstallationTargetDisk>,
+        /// What the installed system will be set to.
+        settings: Box<SystemSettings>,
         /// What the confirmation is the last characters of: the serial, when
         /// the disk has one, otherwise the token itself.
         confirmation_hint: String,
@@ -161,6 +520,66 @@ pub enum WindowEvent {
 mod tests {
     use super::*;
 
+    fn wired() -> Vec<NetworkInterface> {
+        vec![NetworkInterface {
+            name: "enp1s0".into(),
+            wired: true,
+            carrier: true,
+            mac: "52:54:00:12:34:56".into(),
+        }]
+    }
+
+    #[test]
+    fn as_definicoes_so_aceitam_o_que_a_maquina_tem() {
+        let ok = SystemSettings {
+            keyboard: "pt".into(),
+            network: NetworkSettings::Static {
+                interface: "enp1s0".into(),
+                address: "192.168.1.20".parse().unwrap(),
+                prefix: 24,
+                gateway: "192.168.1.1".parse().unwrap(),
+                dns: vec!["192.168.1.1".parse().unwrap()],
+            },
+            hostname: Some("posto-01".into()),
+        };
+        assert_eq!(ok.validate(&wired()), Ok(()));
+        let mut bad = ok.clone();
+        bad.keyboard = "dvorak-evil".into();
+        assert_eq!(bad.validate(&wired()), Err(SettingsRefusal::UnknownLayout));
+        let mut bad = ok.clone();
+        if let NetworkSettings::Static { interface, .. } = &mut bad.network {
+            *interface = "wlan9".into();
+        }
+        assert_eq!(
+            bad.validate(&wired()),
+            Err(SettingsRefusal::UnknownInterface)
+        );
+        let mut bad = ok.clone();
+        if let NetworkSettings::Static { gateway, .. } = &mut bad.network {
+            *gateway = "10.0.0.1".parse().unwrap();
+        }
+        assert_eq!(bad.validate(&wired()), Err(SettingsRefusal::InvalidAddress));
+        let mut bad = ok.clone();
+        if let NetworkSettings::Static { prefix, .. } = &mut bad.network {
+            *prefix = 0;
+        }
+        assert_eq!(bad.validate(&wired()), Err(SettingsRefusal::InvalidAddress));
+        for name in ["", "-a", "a-", "Posto", "posto.lab", "a b", &"x".repeat(64)] {
+            let mut bad = ok.clone();
+            bad.hostname = Some(name.into());
+            assert_eq!(
+                bad.validate(&wired()),
+                Err(SettingsRefusal::InvalidHostname),
+                "{name}"
+            );
+        }
+        assert_eq!(SystemSettings::defaults("fr").keyboard, "fr");
+        assert_eq!(
+            SystemSettings::defaults("xx").network,
+            NetworkSettings::Automatic
+        );
+    }
+
     #[test]
     fn uma_accao_desconhecida_ou_com_campos_a_mais_nao_e_uma_accao() {
         assert_eq!(
@@ -174,6 +593,8 @@ mod tests {
             r#"{"action":"confirm","typed":"7F3A","force":true}"#,
             r#"{"action":"select_disk","device":"sda"}"#,
             r#"{"action":"run","command":"dd"}"#,
+            r#"{"action":"choose_keyboard","layout":"pt","command":"loadkeys"}"#,
+            r#"{"action":"set_network","settings":{"mode":"SCRIPT","text":"ip a"}}"#,
             r#"{}"#,
         ] {
             assert!(

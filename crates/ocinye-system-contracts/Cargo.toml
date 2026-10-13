@@ -14,3 +14,5 @@ zeroize = { workspace = true }
 # TypeScript bindings are generated from these types (never written by hand)
 # and checked in; CI regenerates them and fails on any difference.
 ts-rs = { workspace = true }
+# The update state and requests are the Update Engine's own types (ADR-0032).
+ocinye-update-contracts = { workspace = true }

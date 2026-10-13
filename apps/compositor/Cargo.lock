@@ -475,10 +475,20 @@ dependencies = [
 name = "ocinye-system-contracts"
 version = "0.1.0"
 dependencies = [
+ "ocinye-update-contracts",
  "serde",
  "serde_json",
  "ts-rs",
  "zeroize",
+]
+
+[[package]]
+name = "ocinye-update-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "ts-rs",
 ]
 
 [[package]]

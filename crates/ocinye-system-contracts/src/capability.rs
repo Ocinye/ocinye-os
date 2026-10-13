@@ -185,7 +185,7 @@ catalogue! {
     SystemInfo          = "system.info",            System,       Presence, None,        None,     None,                mutating false, locked true,  headless true,  ai true;
     SystemCapabilities  = "system.capabilities",    System,       Presence, None,        None,     None,                mutating false, locked true,  headless true,  ai true;
     NetworkStatus       = "network.status",         Network,      Presence, None,        None,     NetworkInterface,    mutating false, locked true,  headless true,  ai true;
-    NetworkConfigure    = "network.configure",      Network,      Operator, CoreStepUp,  Security, NetworkInterface,    mutating true,  locked false, headless true,  ai false;
+    NetworkConfigure    = "network.configure",      Network,      Operator, LocalReauth, Security, NetworkInterface,    mutating true,  locked false, headless true,  ai false;
     WifiScan            = "wifi.scan",              Network,      Presence, None,        None,     WifiRadio,           mutating false, locked false, headless true,  ai true;
     WifiConnect         = "wifi.connect",           Network,      Member,   None,        Security, WifiRadio,           mutating true,  locked false, headless true,  ai false;
     WifiDisconnect      = "wifi.disconnect",        Network,      Member,   None,        Change,   WifiRadio,           mutating true,  locked false, headless true,  ai true;
@@ -223,8 +223,17 @@ catalogue! {
     PrivacySetCamera    = "privacy.set_camera",     Privacy,      Member,   None,        Security, Camera,              mutating true,  locked false, headless true,  ai false;
     StorageStatus       = "storage.status",         Storage,      Member,   None,        None,     None,                mutating false, locked false, headless true,  ai true;
     UpdateStatus        = "update.status",          Update,       Presence, None,        None,     None,                mutating false, locked false, headless true,  ai true;
-    UpdatePrepare       = "update.prepare",         Update,       Operator, None,        Security, None,                mutating true,  locked false, headless true,  ai false;
-    UpdateApply         = "update.apply",           Update,       Operator, CoreStepUp,  Security, None,                mutating true,  locked false, headless true,  ai false;
+    UpdateCheck         = "update.check",           Update,       Member,   None,        None,     None,                mutating false, locked false, headless true,  ai true;
+    UpdateDownload      = "update.download",        Update,       Operator, None,        Security, None,                mutating true,  locked false, headless true,  ai false;
+    UpdateInstall       = "update.install",         Update,       Operator, LocalReauth, Security, None,                mutating true,  locked false, headless true,  ai false;
+    UpdateCancel        = "update.cancel",          Update,       Operator, None,        Change,   None,                mutating true,  locked false, headless true,  ai false;
+    UpdateHistory       = "update.history",         Update,       Member,   None,        None,     None,                mutating false, locked false, headless true,  ai true;
+    UpdateRollback      = "update.rollback",        Update,       Operator, LocalReauth, Security, None,                mutating true,  locked false, headless true,  ai false;
+    UpdateConfigure     = "update.configure",       Update,       Operator, LocalReauth, Security, None,                mutating true,  locked false, headless true,  ai false;
+    UpdateImport        = "update.import",          Update,       Operator, None,        Security, None,                mutating true,  locked false, headless true,  ai false;
+    BaseStatus          = "base.status",            Update,       Member,   None,        None,     None,                mutating false, locked false, headless true,  ai true;
+    BaseCheck           = "base.check",             Update,       Operator, None,        Change,   None,                mutating true,  locked false, headless true,  ai false;
+    BaseApply           = "base.apply",             Update,       Operator, LocalReauth, Security, None,                mutating true,  locked false, headless true,  ai false;
     DiagnosticsCollect  = "diagnostics.collect",    Diagnostics,  Operator, None,        Security, None,                mutating false, locked false, headless true,  ai false;
     RemoteAccessStatus  = "remote_access.status",   RemoteAccess, Member,   None,        None,     None,                mutating false, locked false, headless true,  ai true;
     RemoteAccessConfigure = "remote_access.configure", RemoteAccess, Operator, CoreStepUp, Security, None,              mutating true,  locked false, headless true,  ai false;
@@ -232,6 +241,7 @@ catalogue! {
     ActivationStatus    = "activation.status",      Activation,   Presence, None,        None,     None,                mutating false, locked true,  headless true,  ai false;
     ActivationStart     = "activation.start",       Activation,   Presence, None,        Security, None,                mutating true,  locked true,  headless true,  ai false;
     ActivationCredential = "activation.credential", Activation,   Presence, None,        Security, None,                mutating true,  locked true,  headless true,  ai false;
+    ActivationConfigure = "activation.configure",  Activation,   Presence, None,        Security, None,                mutating true,  locked true,  headless true,  ai false;
 }
 
 /// The row for a capability.
