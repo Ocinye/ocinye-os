@@ -130,7 +130,9 @@ servidor, não que o Ocinye os publicou.
 
 13. **Recuperação a partir do menu de arranque.** O sistema instalado tem uma
     entrada `Ocinye OS - release anterior` (`/etc/grub.d/42_ocinye_previous`),
-    que arranca o mesmo núcleo com `ocinye.update=rollback`. O motor age sobre
+    que arranca o mesmo núcleo com `ocinye.update=rollback` — com o initrd quando
+    existe, e sem ele (a imagem cloud `amd64` arranca assim) com a raiz por
+    `PARTUUID`, como o `10_linux`; sem forma de nomear a raiz, não há entrada. O motor age sobre
     ela uma vez por arranque (marca o `boot_id` antes de agir): é a mesma
     reversão diarizada das Definições, registada com o menu de arranque como
     actor. Quem escolhe a entrada está à frente da máquina — a autoridade que o

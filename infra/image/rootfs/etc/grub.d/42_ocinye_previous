@@ -13,8 +13,8 @@ exec_prefix="/usr"
 datarootdir="/usr/share"
 . "${pkgdatadir:-/usr/share/grub}/grub-mkconfig_lib"
 
-# The newest installed kernel and its initrd, chosen as 10_linux does: the
-# /boot/vmlinuz and /boot/initrd.img links are not always there.
+# The newest installed kernel, chosen as 10_linux does: the /boot/vmlinuz and
+# /boot/initrd.img links are not always there.
 kernels=""
 for k in /boot/vmlinuz-*; do
   [ -f "$k" ] && kernels="$kernels $k"
@@ -22,18 +22,33 @@ done
 [ -n "$kernels" ] || exit 0
 latest="$(printf "%s\n" $kernels | version_sort -r | head -n 1)"
 version="${latest#/boot/vmlinuz-}"
-[ -f "/boot/initrd.img-$version" ] || exit 0
 
-if [ -n "${GRUB_DEVICE_UUID}" ] && [ "x${GRUB_DISABLE_LINUX_UUID}" != "xtrue" ]; then
-  root="UUID=${GRUB_DEVICE_UUID}"
+# Its initrd, when there is one, after the early microcode 10_linux also loads.
+# The amd64 cloud image boots without an initrd (GRUB_FORCE_PARTUUID): the
+# kernel alone cannot resolve UUID=, so the root is then named by PARTUUID, as
+# 10_linux does. With neither, no entry: one that cannot boot is worse.
+initrds=""
+for i in ${GRUB_EARLY_INITRD_LINUX_STOCK:-intel-uc.img intel-ucode.img amd-uc.img amd-ucode.img early_ucode.cpio microcode.cpio} ${GRUB_EARLY_INITRD_LINUX_CUSTOM}; do
+  [ -f "/boot/$i" ] && initrds="$initrds $(make_system_path_relative_to_its_root "/boot/$i")"
+done
+if [ -f "/boot/initrd.img-$version" ]; then
+  initrds="$initrds $(make_system_path_relative_to_its_root "/boot/initrd.img-$version")"
+  if [ -n "${GRUB_DEVICE_UUID}" ] && [ "x${GRUB_DISABLE_LINUX_UUID}" != "xtrue" ]; then
+    root="UUID=${GRUB_DEVICE_UUID}"
+  else
+    root="${GRUB_DEVICE}"
+  fi
+elif [ -n "${GRUB_FORCE_PARTUUID}" ]; then
+  root="PARTUUID=${GRUB_FORCE_PARTUUID}"
+elif [ -n "${GRUB_DEVICE_PARTUUID}" ]; then
+  root="PARTUUID=${GRUB_DEVICE_PARTUUID}"
 else
-  root="${GRUB_DEVICE}"
+  exit 0
 fi
 kernel="$(make_system_path_relative_to_its_root "$latest")"
-initrd="$(make_system_path_relative_to_its_root "/boot/initrd.img-$version")"
 
 echo "menuentry 'Ocinye OS - release anterior' --class ocinye --class gnu-linux --class os --id ocinye-previous-release {"
 prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | sed -e 's/^/\t/'
 printf '\tlinux\t%s root=%s ro %s %s ocinye.update=rollback\n' "${kernel}" "${root}" "${GRUB_CMDLINE_LINUX}" "${GRUB_CMDLINE_LINUX_DEFAULT}"
-printf '\tinitrd\t%s\n' "${initrd}"
+[ -z "$initrds" ] || printf '\tinitrd\t%s\n' "${initrds# }"
 echo "}"

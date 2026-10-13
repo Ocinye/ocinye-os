@@ -59,6 +59,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Ambos dizem agora `INSTALL_INTERRUPTED`, com texto em `pt`/`en`/`fr`; uma
   reversão já em curso guarda a razão com que começou. A matriz de cortes de
   energia exige-o.
+- **A entrada de recuperação também numa máquina sem initrd** (encontrado na
+  construção `amd64`, pela inspecção offline `recovery_boot_entry`): a imagem
+  cloud `amd64` arranca sem initrd (`GRUB_FORCE_PARTUUID`), e o
+  `42_ocinye_previous` saía sem escrever a entrada. Agora segue o `10_linux`:
+  initrd e microcode quando existem, raiz por `PARTUUID` quando não há initrd,
+  e nenhuma entrada se não houver forma de nomear a raiz.
 - **Guarda `release_strings.py`** (no `verify.sh` e na CI): nenhum texto das
   superfícies gráficas chega ao ecrã com um campo por preencher.
 - **E2E das imagens**: cenário `update`, numa máquina instalada a partir da ISO,
