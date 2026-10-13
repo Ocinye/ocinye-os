@@ -1412,12 +1412,20 @@ impl<H: Host> Engine<H> {
                     } else {
                         Phase::DownloadFailed
                     };
-                    j.reason = Some(UpdateReason::DownloadInterrupted);
+                    j.reason = Some(UpdateReason::InstallInterrupted);
                     self.save(&mut j)?;
                 } else {
+                    // Stopped after an effect: back to the release that ran.
+                    // An interrupted install never reached the health gate,
+                    // and the record says so; a rollback already under way
+                    // keeps the reason it started with.
+                    let reason = match (j.phase, j.reason) {
+                        (Phase::ActivationFailed | Phase::RollingBack, Some(r)) => r,
+                        _ => UpdateReason::InstallInterrupted,
+                    };
                     j.phase = Phase::RollingBack;
                     self.save(&mut j)?;
-                    let _ = self.roll_back(&mut j, UpdateReason::HealthGateFailed);
+                    let _ = self.roll_back(&mut j, reason);
                 }
             }
             Phase::AwaitingReboot | Phase::BootValidating => {

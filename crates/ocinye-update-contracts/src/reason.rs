@@ -55,6 +55,9 @@ pub enum UpdateReason {
     InstanceUpgradeFailed,
     /// The new release failed its health gate.
     HealthGateFailed,
+    /// The install stopped midway (power, a restart); the running release
+    /// was put back whole.
+    InstallInterrupted,
     /// The new release did not start healthily after the restart.
     BootValidationFailed,
     /// Cancelled by an operator before anything changed.

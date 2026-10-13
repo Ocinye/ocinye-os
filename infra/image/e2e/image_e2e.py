@@ -190,10 +190,10 @@ class Vm:
             if not self._pump():
                 time.sleep(0.1)
 
-    def qmp(self, *commands):
+    def qmp(self, *commands, timeout=30):
         """Run monitor commands; raise on a refusal."""
         c = socket.socket(socket.AF_UNIX)
-        c.settimeout(30)
+        c.settimeout(timeout)
         c.connect(self.qmp_sock)
         f = c.makefile("rw")
         f.readline()
@@ -297,7 +297,9 @@ def throttle(port):
 def ssh(port, user, key, remote=None, input_=None, timeout=120):
     throttle(port)
     args = ["ssh", "-i", key, "-p", str(port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-            "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", f"{user}@127.0.0.1"]
+            "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes",
+            # A machine that loses its power mid-command ends the call, not the bench.
+            "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=6", f"{user}@127.0.0.1"]
     if remote:
         args.append(remote)
     return subprocess.run(args, input=input_, capture_output=True, timeout=timeout)
@@ -633,7 +635,7 @@ def scenario_seat(a, name="seat", before_setup=None, after_unlock=None):
         facts = claim_by_code(r, vm, k1, k2, "seat")
         if not facts:
             return r.finish(work)
-        run = lambda command, timeout=120: ssh(vm.port, "ocinye", k1, command, timeout=timeout)
+        run = lambda command, timeout=120, input_=None: ssh(vm.port, "ocinye", k1, command, input_, timeout)
         units = run("systemctl is-active ocinye-system.service ocinye-session.service ocinye-display.service ocinye-console@tty2.service; systemctl is-enabled ocinye-seat-link.path; systemctl is-active ocinye-console@tty1.service").stdout.decode().split()
         r.check("seat: the two services run before any Instance exists", units[:2] == ["active", "active"], units)
         r.check("seat: the screen is up on a machine with a display, and the text console is on tty2", units[2:4] == ["active", "active"], units)
@@ -1578,6 +1580,29 @@ def click(vm, w, h, x, y):
 CHIP_RGB = (0xFD, 0xF6, 0xE7)
 
 
+# Runs as root on the machine: starts the install and cuts the power once the
+# engine reports INSTALLING or ACTIVATING. Prints each phase it sees; the last
+# printed is the one the cut came in.
+CUT_WATCHER = r"""
+import json, subprocess, sys, time
+subprocess.Popen(["ocinye-system", "update", "install"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+end = time.time() + 1500
+while time.time() < end:
+    out = subprocess.run(["ocinye-system", "--json", "update", "status"], capture_output=True).stdout
+    try:
+        phase = json.loads(out)["value"]["phase"]
+    except (ValueError, KeyError):
+        phase = "UNKNOWN"
+    print(phase, flush=True)
+    if phase in ("INSTALLING", "ACTIVATING"):
+        time.sleep(0.5)
+        open("/proc/sysrq-trigger", "w").write("b")
+    if phase in ("AWAITING_REBOOT", "COMPLETED", "INSTALL_FAILED", "ACTIVATION_FAILED", "ROLLED_BACK", "RECOVERY_REQUIRED"):
+        break
+    time.sleep(0.2)
+"""
+
+
 def scenario_update(a):
     """Routine updates of a machine installed from the candidate ISO (ADR-0032).
 
@@ -1611,10 +1636,16 @@ def scenario_update(a):
         run("sudo -n ocinye-system keyboard layout us && sudo -n systemctl restart ocinye-display.service")
         time.sleep(25)
 
-    def evidence(run):
+    def evidence(run, stage="end"):
         # What the engine and the installer said, kept whatever the outcome.
-        out = run("sudo -n sh -c 'for f in /var/lib/ocinye/update/audit.jsonl /var/lib/ocinye/update/history.json /var/lib/ocinye/update/journal.json /var/lib/ocinye/update/instance-*.log; do echo \"=== $f\"; tail -c 20000 \"$f\"; done; journalctl -u ocinye-update --no-pager -n 200 -o short-iso'", timeout=120)
-        open(os.path.join(a.work, "update-evidence.txt"), "w").write(redact(out.stdout.decode(errors="replace")))
+        # A machine that does not answer leaves the earlier record alone.
+        try:
+            out = run("sudo -n sh -c 'for f in /var/lib/ocinye/update/audit.jsonl /var/lib/ocinye/update/history.json /var/lib/ocinye/update/journal.json /var/lib/ocinye/update/instance-*.log; do echo \"=== $f\"; tail -c 20000 \"$f\"; done; journalctl -u ocinye-update --no-pager -n 200 -o short-iso'", timeout=300)
+        except subprocess.TimeoutExpired:
+            return
+        text = out.stdout.decode(errors="replace")
+        if text.strip():
+            open(os.path.join(a.work, f"update-evidence-{stage}.txt"), "w").write(redact(text))
 
     def journey(r, vm, run, shots, k1, chosen, secret):
         try:
@@ -1694,9 +1725,17 @@ def scenario_update(a):
         # 3. N+1, from Settings. The session ended with the rollback's
         # restarts: sign in again first.
         def sign_in():
-            # The screen restarted with the services: an empty sign-in, the
-            # address first.
+            # A session the restarts left locked opens with the password
+            # alone; with nobody signed in, the sign-in asks the address first.
             time.sleep(20)
+            if session_state(vm.port, k1).get("state") == "LOCKED":
+                vm.type(chosen)
+                vm.press("ret")
+                for _ in range(12):
+                    time.sleep(5)
+                    if session_state(vm.port, k1).get("state") == "ACTIVE":
+                        return True
+                return False
             vm.type("admin@ocinye-seat.test")
             vm.press("tab")
             vm.type(chosen)
@@ -1766,7 +1805,7 @@ def scenario_update(a):
         r.check("update: N+1's expand migration is applied", sql("select count(*) from information_schema.tables where table_name = 'update_e2e_probe'") == "1")
         r.check("update: the configuration is kept (the repository is still the one set)",
                 f"{base}/good/development/metadata/" in run("sudo -n cat /etc/ocinye/update.json").stdout.decode(errors="replace"))
-        health = run("curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8480/api/v1/auth/machine-session/key; systemctl is-active ocinye-system.service ocinye-session.service ocinye-display.service").stdout.decode().split()
+        health = run("curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8480/api/v1/auth/machine-session/key; systemctl is-active ocinye-system.service ocinye-session.service ocinye-display.service").stdout.decode().split()
         r.check("update: Core, System, Session and the screen are up on N+1", health == ["200", "active", "active", "active"], health)
         if session_state(vm.port, k1).get("state") != "ACTIVE":
             r.check("update: sign-in works on N+1", sign_in())
@@ -1782,24 +1821,29 @@ def scenario_update(a):
         engine = run("sudo -n readlink /proc/$(pidof ocinye-update-engine)/exe").stdout.decode().strip()
         r.check("update: the engine restarted itself into N+1's own binary", f"/releases/{versions['GOOD']}/" in engine, engine)
 
+        evidence(run, "n-plus-1")
+
         # 4. Offline, with the power cut during the install.
         run(f"sudo -n install -d -m 0700 /var/lib/ocinye/update/inbox && sudo -n curl -sf -o /var/lib/ocinye/update/inbox/next.ocu {base}/offline.ocu", timeout=1800)
         run("sudo -n ocinye-system update import next.ocu", timeout=1800)
-        offered = status().get("available") or {}
+        # The import, too, returns once the engine has taken it.
+        offered = {}
+        for _ in range(120):
+            offered = status().get("available") or {}
+            if offered:
+                break
+            time.sleep(10)
         r.check("update: the offline bundle is verified and offered, from no repository", offered.get("version") == versions["GOOD2"] and offered.get("source") == "offline", offered)
         run("sudo -n ocinye-system update download", timeout=1800)
         r.check("update: the offline release was staged", settle().get("phase") == "AWAITING_INSTALL", status())
-        # The install runs in the background of the engine; the cut comes
-        # once it is activating.
-        run("sudo -n sh -c 'ocinye-system update install >/dev/null 2>&1 &'")
-        cut = False
-        for _ in range(240):
-            if status().get("phase") in ("INSTALLING", "ACTIVATING"):
-                vm.qmp({"execute": "system_reset"})
-                cut = True
-                break
-            time.sleep(2)
-        r.check("update: the power was cut during the install", cut)
+        # The cut comes from inside the machine, the moment the engine says it
+        # is installing or activating: a watcher there sees phases the bench
+        # would miss between two SSH calls, and `sysrq b` restarts at once,
+        # without syncing or unmounting anything, as a power failure does.
+        out = run("sudo -n python3 -", input_=CUT_WATCHER.encode(), timeout=1800)
+        seen = out.stdout.decode(errors="replace").split()
+        cut = bool(seen) and seen[-1] in ("INSTALLING", "ACTIVATING")
+        r.check("update: the power was cut during the install", cut, seen[-1:])
         time.sleep(20)
         wait_ssh_port(vm.port, 900)
         st = settle()
@@ -1818,7 +1862,20 @@ def scenario_update(a):
         st = through_reboot(st)
         native = run("readlink /usr/lib/ocinye/current").stdout.decode().strip()
         r.check("update: once settled, the native layer is the release the engine says runs", native.endswith(version(st) or "?"), (st.get("phase"), version(st), native))
+        if st.get("phase") == "ROLLED_BACK":
+            r.check("update: the rollback after the cut says the install was interrupted, not that the health gate failed",
+                    st.get("reason") == "INSTALL_INTERRUPTED", st.get("reason"))
         if version(st) != versions["GOOD2"] or st.get("phase") != "COMPLETED":
+            # The operator starts again from the bundle: what was rolled back
+            # is offered once more, downloaded from the same file, installed.
+            if st.get("phase") not in ("AWAITING_INSTALL",):
+                run("sudo -n ocinye-system update import next.ocu", timeout=1800)
+                for _ in range(120):
+                    if (status().get("available") or {}).get("version") == versions["GOOD2"]:
+                        break
+                    time.sleep(10)
+                run("sudo -n ocinye-system update download", timeout=1800)
+                settle()
             run("sudo -n ocinye-system update install", timeout=3600)
             time.sleep(10)
             st = through_reboot(settle())
@@ -1831,6 +1888,9 @@ def scenario_update(a):
         hist = history()
         r.check("update: the history says what happened, newest first", [h.get("version") for h in hist[:1]] == [versions["GOOD2"]], [(h.get("version"), h.get("outcome"), h.get("via")) for h in hist[:6]])
         open(os.path.join(a.work, "update-history.json"), "w").write(json.dumps(hist, indent=2))
+        # The seat's last check restarts the machine with a session open.
+        if session_state(vm.port, k1).get("state") != "ACTIVE":
+            r.check("update: sign-in works on the offline release", sign_in())
 
     try:
         return scenario_seat(a, name="update", before_setup=keyboard_us, after_unlock=journey)

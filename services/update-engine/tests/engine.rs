@@ -600,6 +600,24 @@ fn um_corte_de_energia_em_cada_passo_nunca_deixa_meio_release() {
             }
             other => panic!("{fault:?}: left in {other:?}"),
         }
+        // A cut during the install is said to be one: the health gate never
+        // ran, and the record does not claim it failed.
+        if matches!(
+            fault,
+            Fault::AfterEntered
+                | Fault::AfterImages
+                | Fault::AfterInstance
+                | Fault::AfterNativeSwitch
+                | Fault::AfterUnits
+                | Fault::AfterRestart
+        ) {
+            assert_eq!(
+                s.reason,
+                Some(UpdateReason::InstallInterrupted),
+                "{fault:?}: {:?}",
+                s.phase
+            );
+        }
         // From there, an update completes.
         if s.phase != Phase::Completed {
             if s.phase != Phase::AwaitingInstall {
