@@ -97,6 +97,61 @@ impl LinuxHost {
 
 const MINUTE: Duration = Duration::from_secs(60);
 
+/// The units whose health the gate asks for.
+const SYSTEM_UNITS: [&str; 2] = ["ocinye-system.service", "ocinye-session.service"];
+
+/// How long a unit's run must last, unchanged, to count as healthy: longer
+/// than a restart loop's period (`RestartSec=2` plus the run itself).
+const SETTLE: Duration = Duration::from_secs(10);
+
+impl LinuxHost {
+    /// The invocation of a unit that is active and running, if it is.
+    fn unit_run(&self, unit: &str) -> Option<String> {
+        let r = run(
+            Tool::Systemctl,
+            &[
+                "show",
+                "-p",
+                "ActiveState",
+                "-p",
+                "SubState",
+                "-p",
+                "InvocationID",
+                unit,
+            ],
+            MINUTE,
+        )
+        .ok()?;
+        if !ok(r.code) {
+            return None;
+        }
+        running_invocation(&r.stdout)
+    }
+}
+
+/// `systemctl show -p ActiveState -p SubState -p InvocationID`, read: the
+/// invocation id when the unit is active and running.
+fn running_invocation(show: &str) -> Option<String> {
+    let field = |k: &str| {
+        show.lines()
+            .find_map(|l| l.strip_prefix(k).and_then(|v| v.strip_prefix('=')))
+            .map(str::trim)
+    };
+    match (
+        field("ActiveState"),
+        field("SubState"),
+        field("InvocationID"),
+    ) {
+        (Some("active"), Some("running"), Some(id)) if !id.is_empty() => Some(id.to_owned()),
+        _ => None,
+    }
+}
+
+/// Every unit running, and in the same run at both looks.
+fn same_runs(first: &[Option<String>], second: &[Option<String>]) -> bool {
+    first.len() == second.len() && first.iter().zip(second).all(|(a, b)| a.is_some() && a == b)
+}
+
 fn ok(code: Option<i32>) -> bool {
     code == Some(0)
 }
@@ -124,12 +179,17 @@ impl Host for LinuxHost {
     }
 
     fn system_healthy(&self) -> Result<(), UpdateReason> {
-        for u in ["ocinye-system.service", "ocinye-session.service"] {
-            if !self.unit_active(u) {
-                return Err(UpdateReason::SystemUnhealthy);
-            }
+        // A unit restarted in a loop is `active` while each short run lasts:
+        // one look can catch it there. Healthy is the same run, still
+        // running, at two looks a settle apart.
+        let look = || SYSTEM_UNITS.map(|u| self.unit_run(u));
+        let first = look();
+        std::thread::sleep(SETTLE);
+        if same_runs(&first, &look()) {
+            Ok(())
+        } else {
+            Err(UpdateReason::SystemUnhealthy)
         }
-        Ok(())
     }
 
     fn instance_healthy(&self) -> Result<(), UpdateReason> {
@@ -298,6 +358,36 @@ pub fn images_present(host: &dyn Host, images: &[ImageRef]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn so_conta_uma_unidade_activa_e_a_correr() {
+        let show = |a: &str, s: &str, id: &str| {
+            format!("ActiveState={a}\nSubState={s}\nInvocationID={id}\n")
+        };
+        assert_eq!(
+            running_invocation(&show("active", "running", "ab12")).as_deref(),
+            Some("ab12")
+        );
+        assert_eq!(
+            running_invocation(&show("activating", "auto-restart", "ab12")),
+            None
+        );
+        assert_eq!(running_invocation(&show("failed", "failed", "ab12")), None);
+        assert_eq!(running_invocation(&show("active", "exited", "ab12")), None);
+        assert_eq!(running_invocation(&show("active", "running", "")), None);
+        assert_eq!(running_invocation(""), None);
+    }
+
+    #[test]
+    fn uma_unidade_reiniciada_entre_as_duas_leituras_nao_e_saudavel() {
+        let run = |id: &str| Some(id.to_owned());
+        assert!(same_runs(&[run("a"), run("b")], &[run("a"), run("b")]));
+        // A restart loop caught active twice: two different runs.
+        assert!(!same_runs(&[run("a"), run("b")], &[run("a"), run("c")]));
+        assert!(!same_runs(&[run("a"), None], &[run("a"), None]));
+        assert!(!same_runs(&[run("a"), run("b")], &[run("a"), None]));
+        assert!(!same_runs(&[run("a")], &[run("a"), run("b")]));
+    }
 
     #[test]
     fn datas_rfc3339() {

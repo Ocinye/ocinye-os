@@ -81,7 +81,9 @@ qualquer estado ─não é seguro decidir─▶ RECOVERY_REQUIRED
    a Instância pelo `install/ocinye upgrade` **do release novo** (checkpoint da
    base, troca, portão de saúde), depois a camada nativa, depois o reinício das
    unidades por ordem.
-5. **Portão de saúde** — System, Session e ecrã activos, e a Instância saudável
+5. **Portão de saúde** — System e Session a correr na mesma execução em duas
+   leituras com 10 s de intervalo (um serviço em ciclo de reinícios parece
+   activo durante cada execução curta), o ecrã activo, e a Instância saudável
    quando existe. Falha: reversão automática — ponteiros de volta e a Instância
    devolvida ao release anterior pelo instalador, com a base reposta se o
    esquema mudou.
