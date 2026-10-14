@@ -96,7 +96,10 @@ class Vm:
             cmd = ["qemu-system-x86_64", "-machine", "q35", "-cpu", "host" if kvm else "max"]
         else:
             cmd = ["qemu-system-aarch64", "-machine", "virt", "-cpu", "host" if kvm else "max"]
-        cmd += ["-accel", "kvm" if kvm else "tcg,thread=multi", "-m", str(self.memory), "-smp", str(self.cpus),
+        # Under TCG the translation cache may grow to 1 GiB on top of the
+        # guest's memory: with a 4 GiB guest that was enough for the builder
+        # VM's kernel to kill QEMU mid-scenario. 256 MiB is plenty.
+        cmd += ["-accel", "kvm" if kvm else "tcg,thread=multi,tb-size=256", "-m", str(self.memory), "-smp", str(self.cpus),
                 "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
                 "-drive", f"if=pflash,format=raw,unit=1,file={self.vars}",
                 "-device", "virtio-rng-pci", "-display", "none", "-monitor", "none",
@@ -1580,6 +1583,45 @@ def click(vm, w, h, x, y):
 CHIP_RGB = (0xFD, 0xF6, 0xE7)
 
 
+# Runs as root on the machine: a probe that writes what the machine is short
+# of to the serial console every 30 s, where it can still be read when SSH no
+# longer answers. Kernel warnings (the OOM killer's) are let through as well.
+PROBE_LOOP = """
+import os, time
+def meminfo():
+    m = {}
+    for l in open("/proc/meminfo"):
+        k, v = l.split(":", 1)
+        m[k] = int(v.split()[0]) // 1024
+    return m
+def top():
+    rows = []
+    for pid in os.listdir("/proc"):
+        if pid.isdigit():
+            try:
+                st = dict(l.split(":", 1) for l in open("/proc/%s/status" % pid) if ":" in l)
+                rows.append((int(st.get("VmRSS", "0 kB").split()[0]) // 1024, st["Name"].strip()))
+            except (OSError, ValueError, KeyError):
+                pass
+    return " ".join("%s=%sM" % (n, r) for r, n in sorted(rows, reverse=True)[:3])
+while True:
+    m = meminfo()
+    fs = os.statvfs("/")
+    oom = next((l.split()[1] for l in open("/proc/vmstat") if l.startswith("oom_kill ")), "?")
+    line = "OCINYE-E2E-PROBE %s avail=%sM free=%sM cached=%sM disk_avail=%sM load=%s oom_kills=%s top: %s" % (
+        time.strftime("%H:%M:%S"), m["MemAvailable"], m["MemFree"], m["Cached"],
+        fs.f_bavail * fs.f_frsize // 2**20, open("/proc/loadavg").read().split()[0], oom, top())
+    with open("/dev/ttyS0", "w") as t:
+        t.write(line + "\\n")
+    time.sleep(30)
+"""
+PROBE = (
+    "import subprocess\n"
+    "subprocess.run(['sysctl', '-q', 'kernel.printk=7 4 1 7'])\n"
+    "subprocess.run(['systemd-run', '--unit', 'ocinye-e2e-probe', '--collect', 'python3', '-c', %r])\n" % PROBE_LOOP
+)
+
+
 # Runs as root on the machine: starts the install and cuts the power once the
 # engine reports INSTALLING or ACTIVATING. Prints each phase it sees; the last
 # printed is the one the cut came in.
@@ -1823,7 +1865,9 @@ def scenario_update(a):
 
         evidence(run, "n-plus-1")
 
-        # 4. Offline, with the power cut during the install.
+        # 4. Offline, with the power cut during the install. The probe reports
+        # on the serial console from here on.
+        run("sudo -n python3 -", input_=PROBE.encode())
         run(f"sudo -n install -d -m 0700 /var/lib/ocinye/update/inbox && sudo -n curl -sf -o /var/lib/ocinye/update/inbox/next.ocu {base}/offline.ocu", timeout=1800)
         run("sudo -n ocinye-system update import next.ocu", timeout=1800)
         # The import, too, returns once the engine has taken it.
