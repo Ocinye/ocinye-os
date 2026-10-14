@@ -72,6 +72,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   unidade está activa durante cada execução curta; sob emulação essa execução
   dura o suficiente para ser apanhada. Saudável passa a ser a mesma execução
   (`InvocationID`), `active`/`running`, em duas leituras com 10 s de intervalo.
+- **E2E `update` em `amd64` emulado**: a cache de tradução do QEMU fica em
+  256 MiB (sem limite, o kernel da VM de construção matava o QEMU a meio do
+  cenário); a bancada espera que o motor saia da fase em que um pedido o
+  encontrou antes de ler o resultado; e, a partir do passo offline, uma sonda
+  na máquina escreve na consola série a memória, o disco, a carga e as mortes
+  por OOM, legível quando o SSH já não responde.
 - **Guarda `release_strings.py`** (no `verify.sh` e na CI): nenhum texto das
   superfícies gráficas chega ao ecrã com um campo por preencher.
 - **E2E das imagens**: cenário `update`, numa máquina instalada a partir da ISO,
