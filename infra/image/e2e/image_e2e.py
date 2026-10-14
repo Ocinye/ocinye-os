@@ -96,7 +96,10 @@ class Vm:
             cmd = ["qemu-system-x86_64", "-machine", "q35", "-cpu", "host" if kvm else "max"]
         else:
             cmd = ["qemu-system-aarch64", "-machine", "virt", "-cpu", "host" if kvm else "max"]
-        cmd += ["-accel", "kvm" if kvm else "tcg,thread=multi", "-m", str(self.memory), "-smp", str(self.cpus),
+        # Under TCG the translation cache may grow to 1 GiB on top of the
+        # guest's memory: with a 4 GiB guest that was enough for the builder
+        # VM's kernel to kill QEMU mid-scenario. 256 MiB is plenty.
+        cmd += ["-accel", "kvm" if kvm else "tcg,thread=multi,tb-size=256", "-m", str(self.memory), "-smp", str(self.cpus),
                 "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
                 "-drive", f"if=pflash,format=raw,unit=1,file={self.vars}",
                 "-device", "virtio-rng-pci", "-display", "none", "-monitor", "none",
@@ -1580,6 +1583,45 @@ def click(vm, w, h, x, y):
 CHIP_RGB = (0xFD, 0xF6, 0xE7)
 
 
+# Runs as root on the machine: a probe that writes what the machine is short
+# of to the serial console every 30 s, where it can still be read when SSH no
+# longer answers. Kernel warnings (the OOM killer's) are let through as well.
+PROBE_LOOP = """
+import os, time
+def meminfo():
+    m = {}
+    for l in open("/proc/meminfo"):
+        k, v = l.split(":", 1)
+        m[k] = int(v.split()[0]) // 1024
+    return m
+def top():
+    rows = []
+    for pid in os.listdir("/proc"):
+        if pid.isdigit():
+            try:
+                st = dict(l.split(":", 1) for l in open("/proc/%s/status" % pid) if ":" in l)
+                rows.append((int(st.get("VmRSS", "0 kB").split()[0]) // 1024, st["Name"].strip()))
+            except (OSError, ValueError, KeyError):
+                pass
+    return " ".join("%s=%sM" % (n, r) for r, n in sorted(rows, reverse=True)[:3])
+while True:
+    m = meminfo()
+    fs = os.statvfs("/")
+    oom = next((l.split()[1] for l in open("/proc/vmstat") if l.startswith("oom_kill ")), "?")
+    line = "OCINYE-E2E-PROBE %s avail=%sM free=%sM cached=%sM disk_avail=%sM load=%s oom_kills=%s top: %s" % (
+        time.strftime("%H:%M:%S"), m["MemAvailable"], m["MemFree"], m["Cached"],
+        fs.f_bavail * fs.f_frsize // 2**20, open("/proc/loadavg").read().split()[0], oom, top())
+    with open("/dev/ttyS0", "w") as t:
+        t.write(line + "\\n")
+    time.sleep(30)
+"""
+PROBE = (
+    "import subprocess\n"
+    "subprocess.run(['sysctl', '-q', 'kernel.printk=7 4 1 7'])\n"
+    "subprocess.run(['systemd-run', '--unit', 'ocinye-e2e-probe', '--collect', 'python3', '-c', %r])\n" % PROBE_LOOP
+)
+
+
 # Runs as root on the machine: starts the install and cuts the power once the
 # engine reports INSTALLING or ACTIVATING. Prints each phase it sees; the last
 # printed is the one the cut came in.
@@ -1674,8 +1716,17 @@ def scenario_update(a):
         def sql(q):
             return run(f"sudo -n docker exec ocinye-postgres-1 psql -U ocinye -d ocinye -tAc \"{q}\"").stdout.decode().strip()
 
-        def settle(timeout=3600):
+        def settle(left=None, timeout=3600):
+            # A request returns once the engine has taken it; a slow machine
+            # may still show the phase it was in. With `left`, the phase must
+            # first move from there (or ten minutes pass) before waiting for
+            # the work to end.
             st = status()
+            for _ in range(60 if left else 0):
+                if st.get("phase") not in (left, "UNKNOWN"):
+                    break
+                time.sleep(10)
+                st = status()
             for _ in range(timeout // 15):
                 if st.get("phase") not in ("CHECKING", "DOWNLOADING", "DOWNLOADED", "VERIFYING", "VERIFIED", "PREFLIGHT", "STAGED", "INSTALLING", "ACTIVATING", "BOOT_VALIDATING", "COMMITTING", "ROLLING_BACK", "UNKNOWN"):
                     break
@@ -1708,11 +1759,10 @@ def scenario_update(a):
         # Download and install return once the engine has taken the job; the
         # work goes on in the engine, and the next step waits for it.
         run("sudo -n ocinye-system update download", timeout=3600)
-        st = settle()
+        st = settle("UPDATE_AVAILABLE")
         r.check("update: the unhealthy release was downloaded, verified and staged", st.get("phase") == "AWAITING_INSTALL", st)
         run("sudo -n ocinye-system update install", timeout=3600)
-        time.sleep(10)
-        st = settle()
+        st = settle("AWAITING_INSTALL")
         hist = history()
         r.check("update: the unhealthy release failed its health gate and the machine rolled back on its own",
                 version(st) == versions["N"] and hist[:1] and hist[0].get("outcome") == "ROLLED_BACK", (st, hist[:1]))
@@ -1779,7 +1829,7 @@ def scenario_update(a):
             return True
 
         r.check("update: the download was started from Settings › Updates", through_settings("download", 2))
-        st = settle()
+        st = settle("UPDATE_AVAILABLE")
         r.check("update: N+1 was downloaded and verified", st.get("phase") == "AWAITING_INSTALL", st)
         r.check("update: the install was started from Settings › Updates", through_settings("install", 3))
         # The trusted dialog asks for the operator's password.
@@ -1787,8 +1837,7 @@ def scenario_update(a):
         vm.screenshot(os.path.join(shots, "u-install-auth.png"))
         vm.type(chosen)
         vm.press("ret")
-        time.sleep(30)
-        st = settle()
+        st = settle("AWAITING_INSTALL")
         vm.screenshot(os.path.join(shots, "u-installed.png"))
         if st.get("phase") == "AWAITING_REBOOT":
             run("sudo -n systemctl reboot", timeout=30)
@@ -1823,7 +1872,9 @@ def scenario_update(a):
 
         evidence(run, "n-plus-1")
 
-        # 4. Offline, with the power cut during the install.
+        # 4. Offline, with the power cut during the install. The probe reports
+        # on the serial console from here on.
+        run("sudo -n python3 -", input_=PROBE.encode())
         run(f"sudo -n install -d -m 0700 /var/lib/ocinye/update/inbox && sudo -n curl -sf -o /var/lib/ocinye/update/inbox/next.ocu {base}/offline.ocu", timeout=1800)
         run("sudo -n ocinye-system update import next.ocu", timeout=1800)
         # The import, too, returns once the engine has taken it.
@@ -1835,7 +1886,7 @@ def scenario_update(a):
             time.sleep(10)
         r.check("update: the offline bundle is verified and offered, from no repository", offered.get("version") == versions["GOOD2"] and offered.get("source") == "offline", offered)
         run("sudo -n ocinye-system update download", timeout=1800)
-        r.check("update: the offline release was staged", settle().get("phase") == "AWAITING_INSTALL", status())
+        r.check("update: the offline release was staged", settle("UPDATE_AVAILABLE").get("phase") == "AWAITING_INSTALL", status())
         # The cut comes from inside the machine, the moment the engine says it
         # is installing or activating: a watcher there sees phases the bench
         # would miss between two SSH calls, and `sysrq b` restarts at once,
@@ -1875,10 +1926,9 @@ def scenario_update(a):
                         break
                     time.sleep(10)
                 run("sudo -n ocinye-system update download", timeout=1800)
-                settle()
+                settle("UPDATE_AVAILABLE")
             run("sudo -n ocinye-system update install", timeout=3600)
-            time.sleep(10)
-            st = through_reboot(settle())
+            st = through_reboot(settle("AWAITING_INSTALL"))
         hist = history()
         r.check("update: the offline release finished installing, committed after a healthy restart",
                 version(st) == versions["GOOD2"] and hist[:1] and hist[0].get("outcome") == "COMMITTED" and hist[0].get("rebooted") is True,
