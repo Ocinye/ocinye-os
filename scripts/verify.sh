@@ -312,6 +312,14 @@ step "Advisories RustSec"
 # passo a seguir — ver ADR-0105.
 if command -v cargo-audit >/dev/null 2>&1; then
     cargo audit
+    # Cada lockfile versionado é uma árvore de dependências que se publica: as
+    # janelas Tauri, o compositor e as capabilities WASM vivem fora da
+    # workspace e têm o seu. Em 2026-10-15 o `apps/installer` tinha um `rustls`
+    # vulnerável que a auditoria da raiz não podia ver.
+    for lock in $(git ls-files '*/Cargo.lock'); do
+        echo "-- $lock"
+        cargo audit --file "$lock"
+    done
 else
     echo "AVISO: cargo-audit não está instalado; a auditoria de dependências"
     echo "       não correu aqui. A CI corre-a sempre."
