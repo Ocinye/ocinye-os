@@ -212,6 +212,11 @@ jobs:
           # `--stale` que a aceitaria na mesma, e uma auditoria que responde
           # depressa a partir de uma base velha é a pior combinação possível.
           cargo audit
+          # E cada lockfile fora da workspace, como no verify.sh.
+          for lock in $(git ls-files '*/Cargo.lock'); do
+            echo "-- $lock"
+            cargo audit --file "$lock"
+          done
 
   advisories:
     name: Advisories do GitHub (Cargo.lock)
