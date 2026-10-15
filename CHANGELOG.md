@@ -7,6 +7,19 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Segurança das dependências — 2026-10-15 (ramo `fix/rustsec-2026-10-14`)
+
+- **Avisos RustSec de 2026-10-14**: `rustls` 0.23.45 → 0.23.46
+  (RUSTSEC-2026-0346 a 0349, entre eles segredos TLS expostos pela `Debug` de
+  valores de sessão do cliente) na workspace e no `apps/installer`;
+  `wasmtime` e `wasmtime-wasi` 48.0.5 → 48.0.6 (RUSTSEC-2026-0352 a 0364, entre
+  eles uma fuga da caixa de areia de ficheiros ao renomear ligações
+  simbólicas). Só patches compatíveis; nenhuma dependência nova.
+- **A auditoria cobre todos os lockfiles versionados**, e não só o da
+  workspace: o `verify.sh` e a CI correm `cargo audit --file` sobre os das
+  janelas Tauri, do compositor e das capabilities WASM. O `rustls` vulnerável
+  do `apps/installer` passava sem que nenhum portão o visse.
+
 ### Actualizações, primeiro arranque e instalação — 2026-10-12 (ramo `feat/ocinye-os-v1-updates`)
 
 - **Update Engine** ([ADR-0032](docs/adrs/0032-ocinye-update-engine.md),
