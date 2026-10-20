@@ -36,10 +36,9 @@ on:
   push:
     branches: ["main"]
   pull_request:
-  # Um advisory novo não chega por push. Publica-se contra código que já está
-  # no `main` há semanas, e sem um relógio ninguém pergunta outra vez.
-  schedule:
-    - cron: "17 6 * * *"
+  # Sem execução agendada desde 2026-10-20, por decisão do Fidel: o trabalho
+  # activo saiu deste repositório, e um advisory novo publicado contra o `main`
+  # só aparece no próximo push ou PR (ou num `verify.sh` corrido à mão).
 
 # Least privilege, no topo e por omissão para todos os jobs.
 #
@@ -247,22 +246,20 @@ jobs:
   posture:
     name: Postura do branch canónico
     runs-on: ubuntu-latest
-    # Só no `main` e no relógio. Nunca em pull request: um alerta continua
-    # aberto até a correcção chegar ao branch por omissão, e uma regra assim num
-    # PR reprovaria justamente o PR que o vem fechar.
-    if: >-
-      github.event_name == 'schedule' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Só no `main`. Nunca em pull request: um alerta continua aberto até a
+    # correcção chegar ao branch por omissão, e uma regra assim num PR
+    # reprovaria justamente o PR que o vem fechar.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
 
       # Este é o portão. Confronta o `Cargo.lock` do branch canónico com a base
       # de advisories do GitHub — a mesma base que o Dependabot lê.
       #
-      # No relógio diário isto é a regressão principal deste incidente: um
-      # advisory novo não chega por push, publica-se contra código que já cá
-      # está. Foi assim que o GHSA-h395-gr6q-cpjc apareceu, e é assim que o
-      # próximo aparecerá. Contra o lockfile de antes da correcção, este mesmo
+      # Um advisory novo não chega por push, publica-se contra código que já cá
+      # está — foi assim que o GHSA-h395-gr6q-cpjc apareceu. Sem a execução
+      # agendada (retirada a 2026-10-20), só o próximo push para o `main` volta
+      # a perguntar. Contra o lockfile de antes da correcção, este mesmo
       # comando encontra-o.
       - name: Advisories do GitHub contra o branch canónico
         env:

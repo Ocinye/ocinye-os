@@ -15,8 +15,8 @@ month raises an alert without a single line of the repository changing.
 
 A rule of the form "fail while any alert is open" would fail the very branch that
 fixes the alert, because the alert stays open until the fix reaches the default
-branch. So this belongs to `main` and to the schedule, and never to the pull
-request. Pull requests are judged on what they change; `main` is judged on what
+branch. So this belongs to `main`, and never to the pull request. (The daily
+scheduled run that also called it was removed on 2026-10-20.) Pull requests are judged on what they change; `main` is judged on what
 it still carries.
 
 # Failing to ask is not an answer
